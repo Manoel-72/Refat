@@ -1,0 +1,61 @@
+{
+  "name": "Cena 3",
+  "entities": [
+    {
+      "id": "f6fb27ff-f20b-4435-8021-a4950be445a6",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "45dcb36a-39f2-4df5-a6da-ba7bd4de5a4f",
+      "name": "picachu",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -80.0,
+            "y": -32.5,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/picachu.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
+    }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
+  ]
+}
