@@ -1,10 +1,10 @@
 [package]
-name = "rust2d-engine"
+name = "RS2BR-Engine"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "rust2d-engine"
+name = "RS2BR-Engine"
 path = "src/main.rs"
 
 [dependencies]

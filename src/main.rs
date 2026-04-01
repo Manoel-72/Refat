@@ -15,14 +15,14 @@ fn main() {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Rust2D Engine")
+            .with_title("RS2BR-Engine")
             .with_inner_size([1280.0, 720.0])
             .with_min_inner_size([800.0, 600.0]),
         ..Default::default()
     };
 
-    eframe::run_native(
-        "Rust2D Engine",
+   eframe::run_native(
+    "RS2BR-Engine",
         options,
         Box::new(|cc| Ok(Box::new(EditorApp::new(cc)))),
     )

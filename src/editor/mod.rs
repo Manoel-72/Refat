@@ -163,7 +163,7 @@ impl EditorApp {
             selected_asset: None,
             assets,
             project_root,
-            status_msg: "Bem-vindo ao Rust2D Engine!".to_string(),
+            status_msg: "Bem-vindo ao RS2BR-Engine!".to_string(),
             scene_zoom: 1.0,
             scene_pan: egui::Vec2::ZERO,
             show_entity_names: true,
