@@ -1,6 +1,6 @@
-# 🎮 Rust2D Engine
+# 🎮 RS2BR-Engine
 
-Engine de jogo 2D simples com editor visual, escrita em **Rust puro**.
+Engine de jogo 2D simples com editor visual, escrita em **R2S**.
 
 ---
 
