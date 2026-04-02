@@ -5,8 +5,6 @@
 //  renderizar sprites/câmera em modo Play.
 // ============================================================
 
-pub mod scene_manager;
-
 use std::{collections::HashSet, fs, path::{Path, PathBuf}, time::Instant};
 #[derive(Default, Clone)]
 pub struct RuntimeInput {
@@ -27,8 +25,6 @@ pub struct RuntimeInput {
 }
 
 use eframe::egui;
-
-use self::scene_manager::SceneManager;
 
 use crate::{
     editor::{EditorApp, EditorPlayState},
@@ -55,8 +51,6 @@ pub struct RuntimeState {
     started_scripts: HashSet<String>,
     /// Estado de input do frame atual
     pub input: RuntimeInput,
-    /// Gerencia trocas e recarga de cenas no runtime
-    pub scene_manager: SceneManager,
 }
 
 impl RuntimeState {
@@ -70,40 +64,12 @@ impl RuntimeState {
             window_open: false,
             started_scripts: HashSet::new(),
             input: RuntimeInput::default(),
-            scene_manager: SceneManager::new(),
         }
     }
 
     /// Inicia o runtime clonando a cena atual do editor.
     pub fn start_from_scene(&mut self, scene: &Scene) {
-        self.scene_manager.set_editor_scene(scene.clone());
-        self.active_scene = self.scene_manager.current_scene.clone();
-        self.reset_timing_state();
-    }
-
-    pub fn start_from_path(&mut self, path: PathBuf) -> Result<(), String> {
-        self.scene_manager
-            .load_scene(path)
-            .map_err(|e| format!("Falha ao carregar cena: {}", e))?;
-        self.active_scene = self.scene_manager.current_scene.clone();
-        self.reset_timing_state();
-        Ok(())
-    }
-
-    pub fn queue_scene_change(&mut self, path: PathBuf) {
-        self.scene_manager.change_scene(path);
-    }
-
-    pub fn reload_current_scene(&mut self, fallback_scene: &Scene) {
-        if self.scene_manager.reload_scene().is_err() {
-            self.start_from_scene(fallback_scene);
-        } else {
-            self.active_scene = self.scene_manager.current_scene.clone();
-            self.reset_timing_state();
-        }
-    }
-
-    fn reset_timing_state(&mut self) {
+        self.active_scene = Some(scene.clone());
         self.elapsed_time = 0.0;
         self.delta_time = 0.0;
         self.frame_count = 0;
@@ -115,7 +81,6 @@ impl RuntimeState {
     /// Encerra a execução temporária do runtime.
     pub fn stop(&mut self) {
         self.active_scene = None;
-        self.scene_manager.clear_runtime_scene();
         self.elapsed_time = 0.0;
         self.delta_time = 0.0;
         self.frame_count = 0;
@@ -126,11 +91,6 @@ impl RuntimeState {
 
     /// Mantém o runtime sincronizado com o estado atual do editor.
     pub fn sync_with_mode(&mut self, mode: EditorPlayState, source_scene: &Scene, project_root: &Path) {
-        if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
-            self.active_scene = self.scene_manager.current_scene.clone();
-            self.reset_timing_state();
-        }
-
         match mode {
             EditorPlayState::Edit => {
                 if self.active_scene.is_some() {
@@ -183,7 +143,6 @@ impl RuntimeState {
             if let Some((x, y)) = camera_follow_target {
                 set_main_camera_position(&mut scene.entities, x, y);
             }
-            self.scene_manager.current_scene = Some(scene.clone());
         }
     }
 
@@ -206,7 +165,7 @@ pub fn show_viewport(app: &mut EditorApp, ctx: &egui::Context) {
     ctx.show_viewport_immediate(
         viewport_id,
         egui::ViewportBuilder::default()
-            .with_title("▶ RS2BR Runtime")
+            .with_title("▶ Rust2D Runtime")
             .with_inner_size([960.0, 640.0])
             .with_min_inner_size([480.0, 320.0]),
         |ctx, _class| {
@@ -237,7 +196,7 @@ pub fn show_viewport(app: &mut EditorApp, ctx: &egui::Context) {
                         app.status_msg = "⏹ Runtime parado".to_string();
                     }
                     if ui.button("↻ Recarregar Cena").clicked() {
-                        app.runtime.reload_current_scene(&app.scene);
+                        app.runtime.start_from_scene(&app.scene);
                         app.status_msg = "↻ Cena recarregada no runtime".to_string();
                     }
                     ui.separator();
@@ -248,21 +207,6 @@ pub fn show_viewport(app: &mut EditorApp, ctx: &egui::Context) {
                         app.status_msg = "Runtime fechado".to_string();
                     }
                 });
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Trocar cena no runtime:");
-                    for path in app.scene_file_candidates() {
-                        let label = path.file_stem()
-                            .and_then(|n| n.to_str())
-                            .map(|name| name.replace(".scene", ""))
-                            .unwrap_or_else(|| "Cena".to_string());
-                        if ui.small_button(format!("🎬 {}", label)).clicked() {
-                            app.runtime.queue_scene_change(path.clone());
-                            app.status_msg = format!("Cena agendada para runtime: {}", label);
-                        }
-                    }
-                });
-
                 show(app, ui);
             });
         },
@@ -751,7 +695,7 @@ fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
     });
 
     if reload_scene {
-        app.runtime.reload_current_scene(&app.scene);
+        app.runtime.start_from_scene(&app.scene);
         return;
     }
 

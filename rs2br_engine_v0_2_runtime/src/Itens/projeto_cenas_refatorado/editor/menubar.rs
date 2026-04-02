@@ -136,7 +136,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 });
 
                 ui.menu_button("❓ Ajuda", |ui| {
-                    ui.label("RS2BR-Engine v0.2.0");
+                    ui.label("Rust2D Engine v0.2.0");
                     ui.separator();
                     ui.label("Atalhos:");
                     ui.label("• Ctrl + Z / Ctrl + Y = desfazer / refazer");
@@ -165,27 +165,8 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     if ui.button("▶ Play").clicked() {
                         app.play_state = EditorPlayState::Playing;
                         app.runtime.window_open = true;
-
-                        let maybe_path = app
-                            .open_scenes
-                            .get(app.active_scene_index)
-                            .and_then(|doc| doc.file_path.clone());
-
-                        if let Some(path) = maybe_path {
-                            if let Err(error) = app.runtime.start_from_path(path.clone()) {
-                                app.runtime.start_from_scene(&app.scene);
-                                app.status_msg = format!("▶ Play iniciado com cena em memória (falha ao carregar arquivo: {})", error);
-                            } else {
-                                let label = path.file_stem()
-                                    .and_then(|n| n.to_str())
-                                    .map(|name| name.replace(".scene", ""))
-                                    .unwrap_or_else(|| app.scene.name.clone());
-                                app.status_msg = format!("▶ Modo Play iniciado com a cena '{}'", label);
-                            }
-                        } else {
-                            app.runtime.start_from_scene(&app.scene);
-                            app.status_msg = "▶ Modo Play iniciado com a cena atual em memória.".to_string();
-                        }
+                        app.runtime.start_from_scene(&app.scene);
+                        app.status_msg = "▶ Modo Play iniciado em janela separada.".to_string();
                     }
                     ui.separator();
                     ui.label(
