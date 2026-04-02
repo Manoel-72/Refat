@@ -1,11 +1,5 @@
 use std::{fs, path::{Path, PathBuf}};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScriptAction {
-    ChangeScene(String),
-    ReloadScene,
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct ScriptBehavior {
     pub move_x: f32,
@@ -15,7 +9,6 @@ pub struct ScriptBehavior {
     pub camera_follow: bool,
     pub start_message: Option<String>,
     pub on_update: Vec<String>,
-    pub on_collision: Vec<ScriptAction>,
 }
 
 pub fn load_script_behavior(project_root: &Path, raw_path: &str) -> Option<ScriptBehavior> {
@@ -55,11 +48,7 @@ pub fn parse_script_behavior(source: &str) -> ScriptBehavior {
         }
         if let Some(value) = parse_script_number(
             line,
-            &[
-                "@player_controller",
-                "player_controller",
-                "player_controller_speed",
-            ],
+            &["@player_controller", "player_controller", "player_controller_speed"],
         ) {
             behavior.player_controller_speed = value.abs();
         }
@@ -74,21 +63,16 @@ pub fn parse_script_behavior(source: &str) -> ScriptBehavior {
         if let Some(rest) = clean.strip_prefix("@on_update") {
             behavior.on_update.push(rest.trim().to_string());
         }
-        if let Some(rest) = clean.strip_prefix("@on_collision") {
-            if let Some(action) = parse_script_action(rest.trim()) {
-                behavior.on_collision.push(action);
-            }
-        }
     }
 
     behavior
 }
 
-fn parse_script_number(line: &str, keys: &[&str]) -> Option<f32> {
-    let clean = line.trim().trim_start_matches('/').trim();
-    for key in keys {
-        if let Some(rest) = clean.strip_prefix(key) {
-            let value = rest.trim().trim_start_matches('=').trim().trim_end_matches(';').trim();
+fn parse_script_number(line: &str, names: &[&str]) -> Option<f32> {
+    let clean = line.trim().trim_start_matches('/').trim().trim_end_matches(';');
+    for name in names {
+        if let Some(rest) = clean.strip_prefix(name) {
+            let value = rest.trim_start_matches(':').trim_start_matches('=').trim();
             if let Ok(parsed) = value.parse::<f32>() {
                 return Some(parsed);
             }
@@ -97,30 +81,20 @@ fn parse_script_number(line: &str, keys: &[&str]) -> Option<f32> {
     None
 }
 
-fn parse_script_text(line: &str, keys: &[&str]) -> Option<String> {
-    let clean = line.trim().trim_start_matches('/').trim();
-    for key in keys {
-        if let Some(rest) = clean.strip_prefix(key) {
-            let value = rest.trim().trim_start_matches('=').trim().trim_end_matches(';').trim();
-            let unquoted = value.trim_matches('"').trim_matches('\'');
-            if !unquoted.is_empty() {
-                return Some(unquoted.to_string());
+fn parse_script_text(line: &str, names: &[&str]) -> Option<String> {
+    let clean = line.trim().trim_start_matches('/').trim().trim_end_matches(';');
+    for name in names {
+        if let Some(rest) = clean.strip_prefix(name) {
+            let value = rest
+                .trim_start_matches(':')
+                .trim_start_matches('=')
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'');
+            if !value.is_empty() {
+                return Some(value.to_string());
             }
         }
-    }
-    None
-}
-
-fn parse_script_action(raw: &str) -> Option<ScriptAction> {
-    let cleaned = raw.trim().trim_end_matches(';').trim();
-    if let Some(rest) = cleaned.strip_prefix("change_scene") {
-        let path = rest.trim().trim_matches('"').trim_matches('\'');
-        if !path.is_empty() {
-            return Some(ScriptAction::ChangeScene(path.to_string()));
-        }
-    }
-    if cleaned == "reload_scene" {
-        return Some(ScriptAction::ReloadScene);
     }
     None
 }

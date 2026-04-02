@@ -1,13 +1,7 @@
 use std::{collections::HashSet, path::Path};
 
 use crate::engine::{component::Component, entity::Entity};
-use crate::runtime::script::{load_script_behavior, ScriptAction};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuntimeCommand {
-    ChangeScene(String),
-    ReloadScene,
-}
+use crate::runtime::script::load_script_behavior;
 
 fn aabb_collision(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> bool {
     let (ax, ay, aw, ah) = a;
@@ -22,30 +16,10 @@ pub fn update_entities_runtime(
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
-) -> Option<RuntimeCommand> {
+) {
     let mut colliders = Vec::new();
     collect_colliders(entities, &mut colliders);
 
-    update_entities_runtime_recursive(
-        entities,
-        delta_time,
-        project_root,
-        started_scripts,
-        camera_follow_target,
-        ground_y,
-        &colliders,
-    )
-}
-
-fn update_entities_runtime_recursive(
-    entities: &mut [Entity],
-    delta_time: f32,
-    project_root: &Path,
-    started_scripts: &mut HashSet<String>,
-    camera_follow_target: &mut Option<(f32, f32)>,
-    ground_y: f32,
-    colliders: &[(f32, f32, f32, f32, *const Entity)],
-) -> Option<RuntimeCommand> {
     for entity in entities {
         let mut gravity_scale = None;
         let mut is_static = false;
@@ -54,7 +28,6 @@ fn update_entities_runtime_recursive(
         let mut script_move_y = 0.0_f32;
         let mut script_rotate_speed = 0.0_f32;
         let mut should_follow_camera = false;
-        let mut collision_actions = Vec::new();
 
         for component in &entity.components {
             match component {
@@ -80,7 +53,6 @@ fn update_entities_runtime_recursive(
                         script_move_y += behavior.move_y;
                         script_rotate_speed += behavior.rotate_speed;
                         should_follow_camera |= behavior.camera_follow;
-                        collision_actions.extend(behavior.on_collision.into_iter());
                     }
                 }
                 _ => {}
@@ -96,7 +68,6 @@ fn update_entities_runtime_recursive(
         if let Some(transform) = entity.transform_mut() {
             let old_x = transform.x;
             let old_y = transform.y;
-            let mut collided = false;
 
             transform.x += script_move_x * delta_time;
             transform.y += script_move_y * delta_time;
@@ -115,13 +86,12 @@ fn update_entities_runtime_recursive(
                     width,
                     height,
                 );
-                for (ox, oy, ow, oh, other_ptr) in colliders {
+                for (ox, oy, ow, oh, other_ptr) in &colliders {
                     if std::ptr::eq(entity_ptr, *other_ptr) {
                         continue;
                     }
                     let other_rect = (*ox - *ow * 0.5, *oy - *oh * 0.5, *ow, *oh);
                     if aabb_collision(my_rect, other_rect) {
-                        collided = true;
                         transform.x = old_x;
                         transform.y = old_y;
                         break;
@@ -137,31 +107,17 @@ fn update_entities_runtime_recursive(
             if should_follow_camera {
                 *camera_follow_target = Some((transform.x, transform.y));
             }
-
-            if collided {
-                for action in collision_actions {
-                    match action {
-                        ScriptAction::ChangeScene(path) => return Some(RuntimeCommand::ChangeScene(path)),
-                        ScriptAction::ReloadScene => return Some(RuntimeCommand::ReloadScene),
-                    }
-                }
-            }
         }
 
-        if let Some(command) = update_entities_runtime_recursive(
+        update_entities_runtime(
             &mut entity.children,
             delta_time,
             project_root,
             started_scripts,
             camera_follow_target,
             ground_y,
-            colliders,
-        ) {
-            return Some(command);
-        }
+        );
     }
-
-    None
 }
 
 pub fn apply_player_controller_input(

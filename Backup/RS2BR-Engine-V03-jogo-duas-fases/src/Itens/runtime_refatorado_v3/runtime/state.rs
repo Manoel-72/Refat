@@ -1,9 +1,9 @@
-use std::{collections::HashSet, path::{Path, PathBuf}, time::Instant};
+use std::{collections::HashSet, path::Path, time::Instant};
 
 use crate::{
     editor::EditorPlayState,
     engine::scene::Scene,
-    runtime::{camera, scene_manager::SceneManager, systems::{self, RuntimeCommand}},
+    runtime::{camera, systems},
 };
 
 #[derive(Default, Clone)]
@@ -33,7 +33,6 @@ pub struct RuntimeState {
     pub window_open: bool,
     pub started_scripts: HashSet<String>,
     pub input: RuntimeInput,
-    pub scene_manager: SceneManager,
 }
 
 impl RuntimeState {
@@ -47,39 +46,21 @@ impl RuntimeState {
             window_open: false,
             started_scripts: HashSet::new(),
             input: RuntimeInput::default(),
-            scene_manager: SceneManager::new(),
         }
     }
 
     pub fn start_from_scene(&mut self, scene: &Scene) {
-        self.scene_manager.set_editor_scene(scene.clone());
-        self.active_scene = self.scene_manager.current_scene.clone();
-        self.reset_timing_state();
-    }
-
-    pub fn start_from_path(&mut self, path: PathBuf) -> Result<(), String> {
-        self.scene_manager.load_scene(path)?;
-        self.active_scene = self.scene_manager.current_scene.clone();
-        self.reset_timing_state();
-        Ok(())
-    }
-
-    pub fn queue_scene_change(&mut self, path: PathBuf) {
-        self.scene_manager.change_scene(path);
-    }
-
-    pub fn reload_current_scene(&mut self, fallback_scene: &Scene) {
-        if self.scene_manager.reload_scene().is_err() {
-            self.start_from_scene(fallback_scene);
-        } else {
-            self.active_scene = self.scene_manager.current_scene.clone();
-            self.reset_timing_state();
-        }
+        self.active_scene = Some(scene.clone());
+        self.elapsed_time = 0.0;
+        self.delta_time = 0.0;
+        self.frame_count = 0;
+        self.last_frame_at = Some(Instant::now());
+        self.started_scripts.clear();
+        self.input = RuntimeInput::default();
     }
 
     pub fn stop(&mut self) {
         self.active_scene = None;
-        self.scene_manager.clear_runtime_scene();
         self.elapsed_time = 0.0;
         self.delta_time = 0.0;
         self.frame_count = 0;
@@ -95,11 +76,6 @@ impl RuntimeState {
         project_root: &Path,
         ground_y: f32,
     ) {
-        if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
-            self.active_scene = self.scene_manager.current_scene.clone();
-            self.reset_timing_state();
-        }
-
         match mode {
             EditorPlayState::Edit => {
                 if self.active_scene.is_some() {
@@ -133,15 +109,6 @@ impl RuntimeState {
         }
     }
 
-    fn reset_timing_state(&mut self) {
-        self.elapsed_time = 0.0;
-        self.delta_time = 0.0;
-        self.frame_count = 0;
-        self.last_frame_at = Some(Instant::now());
-        self.started_scripts.clear();
-        self.input = RuntimeInput::default();
-    }
-
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
         let now = Instant::now();
         let dt = self
@@ -156,7 +123,7 @@ impl RuntimeState {
 
         if let Some(scene) = &mut self.active_scene {
             let mut camera_follow_target = None;
-            let runtime_command = systems::update_entities_runtime(
+            systems::update_entities_runtime(
                 &mut scene.entities,
                 dt,
                 project_root,
@@ -166,23 +133,6 @@ impl RuntimeState {
             );
             if let Some((x, y)) = camera_follow_target {
                 camera::set_main_camera_position(&mut scene.entities, x, y);
-            }
-            self.scene_manager.current_scene = Some(scene.clone());
-
-            if let Some(command) = runtime_command {
-                match command {
-                    RuntimeCommand::ChangeScene(path) => {
-                        self.queue_scene_change(project_root.join(path));
-                    }
-                    RuntimeCommand::ReloadScene => {
-                        self.scene_manager.change_scene(
-                            self.scene_manager
-                                .current_path
-                                .clone()
-                                .unwrap_or_else(|| project_root.join("assets/scenes/fase1.scene.json")),
-                        );
-                    }
-                }
             }
         }
     }
