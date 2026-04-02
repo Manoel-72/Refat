@@ -89,16 +89,16 @@
         {
           "Sprite": {
             "texture_path": "",
-            "color_r": 0.95,
-            "color_g": 0.4,
-            "color_b": 0.2,
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
             "color_a": 1.0
           }
         },
         {
           "RigidBody2D": {
-            "gravity_scale": 0.0,
-            "is_static": true
+            "gravity_scale": 1.0,
+            "is_static": false
           }
         },
         {
@@ -111,7 +111,7 @@
         },
         {
           "Script": {
-            "file_path": "portal_fase2.rs2"
+            "file_path": "assets/scripts/portal_fase2.rs2"
           }
         }
       ],
@@ -154,10 +154,19 @@
             "offset_x": 0.0,
             "offset_y": 0.0
           }
+        },
+        {
+          "Script": {
+            "file_path": "assets/scripts/portal_fase2.rs2"
+          }
         }
       ],
       "matr_source": null
     }
   ],
-  "background_color": [0.11, 0.13, 0.18]
+  "background_color": [
+    0.11,
+    0.13,
+    0.18
+  ]
 }
