@@ -42,7 +42,7 @@
         },
         {
           "Sprite": {
-            "texture_path": "",
+            "texture_path": "matrs/Player.matr.json",
             "color_r": 0.3,
             "color_g": 1.0,
             "color_b": 0.45,
@@ -88,7 +88,7 @@
         },
         {
           "Sprite": {
-            "texture_path": "",
+            "texture_path": "prefabs/Portal_Volta.prefab.json",
             "color_r": 1.0,
             "color_g": 0.92,
             "color_b": 0.2,
@@ -134,7 +134,7 @@
         },
         {
           "Sprite": {
-            "texture_path": "",
+            "texture_path": "prefabs/Bloco_A.prefab.json",
             "color_r": 0.45,
             "color_g": 0.3,
             "color_b": 0.7,
@@ -175,7 +175,7 @@
         },
         {
           "Sprite": {
-            "texture_path": "",
+            "texture_path": "prefabs/Bloco_A.prefab.json",
             "color_r": 0.7,
             "color_g": 0.32,
             "color_b": 0.82,
@@ -216,7 +216,7 @@
         },
         {
           "Sprite": {
-            "texture_path": "",
+            "texture_path": "matrs/Player.matr.json",
             "color_r": 0.2,
             "color_g": 0.75,
             "color_b": 1.0,

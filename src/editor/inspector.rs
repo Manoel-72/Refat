@@ -5,7 +5,7 @@
 // ============================================================
 
 use eframe::egui;
-use crate::engine::{
+use crate::{
     assets::is_rs2_script_file,
     component::{BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite},
 };
@@ -47,9 +47,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     let entity_data = {
         fn find_clone(
-            entities: &[crate::engine::entity::Entity],
+            entities: &[crate::core::entity::Entity],
             id: &str,
-        ) -> Option<crate::engine::entity::Entity> {
+        ) -> Option<crate::core::entity::Entity> {
             for e in entities {
                 if e.id == id {
                     return Some(e.clone());
@@ -70,6 +70,22 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
             return;
         }
     };
+
+    let runtime_warnings = app.collect_runtime_warnings();
+    if !runtime_warnings.is_empty() {
+        ui.group(|ui| {
+            ui.label(egui::RichText::new("⚠ Warnings da cena").strong());
+            for warning in runtime_warnings.iter().take(6) {
+                ui.colored_label(egui::Color32::YELLOW, &warning.label);
+                ui.label(egui::RichText::new(&warning.details).small().weak());
+                ui.add_space(4.0);
+            }
+            if runtime_warnings.len() > 6 {
+                ui.label(egui::RichText::new(format!("+ {} warning(s) adicional(is)", runtime_warnings.len() - 6)).small().weak());
+            }
+        });
+        ui.add_space(6.0);
+    }
 
     ui.group(|ui| {
         ui.label("Nome:");
@@ -163,7 +179,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                         if changed {
                             updated_components.push((
                                 i,
-                                Component::Transform(crate::engine::component::Transform {
+                                Component::Transform(crate::core::component::Transform {
                                     x: cx,
                                     y: cy,
                                     rotation: rot,
@@ -537,9 +553,43 @@ fn draw_script_component_ui(
         ));
     }
 
+    if !path.trim().is_empty() {
+        if let Some(script_full_path) = crate::runtime::script::resolve_script_path(&app.project_root, &path) {
+            match std::fs::read_to_string(&script_full_path) {
+                Ok(source) => {
+                    let script_errors = crate::runtime::script::validate_script(&source);
+                    if script_errors.is_empty() {
+                        ui.colored_label(egui::Color32::GREEN, "Script validado com sucesso.");
+                    } else {
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            format!("{} erro(s) de validação encontrados.", script_errors.len()),
+                        );
+                        for error in script_errors.iter().take(4) {
+                            ui.label(egui::RichText::new(error.display()).small().weak());
+                        }
+                        if script_errors.len() > 4 {
+                            ui.label(
+                                egui::RichText::new(format!("+ {} erro(s) adicional(is)", script_errors.len() - 4))
+                                    .small()
+                                    .weak(),
+                            );
+                        }
+                    }
+                }
+                Err(_) => {
+                    ui.colored_label(
+                        egui::Color32::RED,
+                        format!("Falha ao ler o script em '{}'.", script_full_path.display()),
+                    );
+                }
+            }
+        }
+    }
+
     ui.label(
         egui::RichText::new(
-            "Diretivas suportadas: @move_x, @move_y, @rotate_speed, @player_controller, @camera_follow e @on_collision.",
+            "Diretivas suportadas: @move_x, @move_y, @rotate_speed, @player_controller, @camera_follow, @start_message, @on_update e @on_collision.",
         )
         .small()
         .weak(),

@@ -8,6 +8,7 @@ mod inspector;
 mod asset_browser;
 mod scene_view;
 mod menubar;
+mod warnings;
 
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -17,8 +18,8 @@ use std::{
 };
 
 use crate::{
-    engine::{
-        assets::AssetManager,
+    assets::AssetManager,
+    core::{
         component::{Component, Sprite},
         entity::Entity,
         scene::Scene,
@@ -75,6 +76,12 @@ impl OpenSceneDocument {
 }
 
 /// Estado global do editor
+#[derive(Debug, Clone)]
+pub struct RuntimePreviewWarning {
+    pub label: String,
+    pub details: String,
+}
+
 pub struct EditorApp {
     /// Cena atualmente aberta
     pub scene: Scene,
@@ -373,6 +380,21 @@ impl EditorApp {
         }
     }
 
+
+    pub fn collect_runtime_warnings(&self) -> Vec<RuntimePreviewWarning> {
+        warnings::collect_scene_warnings(&self.project_root, &self.scene)
+            .into_iter()
+            .map(|warning| RuntimePreviewWarning {
+                label: warning.label,
+                details: warning.details,
+            })
+            .collect()
+    }
+
+    pub fn warning_count(&self) -> usize {
+        self.collect_runtime_warnings().len()
+    }
+
     pub fn create_sprite_entity_from_asset(
         &mut self,
         path: &Path,
@@ -410,12 +432,13 @@ impl EditorApp {
     }
 
     pub fn export_entity_as_matr(&mut self, entity: &Entity) -> std::io::Result<PathBuf> {
-        let matrs_dir = self.project_root.join("assets/matrs");
-        std::fs::create_dir_all(&matrs_dir)?;
+        let prefabs_dir = self.project_root.join("assets/prefabs");
+        std::fs::create_dir_all(&prefabs_dir)?;
 
-        let filename = format!("{}.matr.json", sanitize_filename(&entity.name));
-        let path = matrs_dir.join(filename);
-        std::fs::write(&path, entity.to_json())?;
+        let filename = format!("{}.prefab.json", sanitize_filename(&entity.name));
+        let path = prefabs_dir.join(filename);
+        let prefab = crate::core::prefab::Prefab::new(entity.name.clone(), entity.clone());
+        crate::serialization::prefab_serializer::save_prefab_to_path(&prefab, &path)?;
         self.assets.refresh();
         Ok(path)
     }
@@ -434,8 +457,11 @@ impl EditorApp {
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("Falha ao ler MATR: {}", e))?;
 
-        let mut entity = Entity::from_json(&content)
-            .ok_or_else(|| "MATR inválido ou corrompido.".to_string())?;
+        let mut entity = if let Some(prefab) = crate::serialization::prefab_serializer::prefab_from_json(&content) {
+            prefab.root_entity
+        } else {
+            Entity::from_json(&content).ok_or_else(|| "Prefab/MATR inválido ou corrompido.".to_string())?
+        };
 
         entity.regenerate_ids_recursive();
         entity.matr_source = path
@@ -982,6 +1008,14 @@ impl eframe::App for EditorApp {
                     EditorPlayState::Paused => "Modo: Pausado",
                 };
                 ui.label(mode_label);
+
+                let warning_count = self.warning_count();
+                ui.separator();
+                if warning_count == 0 {
+                    ui.label("Warnings: 0");
+                } else {
+                    ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
+                }
 
                 if !self.selected_entity_ids.is_empty() {
                     ui.separator();

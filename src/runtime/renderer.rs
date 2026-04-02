@@ -2,7 +2,7 @@ use eframe::egui;
 
 use crate::{
     editor::EditorApp,
-    engine::{
+    core::{
         component::{Component, Sprite},
         entity::Entity,
     },

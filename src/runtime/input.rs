@@ -2,7 +2,7 @@ use eframe::egui;
 
 use crate::{
     editor::{EditorApp, EditorPlayState},
-    runtime::{camera, systems, RuntimeInput},
+    runtime::{camera, systems},
 };
 
 pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
@@ -12,69 +12,12 @@ pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
         app.runtime.delta_time.max(1.0 / 120.0)
     };
 
-    ctx.input(|i| {
-        let mut input = RuntimeInput::default();
-        input.key_w = i.key_down(egui::Key::W);
-        input.key_a = i.key_down(egui::Key::A);
-        input.key_s = i.key_down(egui::Key::S);
-        input.key_d = i.key_down(egui::Key::D);
-        input.key_up = i.key_down(egui::Key::ArrowUp);
-        input.key_down = i.key_down(egui::Key::ArrowDown);
-        input.key_left = i.key_down(egui::Key::ArrowLeft);
-        input.key_right = i.key_down(egui::Key::ArrowRight);
-        input.key_space = i.key_down(egui::Key::Space);
-        input.key_enter = i.key_down(egui::Key::Enter);
-        input.mouse_left = i.pointer.button_down(egui::PointerButton::Primary);
-        input.mouse_right = i.pointer.button_down(egui::PointerButton::Secondary);
-        input.mouse_middle = i.pointer.button_down(egui::PointerButton::Middle);
-        input.mouse_pos = i
-            .pointer
-            .hover_pos()
-            .map(|p| (p.x, p.y))
-            .unwrap_or((0.0, 0.0));
-        app.runtime.input = input;
-    });
+    app.runtime.input = systems::input_system::capture_runtime_input(ctx);
 
-    let (player_input, camera_input, zoom_input, reload_scene) = ctx.input(|i| {
-        let mut player = egui::vec2(0.0, 0.0);
-        if i.key_down(egui::Key::A) {
-            player.x -= 1.0;
-        }
-        if i.key_down(egui::Key::D) {
-            player.x += 1.0;
-        }
-        if i.key_down(egui::Key::W) {
-            player.y += 1.0;
-        }
-        if i.key_down(egui::Key::S) {
-            player.y -= 1.0;
-        }
-
-        let mut camera_move = egui::vec2(0.0, 0.0);
-        if i.key_down(egui::Key::ArrowLeft) {
-            camera_move.x -= 1.0;
-        }
-        if i.key_down(egui::Key::ArrowRight) {
-            camera_move.x += 1.0;
-        }
-        if i.key_down(egui::Key::ArrowUp) {
-            camera_move.y += 1.0;
-        }
-        if i.key_down(egui::Key::ArrowDown) {
-            camera_move.y -= 1.0;
-        }
-
-        let mut zoom = 0.0;
-        if i.key_down(egui::Key::Q) {
-            zoom -= 1.0;
-        }
-        if i.key_down(egui::Key::E) {
-            zoom += 1.0;
-        }
-        zoom += i.raw_scroll_delta.y * 0.02;
-
-        (player, camera_move, zoom, i.key_pressed(egui::Key::R))
-    });
+    let player_input = systems::input_system::player_axis(&app.runtime.input);
+    let camera_input = systems::input_system::camera_axis(&app.runtime.input);
+    let zoom_input = systems::input_system::zoom_delta(ctx);
+    let reload_scene = ctx.input(|i| i.key_pressed(egui::Key::R));
 
     if reload_scene {
         app.runtime.reload_current_scene(&app.scene);

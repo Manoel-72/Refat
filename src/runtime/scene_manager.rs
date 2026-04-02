@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::engine::scene::Scene;
+use crate::{core::scene::Scene, serialization::scene_serializer};
 
 #[derive(Debug, Clone, Default)]
 pub struct SceneManager {
@@ -27,7 +27,10 @@ impl SceneManager {
     }
 
     pub fn load_scene(&mut self, path: PathBuf) -> Result<(), String> {
-        let scene = Scene::load_from_path(&path)
+        if !path.exists() {
+            return Err(format!("Cena não encontrada: {}", path.display()));
+        }
+        let scene = scene_serializer::load_scene_from_path(&path)
             .ok_or_else(|| format!("Não foi possível carregar a cena em {}", path.display()))?;
         self.current_scene = Some(scene);
         self.current_path = Some(path);
