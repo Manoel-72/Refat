@@ -1,0 +1,126 @@
+{
+  "name": "Cena Principal",
+  "entities": [
+    {
+      "id": "7462493b-b92d-4e61-80fa-b9112791438d",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "dd1ce095-ffb8-47b4-a861-6367819e376f",
+      "name": "picachu_copy_1",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -343.0,
+            "y": -433.5,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/picachu_copy_1.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0
+          }
+        },
+        {
+          "Script": {
+            "file_path": "assets/scripts/player.rs2"
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "772e8f1b-5b63-4700-93cd-7187c3a56561",
+      "name": "Sprite",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 268.0,
+            "y": -482.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": true
+          }
+        },
+        {
+          "Script": {
+            "file_path": "assets/scripts/meu_script.rs2"
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
+    }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
+  ]
+}

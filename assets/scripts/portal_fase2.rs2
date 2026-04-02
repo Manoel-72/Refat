@@ -1,4 +1,3 @@
 // Portal da fase 1 para a fase 2
 @start_message Portal da Fase 1 pronto
 @on_collision change_scene assets/scenes/fase2.scene.json
-@on_collision player_controller

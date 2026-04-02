@@ -9,7 +9,7 @@ use rfd::FileDialog;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    assets::AssetNode,
+    assets::{AssetLoadStatus, AssetNode, AssetType},
     component::{Camera2D, Component},
     entity::Entity,
 };
@@ -31,8 +31,18 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         if ui.button("📥 Importar Sprite").clicked() {
             import_sprite_file(app, &assets_root);
         }
+        if ui.button("🎬 Cena").clicked() {
+            match app.assets.create_scene_file(&assets_root.join("scenes"), "nova_cena") {
+                Ok(path) => {
+                    app.assets.refresh();
+                    app.selected_asset = Some(path.clone());
+                    app.status_msg = format!("🎬 Cena criada: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("nova_cena.scene.json"));
+                }
+                Err(error) => app.status_msg = format!("❌ {}", error),
+            }
+        }
         if ui.button("📜 Script RS2").clicked() {
-            app.new_script_dialog = Some((assets_root.clone(), "meu_script".to_string()));
+            app.new_script_dialog = Some((assets_root.join("scripts"), "meu_script".to_string()));
         }
         if ui.button("📁 Pasta").clicked() {
             app.new_folder_dialog = Some((assets_root.clone(), "nova_pasta".to_string()));
@@ -70,8 +80,12 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                     action = Some(AssetAction::ImportSprite);
                     ui.close_menu();
                 }
+                if ui.button("🎬 Criar Cena (.scene.json)").clicked() {
+                    action = Some(AssetAction::NewScene(assets_root.join("scenes")));
+                    ui.close_menu();
+                }
                 if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
-                    action = Some(AssetAction::NewScript(assets_root.clone()));
+                    action = Some(AssetAction::NewScript(assets_root.join("scripts")));
                     ui.close_menu();
                 }
                 if ui.button("📁 Criar Pasta").clicked() {
@@ -121,11 +135,14 @@ enum AssetAction {
     Select(PathBuf),
     NewScript(PathBuf),
     NewFolder(PathBuf),
+    NewScene(PathBuf),
     CreateEntity,
     CreateCamera,
+    ExportSelectedPrefab,
     CreateSpriteFromAsset(PathBuf),
     InstantiateMatr(PathBuf),
     Rename(PathBuf),
+    Duplicate(PathBuf),
     Delete(PathBuf),
     ImportSprite,
     Refresh,
@@ -145,6 +162,16 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
         }
         Some(AssetAction::NewFolder(parent)) => {
             app.new_folder_dialog = Some((parent, "nova_pasta".to_string()));
+        }
+        Some(AssetAction::NewScene(parent)) => {
+            match app.assets.create_scene_file(&parent, "nova_cena") {
+                Ok(path) => {
+                    app.assets.refresh();
+                    app.selected_asset = Some(path.clone());
+                    app.status_msg = format!("🎬 Cena criada: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("nova_cena.scene.json"));
+                }
+                Err(error) => app.status_msg = format!("❌ {}", error),
+            }
         }
         Some(AssetAction::CreateEntity) => {
             app.new_entity_dialog = Some("Entidade".to_string());
@@ -170,8 +197,32 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
                 Err(e) => app.status_msg = format!("❌ {}", e),
             }
         }
+        Some(AssetAction::ExportSelectedPrefab) => {
+            if let Some(selected_id) = app.selected_entity_id.clone() {
+                if let Some(entity) = app.scene.find_entity(&selected_id).cloned() {
+                    match app.export_entity_as_matr(&entity) {
+                        Ok(path) => app.status_msg = format!("🧱 Prefab exportado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("prefab.prefab.json")),
+                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    }
+                } else {
+                    app.status_msg = "❌ Entidade selecionada não encontrada.".to_string();
+                }
+            } else {
+                app.status_msg = "❌ Selecione uma entidade para exportar como prefab.".to_string();
+            }
+        }
         Some(AssetAction::Rename(path)) => {
             app.request_rename_asset(path);
+        }
+        Some(AssetAction::Duplicate(path)) => {
+            match app.assets.duplicate_path(&path) {
+                Ok(new_path) => {
+                    app.assets.refresh();
+                    app.selected_asset = Some(new_path.clone());
+                    app.status_msg = format!("📄 Duplicado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
+                }
+                Err(error) => app.status_msg = format!("❌ {}", error),
+            }
         }
         Some(AssetAction::Delete(path)) => {
             app.request_delete_asset(path);
@@ -225,6 +276,10 @@ fn show_node(
             ui.separator();
             if ui.button("📥 Importar Sprite").clicked() {
                 *action = Some(AssetAction::ImportSprite);
+                ui.close_menu();
+            }
+            if ui.button("🎬 Criar Cena (.scene.json)").clicked() {
+                *action = Some(AssetAction::NewScene(node_path.clone()));
                 ui.close_menu();
             }
             if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
@@ -311,6 +366,11 @@ fn show_node(
                     ui.close_menu();
                 }
 
+                if ui.button("📄 Duplicar").clicked() {
+                    *action = Some(AssetAction::Duplicate(node_path.clone()));
+                    ui.close_menu();
+                }
+
                 if ui.button("📋 Copiar caminho").clicked() {
                     ui.output_mut(|o| {
                         o.copied_text = node_path.to_string_lossy().to_string();
@@ -347,7 +407,29 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
             .map(|p| p.to_string_lossy().replace('\\', "/"));
 
         ui.label(egui::RichText::new(name).strong());
-        ui.label(if path.is_dir() { "Tipo: pasta" } else { "Tipo: arquivo" });
+        let record = app.assets.asset_record_for(&path);
+        let tipo_texto = match record.asset_type {
+            AssetType::Folder => "pasta",
+            AssetType::Scene => "cena",
+            AssetType::Prefab => "prefab",
+            AssetType::Texture => "textura",
+            AssetType::Audio => "áudio",
+            AssetType::Font => "fonte",
+            AssetType::ScriptRs2 => "script RS2",
+            AssetType::Json => "json",
+            AssetType::Unknown => "desconhecido",
+        };
+        ui.label(format!("Tipo: {}", tipo_texto));
+        let status_text = match record.load_status {
+            AssetLoadStatus::Ready => "Ready",
+            AssetLoadStatus::NotLoaded => "NotLoaded",
+            AssetLoadStatus::Missing => "Missing",
+            AssetLoadStatus::Invalid => "Invalid",
+        };
+        ui.label(format!("Status: {}", status_text));
+        if !record.validation.is_valid {
+            ui.colored_label(egui::Color32::YELLOW, format!("⚠ {}", record.validation.message));
+        }
 
         if let Some(rel) = &relative {
             ui.label("Caminho relativo:");
@@ -358,6 +440,16 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
 
         if path.is_dir() {
             ui.horizontal_wrapped(|ui| {
+                if ui.button("🎬 Criar Cena").clicked() {
+                    match app.assets.create_scene_file(&path, "nova_cena") {
+                        Ok(new_path) => {
+                            app.assets.refresh();
+                            app.selected_asset = Some(new_path.clone());
+                            app.status_msg = format!("🎬 Cena criada: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("nova_cena.scene.json"));
+                        }
+                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    }
+                }
                 if ui.button("📜 Criar Script RS2").clicked() {
                     app.new_script_dialog = Some((path.clone(), "meu_script".to_string()));
                 }
@@ -415,11 +507,39 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
         }
 
         ui.horizontal_wrapped(|ui| {
+        if ui.button("🧱 Exportar entidade selecionada como Prefab").clicked() {
+            if let Some(selected_id) = app.selected_entity_id.clone() {
+                if let Some(entity) = app.scene.find_entity(&selected_id).cloned() {
+                    match app.export_entity_as_matr(&entity) {
+                        Ok(prefab_path) => {
+                            app.assets.refresh();
+                            app.status_msg = format!("🧱 Prefab exportado: {}", prefab_path.file_name().and_then(|n| n.to_str()).unwrap_or("prefab.prefab.json"));
+                        }
+                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    }
+                } else {
+                    app.status_msg = "❌ Entidade selecionada não encontrada.".to_string();
+                }
+            } else {
+                app.status_msg = "❌ Selecione uma entidade para exportar como prefab.".to_string();
+            }
+        }
             if ui.button("📋 Copiar caminho").clicked() {
                 let copied = relative.unwrap_or_else(|| path.to_string_lossy().to_string());
                 ui.output_mut(|o| {
                     o.copied_text = copied;
                 });
+            }
+
+            if ui.button("📄 Duplicar").clicked() {
+                match app.assets.duplicate_path(&path) {
+                    Ok(new_path) => {
+                        app.assets.refresh();
+                        app.selected_asset = Some(new_path.clone());
+                        app.status_msg = format!("📄 Duplicado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
+                    }
+                    Err(error) => app.status_msg = format!("❌ {}", error),
+                }
             }
 
             if ui.button("✏ Renomear").clicked() {

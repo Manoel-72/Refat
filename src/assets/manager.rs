@@ -1,12 +1,14 @@
 // ============================================================
-//  engine/assets.rs
-//  Gerenciador de assets — lê o disco e mantém a árvore de
-//  arquivos/pastas do projeto.
+//  assets/manager.rs
+//  Gerenciador de assets — lê o disco, mantém a árvore e
+//  oferece operações de produção do projeto.
 // ============================================================
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use super::types::{detect_asset_type, AssetRecord};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssetKind {
@@ -73,7 +75,6 @@ pub fn is_rs2_script_file(path: &Path) -> bool {
     matches!(detect_asset_kind(path), AssetKind::ScriptRs2)
 }
 
-/// Um nó na árvore de assets (arquivo ou pasta)
 #[derive(Debug, Clone)]
 pub struct AssetNode {
     pub name: String,
@@ -83,7 +84,6 @@ pub struct AssetNode {
 }
 
 impl AssetNode {
-    /// Lê recursivamente uma pasta e constrói a árvore
     pub fn from_path(path: &Path) -> Option<Self> {
         let name = path
             .file_name()
@@ -106,15 +106,9 @@ impl AssetNode {
             Vec::new()
         };
 
-        Some(AssetNode {
-            name,
-            path: path.to_path_buf(),
-            is_dir,
-            children,
-        })
+        Some(AssetNode { name, path: path.to_path_buf(), is_dir, children })
     }
 
-    /// Ícone emoji simples baseado no tipo/extensão
     pub fn icon(&self) -> &str {
         match detect_asset_kind(&self.path) {
             AssetKind::Folder => "📁",
@@ -130,47 +124,62 @@ impl AssetNode {
     }
 }
 
-/// Raiz do gerenciador de assets do projeto
 pub struct AssetManager {
-    /// Pasta raiz do projeto
     pub root: PathBuf,
-    /// Árvore de arquivos lida do disco
     pub tree: Option<AssetNode>,
 }
 
 impl AssetManager {
     pub fn new(root: PathBuf) -> Self {
-        let mut mgr = Self {
-            root: root.clone(),
-            tree: None,
-        };
+        let mut mgr = Self { root: root.clone(), tree: None };
         mgr.refresh();
         mgr
     }
 
-    /// Relê o disco e atualiza a árvore
     pub fn refresh(&mut self) {
         let assets_path = self.root.join("assets");
         let _ = fs::create_dir_all(assets_path.join("scripts"));
         let _ = fs::create_dir_all(assets_path.join("scenes"));
         let _ = fs::create_dir_all(assets_path.join("sprites"));
+        let _ = fs::create_dir_all(assets_path.join("sounds"));
+        let _ = fs::create_dir_all(assets_path.join("fonts"));
+        let _ = fs::create_dir_all(assets_path.join("prefabs"));
         self.tree = AssetNode::from_path(&assets_path);
     }
 
-    /// Cria uma nova pasta dentro de um diretório existente
+    pub fn list_asset_records(&self) -> Vec<AssetRecord> {
+        let mut records = Vec::new();
+        let assets_root = self.root.join("assets");
+        collect_records(&assets_root, &mut records);
+        records.sort_by(|a, b| a.name.cmp(&b.name));
+        records
+    }
+
+    pub fn asset_record_for(&self, path: &Path) -> AssetRecord {
+        AssetRecord::new(path.to_path_buf(), detect_asset_type(path))
+    }
+
     pub fn create_folder(&self, parent: &Path, name: &str) -> io::Result<()> {
         let new_dir = parent.join(sanitize_asset_name(name));
         fs::create_dir_all(new_dir)
     }
 
-    /// Importa um arquivo externo para dentro de uma pasta de assets
+    pub fn create_scene_file(&self, parent: &Path, name: &str) -> io::Result<PathBuf> {
+        fs::create_dir_all(parent)?;
+        let sanitized = sanitize_asset_name(name.trim_end_matches(".scene.json"));
+        let path = parent.join(format!("{}.scene.json", sanitized));
+        if path.exists() {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe uma cena com esse nome."));
+        }
+        let scene = crate::core::scene::Scene::new(name);
+        crate::serialization::scene_serializer::save_scene_to_path(&scene, &path)?;
+        Ok(path)
+    }
+
     pub fn import_file(&self, source: &Path, target_dir: &Path) -> io::Result<PathBuf> {
         fs::create_dir_all(target_dir)?;
 
-        let file_name = source
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("asset.bin");
+        let file_name = source.file_name().and_then(|n| n.to_str()).unwrap_or("asset.bin");
 
         let mut destination = target_dir.join(file_name);
         if destination.exists() {
@@ -181,29 +190,16 @@ impl AssetManager {
         Ok(destination)
     }
 
-    /// Renomeia um arquivo ou pasta existente dentro de /assets
     pub fn rename_path(&self, path: &Path, new_name: &str) -> io::Result<PathBuf> {
         let trimmed = sanitize_asset_name(new_name);
         if trimmed.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Nome não pode ficar vazio.",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Nome não pode ficar vazio."));
         }
 
-        let parent = path.parent().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada.")
-        })?;
+        let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
 
-        let final_name = if path.is_file()
-            && Path::new(&trimmed).extension().is_none()
-            && path.extension().is_some()
-        {
-            format!(
-                "{}.{}",
-                trimmed,
-                path.extension().and_then(|e| e.to_str()).unwrap_or_default()
-            )
+        let final_name = if path.is_file() && Path::new(&trimmed).extension().is_none() && path.extension().is_some() {
+            format!("{}.{}", trimmed, path.extension().and_then(|e| e.to_str()).unwrap_or_default())
         } else {
             trimmed
         };
@@ -213,20 +209,24 @@ impl AssetManager {
         Ok(target)
     }
 
-    /// Deleta um arquivo ou pasta do disco
-    pub fn delete_path(&self, path: &Path) -> io::Result<()> {
-        if !path.exists() {
-            return Ok(());
+    pub fn duplicate_path(&self, path: &Path) -> io::Result<PathBuf> {
+        let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
+        if path.is_dir() {
+            let duplicate_dir = make_unique_named_path(parent, path.file_name().and_then(|n| n.to_str()).unwrap_or("pasta"));
+            copy_dir_recursive(path, &duplicate_dir)?;
+            return Ok(duplicate_dir);
         }
 
-        if path.is_dir() {
-            fs::remove_dir_all(path)
-        } else {
-            fs::remove_file(path)
-        }
+        let duplicate_file = make_unique_named_path(parent, path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
+        fs::copy(path, &duplicate_file)?;
+        Ok(duplicate_file)
     }
 
-    /// Cria um arquivo de script RS2 template.
+    pub fn delete_path(&self, path: &Path) -> io::Result<()> {
+        if !path.exists() { return Ok(()); }
+        if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) }
+    }
+
     pub fn create_rs2_script_file(&self, parent: &Path, name: &str) -> io::Result<PathBuf> {
         fs::create_dir_all(parent)?;
 
@@ -236,48 +236,75 @@ impl AssetManager {
 
         let path = parent.join(&final_name);
         if path.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "Já existe um script RS2 com esse nome.",
-            ));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um script RS2 com esse nome."));
         }
 
-        let template = "// Script RS2BR-Engine\n@start_message Novo script\n";
+        let template = "// Script RS2BR-Engine
+@start_message Novo script
+";
         fs::write(&path, template)?;
         Ok(path)
     }
 
-    /// Compatibilidade com código antigo.
     pub fn create_script(&self, parent: &Path, name: &str) -> io::Result<PathBuf> {
         self.create_rs2_script_file(parent, name)
     }
 
-    /// Retorna o caminho relativo à pasta assets
     pub fn relative_path<'a>(&self, path: &'a Path) -> Option<&'a Path> {
         let assets = self.root.join("assets");
         path.strip_prefix(&assets).ok()
     }
 }
 
-fn make_unique_path(target_dir: &Path, source: &Path) -> PathBuf {
-    let stem = source
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .unwrap_or("asset");
-    let extension = source.extension().and_then(|e| e.to_str()).unwrap_or_default();
-
-    for index in 1..10_000 {
-        let candidate_name = if extension.is_empty() {
-            format!("{}_{}", stem, index)
-        } else {
-            format!("{}_{}.{}", stem, index, extension)
-        };
-
-        let candidate = target_dir.join(candidate_name);
-        if !candidate.exists() {
-            return candidate;
+fn collect_records(path: &Path, output: &mut Vec<AssetRecord>) {
+    if !path.exists() { return; }
+    output.push(AssetRecord::new(path.to_path_buf(), detect_asset_type(path)));
+    if path.is_dir() {
+        let Ok(entries) = fs::read_dir(path) else { return; };
+        for entry in entries.filter_map(Result::ok) {
+            collect_records(&entry.path(), output);
         }
     }
+}
 
-    target_dir.join(source.file_name().unwrap_or_default())
+fn make_unique_path(target_dir: &Path, source: &Path) -> PathBuf {
+    let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
+    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    for index in 1..1000 {
+        let candidate_name = if ext.is_empty() { format!("{}_{}", stem, index) } else { format!("{}_{}.{}", stem, index, ext) };
+        let candidate = target_dir.join(candidate_name);
+        if !candidate.exists() { return candidate; }
+    }
+
+    target_dir.join(format!("{}_copy", stem))
+}
+
+fn make_unique_named_path(parent: &Path, original_name: &str) -> PathBuf {
+    let original = Path::new(original_name);
+    let stem = original.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
+    let ext = original.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    for index in 1..1000 {
+        let candidate_name = if ext.is_empty() { format!("{}_copy_{}", stem, index) } else { format!("{}_copy_{}.{}", stem, index, ext) };
+        let candidate = parent.join(candidate_name);
+        if !candidate.exists() { return candidate; }
+    }
+
+    parent.join(format!("{}_copy", stem))
+}
+
+fn copy_dir_recursive(from: &Path, to: &Path) -> io::Result<()> {
+    fs::create_dir_all(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = to.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path)?;
+        }
+    }
+    Ok(())
 }
