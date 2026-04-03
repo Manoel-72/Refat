@@ -158,6 +158,10 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             EditorPlayState::Paused => "Status: Pausado",
             EditorPlayState::Edit => "Status: Edição",
         });
+        ui.separator();
+        ui.label(format!("Flow: {:?}", app.runtime.game_state.flow));
+        ui.separator();
+        ui.label(format!("Etapa: {:?}", app.runtime.last_stage));
     });
 
     ui.label("Runtime jogável: carrega a cena atual, renderiza sprites, atualiza física e executa scripts anexados.");

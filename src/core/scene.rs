@@ -16,11 +16,8 @@ pub const SCENE_FILE_EXTENSION: &str = "scene.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scene {
-    #[serde(default = "default_scene_name")]
     pub name: String,
-    #[serde(default)]
     pub entities: Vec<Entity>,
-    #[serde(default = "default_background_color")]
     pub background_color: [f32; 3],
 }
 
@@ -122,13 +119,4 @@ pub fn sanitize_scene_name(name: &str) -> String {
     } else {
         sanitized
     }
-}
-
-
-fn default_scene_name() -> String {
-    "scene".to_string()
-}
-
-fn default_background_color() -> [f32; 3] {
-    [0.15, 0.15, 0.18]
 }

@@ -11,12 +11,32 @@ pub fn scene_to_json(scene: &Scene) -> String {
 }
 
 pub fn try_scene_from_json(json: &str) -> Result<Scene, String> {
-    let trimmed = json.trim();
-    if trimmed.is_empty() {
-        return Err("Falha ao desserializar cena: JSON vazio.".to_string());
-    }
+    let value: serde_json::Value = serde_json::from_str(json)
+        .map_err(|error| format!("Falha ao desserializar cena: {}", error))?;
 
-    serde_json::from_str(trimmed).map_err(|error| format!("Falha ao desserializar cena: {}", error))
+    let name = value
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("scene")
+        .to_string();
+
+    let entities = value
+        .get("entities")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+
+    let background_color = value
+        .get("background_color")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([0.15, 0.15, 0.18]));
+
+    serde_json::from_value(serde_json::json!({
+        "name": name,
+        "entities": entities,
+        "background_color": background_color,
+    }))
+    .map_err(|error| format!("Falha ao desserializar cena: {}", error))
 }
 
 pub fn scene_from_json(json: &str) -> Option<Scene> {
@@ -30,33 +50,35 @@ pub fn save_scene_to_path(scene: &Scene, path: &Path) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
-    let json = scene_to_json(scene);
-    if json.trim().is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Falha ao serializar cena '{}'.", scene.name),
-        ));
-    }
-
-    std::fs::write(path, json)
+    std::fs::write(path, scene_to_json(scene))
 }
 
 pub fn try_load_scene_from_path(path: &Path) -> Result<Scene, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("Falha ao ler cena '{}': {}", path.display(), error))?;
     try_scene_from_json(&content)
-        .map_err(|error| format!("{} (arquivo: {})", error, path.display()))
 }
 
 pub fn load_scene_from_path(path: &Path) -> Option<Scene> {
     try_load_scene_from_path(path).ok()
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::scene::Scene;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_scene_path() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("rs2br_scene_serializer_{}", unique))
+            .join("assets/scenes/teste.scene.json")
+    }
 
     #[test]
     fn scene_roundtrip_works() {
@@ -67,8 +89,29 @@ mod tests {
     }
 
     #[test]
-    fn invalid_scene_json_reports_error() {
-        let result = try_scene_from_json("{ invalid json }");
-        assert!(result.is_err());
+    fn invalid_scene_json_fails_cleanly() {
+        let error = try_scene_from_json("{ invalido }").unwrap_err();
+        assert!(error.contains("Falha ao desserializar cena"));
+    }
+
+    #[test]
+    fn scene_defaults_missing_fields_safely() {
+        let loaded = try_scene_from_json(r#"{"name":"SemCampos"}"#).unwrap();
+        assert_eq!(loaded.name, "SemCampos");
+        assert!(loaded.entities.is_empty());
+        assert_eq!(loaded.background_color, [0.15, 0.15, 0.18]);
+    }
+
+    #[test]
+    fn save_and_load_scene_path_work() {
+        let path = temp_scene_path();
+        let scene = Scene::new("SalvarCena");
+        save_scene_to_path(&scene, &path).unwrap();
+
+        let loaded = try_load_scene_from_path(&path).unwrap();
+        assert_eq!(loaded.name, "SalvarCena");
+
+        let root = path.parent().unwrap().parent().unwrap().parent().unwrap();
+        let _ = std::fs::remove_dir_all(root);
     }
 }

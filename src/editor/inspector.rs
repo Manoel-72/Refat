@@ -10,7 +10,7 @@ use crate::{
     component::{BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite},
 };
 use crate::runtime::script::is_valid_rs2_script;
-use super::EditorApp;
+use super::{warnings::EditorWarningSeverity, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     ui.heading("🔍 Inspector");
@@ -74,14 +74,19 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
     let runtime_warnings = app.collect_runtime_warnings();
     if !runtime_warnings.is_empty() {
         ui.group(|ui| {
-            ui.label(egui::RichText::new("⚠ Warnings da cena").strong());
+            ui.label(egui::RichText::new("⚠ Diagnóstico da cena").strong());
             for warning in runtime_warnings.iter().take(6) {
-                ui.colored_label(egui::Color32::YELLOW, &warning.label);
+                let (icon, color) = match warning.severity {
+                    EditorWarningSeverity::Info => ("ℹ", egui::Color32::from_rgb(120, 180, 255)),
+                    EditorWarningSeverity::Warning => ("⚠", egui::Color32::YELLOW),
+                    EditorWarningSeverity::Error => ("❌", egui::Color32::from_rgb(255, 120, 120)),
+                };
+                ui.colored_label(color, format!("{} {}", icon, warning.label));
                 ui.label(egui::RichText::new(&warning.details).small().weak());
                 ui.add_space(4.0);
             }
             if runtime_warnings.len() > 6 {
-                ui.label(egui::RichText::new(format!("+ {} warning(s) adicional(is)", runtime_warnings.len() - 6)).small().weak());
+                ui.label(egui::RichText::new(format!("+ {} aviso(s) adicional(is)", runtime_warnings.len() - 6)).small().weak());
             }
         });
         ui.add_space(6.0);
@@ -285,6 +290,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                         let mut h = bc.height;
                         let mut ox = bc.offset_x;
                         let mut oy = bc.offset_y;
+                        let mut is_trigger = bc.is_trigger;
                         let mut changed = false;
 
                         egui::Grid::new(format!("bc_{}", i))
@@ -303,6 +309,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 ui.label("Offset Y:");
                                 changed |= ui.add(egui::DragValue::new(&mut oy).speed(0.5)).changed();
                                 ui.end_row();
+                                ui.label("Trigger:");
+                                changed |= ui.checkbox(&mut is_trigger, "").changed();
+                                ui.end_row();
                             });
                         if changed {
                             updated_components.push((
@@ -312,6 +321,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     height: h,
                                     offset_x: ox,
                                     offset_y: oy,
+                                    is_trigger,
                                 }),
                             ));
                         }

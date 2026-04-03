@@ -55,7 +55,7 @@ fn update_entities_runtime_recursive(
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
-    colliders: &[(f32, f32, f32, f32, *const Entity)],
+    colliders: &[collision_system::RuntimeCollider],
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -63,6 +63,11 @@ fn update_entities_runtime_recursive(
         let my_collider_data = find_entity_collider(entity);
         let old_position = entity.transform().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0));
 
+        // Ordem oficial do frame no runtime por entidade:
+        // 1) movimento controlado por script/player
+        // 2) física simples
+        // 3) colisões e triggers
+        // 4) pós-processos (chão/câmera)
         movement_system::apply_script_movement(
             entity,
             delta_time,
@@ -75,12 +80,22 @@ fn update_entities_runtime_recursive(
             physics_system::apply_gravity(entity, delta_time, script_data.gravity_scale);
         }
 
-        let collision_state = handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
+        let collision_state =
+            handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
         physics_system::clamp_to_ground(entity, ground_y, script_data.collider_half_height);
         apply_camera_follow(entity, script_data.should_follow_camera, camera_follow_target);
 
         if collision_state.collided {
             for action in script_data.collision_actions {
+                match action {
+                    ScriptAction::ChangeScene(path) => return Some(RuntimeCommand::ChangeScene(path)),
+                    ScriptAction::ReloadScene => return Some(RuntimeCommand::ReloadScene),
+                }
+            }
+        }
+
+        if collision_state.triggered {
+            for action in script_data.trigger_actions {
                 match action {
                     ScriptAction::ChangeScene(path) => return Some(RuntimeCommand::ChangeScene(path)),
                     ScriptAction::ReloadScene => return Some(RuntimeCommand::ReloadScene),
@@ -107,16 +122,17 @@ fn update_entities_runtime_recursive(
 #[derive(Debug, Default)]
 struct CollisionState {
     collided: bool,
+    triggered: bool,
 }
 
 fn handle_entity_collisions(
     entity: &mut Entity,
     entity_ptr: *const Entity,
-    my_collider_data: Option<(f32, f32, f32, f32)>,
+    my_collider_data: Option<(f32, f32, f32, f32, bool)>,
     old_position: (f32, f32),
-    colliders: &[(f32, f32, f32, f32, *const Entity)],
+    colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
-    let Some((off_x, off_y, width, height)) = my_collider_data else {
+    let Some((off_x, off_y, width, height, is_my_trigger)) = my_collider_data else {
         return CollisionState::default();
     };
 
@@ -131,20 +147,33 @@ fn handle_entity_collisions(
         height,
     );
 
-    for (ox, oy, ow, oh, other_ptr) in colliders {
-        if std::ptr::eq(entity_ptr, *other_ptr) {
+    let mut state = CollisionState::default();
+
+    for other in colliders {
+        if std::ptr::eq(entity_ptr, other.entity_ptr) {
             continue;
         }
 
-        let other_rect = (*ox - *ow * 0.5, *oy - *oh * 0.5, *ow, *oh);
+        let other_rect = (
+            other.center_x - other.width * 0.5,
+            other.center_y - other.height * 0.5,
+            other.width,
+            other.height,
+        );
         if collision_system::aabb_collision(my_rect, other_rect) {
+            if is_my_trigger || other.is_trigger {
+                state.triggered = true;
+                continue;
+            }
+
             transform.x = old_position.0;
             transform.y = old_position.1;
-            return CollisionState { collided: true };
+            state.collided = true;
+            return state;
         }
     }
 
-    CollisionState::default()
+    state
 }
 
 fn apply_camera_follow(
@@ -161,13 +190,14 @@ fn apply_camera_follow(
     }
 }
 
-fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32)> {
+fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool)> {
     entity.components.iter().find_map(|component| match component {
         Component::BoxCollider(collider) => Some((
             collider.offset_x,
             collider.offset_y,
             collider.width,
             collider.height,
+            collider.is_trigger,
         )),
         _ => None,
     })
@@ -184,7 +214,9 @@ pub fn apply_player_controller_input(
 
         for component in &entity.components {
             if let Component::Script(script) = component {
-                if let Ok(behavior) = crate::runtime::script::load_script_behavior_checked(project_root, &script.file_path) {
+                if let Ok(behavior) =
+                    crate::runtime::script::load_script_behavior_checked(project_root, &script.file_path)
+                {
                     controller_speed = controller_speed.max(behavior.player_controller_speed.abs());
                 }
             }

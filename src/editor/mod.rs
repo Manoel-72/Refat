@@ -34,6 +34,17 @@ pub enum EditorPlayState {
     Paused,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetBrowserFilter {
+    All,
+    Images,
+    Scripts,
+    Scenes,
+    Prefabs,
+    Audio,
+    Fonts,
+}
+
 #[derive(Debug, Clone)]
 pub enum DeleteTarget {
     Entities { ids: Vec<String>, label: String },
@@ -76,8 +87,17 @@ impl OpenSceneDocument {
 }
 
 /// Estado global do editor
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorStatusLevel {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimePreviewWarning {
+    pub severity: warnings::EditorWarningSeverity,
     pub label: String,
     pub details: String,
 }
@@ -109,6 +129,8 @@ pub struct EditorApp {
     pub snap_to_grid: bool,
     /// Texto de busca do painel de assets
     pub asset_search: String,
+    /// Filtro rápido do painel de assets
+    pub asset_filter: AssetBrowserFilter,
     /// Cache de texturas carregadas dos sprites
     pub sprite_textures: HashMap<String, egui::TextureHandle>,
     /// Asset atualmente sendo arrastado do painel Assets para a cena
@@ -177,6 +199,7 @@ impl EditorApp {
             show_colliders: true,
             snap_to_grid: false,
             asset_search: String::new(),
+            asset_filter: AssetBrowserFilter::All,
             sprite_textures: HashMap::new(),
             dragging_asset_path: None,
             active_drag_entity_id: None,
@@ -385,6 +408,7 @@ impl EditorApp {
         warnings::collect_scene_warnings(&self.project_root, &self.scene)
             .into_iter()
             .map(|warning| RuntimePreviewWarning {
+                severity: warning.severity,
                 label: warning.label,
                 details: warning.details,
             })
@@ -572,7 +596,7 @@ impl EditorApp {
         self.active_scene_index = self.open_scenes.len().saturating_sub(1);
         self.scene = scene;
         self.clear_entity_selection();
-        self.status_msg = "Nova cena criada.".to_string();
+        self.status_msg = format!("✅ Nova cena criada: {}", self.scene.name);
     }
 
     pub fn save_active_scene(&mut self) -> Result<PathBuf, String> {
@@ -642,10 +666,7 @@ impl EditorApp {
                         if ui.button("✅ Criar").clicked() {
                             match self.assets.create_rs2_script_file(&folder, &buf) {
                                 Ok(p) => {
-                                    self.status_msg = format!(
-                                        "Script RS2 criado: {:?}",
-                                        p.file_name().unwrap_or_default()
-                                    );
+                                    self.status_msg = format!("✅ Script RS2 criado: {}", p.file_name().and_then(|n| n.to_str()).unwrap_or("script.rs2"));
                                     self.assets.refresh();
 
                                     #[cfg(target_os = "windows")]
@@ -693,7 +714,7 @@ impl EditorApp {
                         if ui.button("✅ Criar").clicked() {
                             match self.assets.create_folder(&parent, &buf) {
                                 Ok(_) => {
-                                    self.status_msg = format!("Pasta criada: {}", buf);
+                                    self.status_msg = format!("✅ Pasta criada: {}", crate::assets::manager::sanitize_asset_name(&buf));
                                     self.assets.refresh();
                                 }
                                 Err(e) => self.status_msg = format!("Erro: {}", e),
@@ -737,7 +758,7 @@ impl EditorApp {
                             let id = entity.id.clone();
                             self.scene.add_entity(entity);
                             self.select_single_entity(Some(id));
-                            self.status_msg = format!("Entidade '{}' criada!", buf);
+                            self.status_msg = format!("✅ Entidade '{}' criada.", buf.trim());
                             self.new_entity_dialog = None;
                         }
 
@@ -826,7 +847,7 @@ impl EditorApp {
                             if !buf.trim().is_empty() {
                                 if let Some(entity) = self.find_entity_mut(&entity_id) {
                                     entity.name = buf.trim().to_string();
-                                    self.status_msg = "✏ Entidade renomeada.".to_string();
+                                    self.status_msg = format!("✅ Entidade renomeada para '{}'.", buf.trim());
                                 }
                             }
                             self.rename_entity_dialog = None;
@@ -911,6 +932,28 @@ impl EditorApp {
         if !open {
             self.delete_confirmation = None;
         }
+    }
+}
+
+fn infer_status_level(message: &str) -> EditorStatusLevel {
+    let trimmed = message.trim_start();
+    if trimmed.starts_with('❌') || trimmed.to_ascii_lowercase().starts_with("erro") {
+        EditorStatusLevel::Error
+    } else if trimmed.starts_with('⚠') {
+        EditorStatusLevel::Warning
+    } else if trimmed.starts_with('✅') || trimmed.starts_with('✔') {
+        EditorStatusLevel::Success
+    } else {
+        EditorStatusLevel::Info
+    }
+}
+
+fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
+    match level {
+        EditorStatusLevel::Info => ("ℹ", egui::Color32::from_rgb(120, 180, 255)),
+        EditorStatusLevel::Success => ("✅", egui::Color32::from_rgb(120, 220, 140)),
+        EditorStatusLevel::Warning => ("⚠", egui::Color32::YELLOW),
+        EditorStatusLevel::Error => ("❌", egui::Color32::from_rgb(255, 120, 120)),
     }
 }
 
@@ -999,7 +1042,12 @@ impl eframe::App for EditorApp {
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(&self.status_msg);
+                let level = infer_status_level(&self.status_msg);
+                let (icon, color) = status_visuals(level);
+                let trimmed_message = self
+                    .status_msg
+                    .trim_start_matches(|c: char| matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' '));
+                ui.colored_label(color, format!("{} {}", icon, trimmed_message));
                 ui.separator();
 
                 let mode_label = match self.play_state {
@@ -1015,6 +1063,17 @@ impl eframe::App for EditorApp {
                     ui.label("Warnings: 0");
                 } else {
                     ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
+                }
+
+                if let Some(asset) = self.selected_asset.as_ref() {
+                    let record = self.assets.asset_record_for(asset);
+                    ui.separator();
+                    let asset_color = if record.validation.is_valid {
+                        egui::Color32::from_rgb(120, 220, 140)
+                    } else {
+                        egui::Color32::from_rgb(255, 120, 120)
+                    };
+                    ui.colored_label(asset_color, format!("Asset: {}", record.name));
                 }
 
                 if !self.selected_entity_ids.is_empty() {

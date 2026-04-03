@@ -109,11 +109,13 @@ pub struct BoxCollider {
     pub height: f32,
     pub offset_x: f32,
     pub offset_y: f32,
+    #[serde(default)]
+    pub is_trigger: bool,
 }
 
 impl Default for BoxCollider {
     fn default() -> Self {
-        Self { width: 32.0, height: 32.0, offset_x: 0.0, offset_y: 0.0 }
+        Self { width: 32.0, height: 32.0, offset_x: 0.0, offset_y: 0.0, is_trigger: false }
     }
 }
 

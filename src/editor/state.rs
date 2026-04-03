@@ -126,7 +126,7 @@ impl EditorApp {
         ctx: &eframe::egui::Context,
         relative_path: &str,
     ) -> Option<eframe::egui::TextureHandle> {
-        let key = relative_path.replace('\', "/");
+        let key = relative_path.replace('\\', "/");
 
         if let Some(texture) = self.sprite_textures.get(&key) {
             return Some(texture.clone());
@@ -171,7 +171,7 @@ impl EditorApp {
 
         self.push_undo_state();
 
-        let relative_str = relative.to_string_lossy().replace('\', "/");
+        let relative_str = relative.to_string_lossy().replace('\\', "/");
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Sprite");
 
         let mut entity = Entity::new(name);

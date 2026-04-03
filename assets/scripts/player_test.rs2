@@ -1,0 +1,4 @@
+// Player do teste prático V0.6.5
+@start_message Mini jogo de validação carregado
+@player_controller 220
+@camera_follow

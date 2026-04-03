@@ -1,9 +1,17 @@
-use std::{collections::HashSet, path::{Path, PathBuf}, time::Instant};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use crate::{
-    editor::EditorPlayState,
     core::scene::Scene,
-    runtime::{camera, scene_manager::SceneManager, systems::{self, RuntimeCommand}},
+    editor::EditorPlayState,
+    runtime::{
+        camera,
+        scene_manager::SceneManager,
+        systems::{self, RuntimeCommand},
+    },
 };
 
 #[derive(Default, Clone)]
@@ -24,6 +32,36 @@ pub struct RuntimeInput {
     pub mouse_pos: (f32, f32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RuntimeFrameStage {
+    #[default]
+    Idle,
+    CaptureInput,
+    ApplyPlayerInput,
+    UpdateScriptsAndMovement,
+    ApplyPhysics,
+    ResolveCollisions,
+    UpdateCamera,
+    FinalizeFrame,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RuntimeGameFlow {
+    #[default]
+    Editing,
+    Playing,
+    Paused,
+    GameOver,
+    Loading,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeGameState {
+    pub flow: RuntimeGameFlow,
+    pub score: i32,
+    pub loading_label: Option<String>,
+}
+
 pub struct RuntimeState {
     pub active_scene: Option<Scene>,
     pub elapsed_time: f32,
@@ -34,6 +72,8 @@ pub struct RuntimeState {
     pub started_scripts: HashSet<String>,
     pub input: RuntimeInput,
     pub scene_manager: SceneManager,
+    pub game_state: RuntimeGameState,
+    pub last_stage: RuntimeFrameStage,
 }
 
 impl RuntimeState {
@@ -48,6 +88,8 @@ impl RuntimeState {
             started_scripts: HashSet::new(),
             input: RuntimeInput::default(),
             scene_manager: SceneManager::new(),
+            game_state: RuntimeGameState::default(),
+            last_stage: RuntimeFrameStage::Idle,
         }
     }
 
@@ -55,25 +97,32 @@ impl RuntimeState {
         self.scene_manager.set_editor_scene(scene.clone());
         self.active_scene = self.scene_manager.current_scene.clone();
         self.reset_timing_state();
+        self.game_state.flow = RuntimeGameFlow::Playing;
     }
 
     pub fn start_from_path(&mut self, path: PathBuf) -> Result<(), String> {
         self.scene_manager.load_scene(path)?;
         self.active_scene = self.scene_manager.current_scene.clone();
         self.reset_timing_state();
+        self.game_state.flow = RuntimeGameFlow::Playing;
         Ok(())
     }
 
     pub fn queue_scene_change(&mut self, path: PathBuf) {
+        self.game_state.flow = RuntimeGameFlow::Loading;
+        self.game_state.loading_label = Some(path.display().to_string());
         self.scene_manager.change_scene(path);
     }
 
     pub fn reload_current_scene(&mut self, fallback_scene: &Scene) {
+        self.game_state.flow = RuntimeGameFlow::Loading;
         if self.scene_manager.reload_scene().is_err() {
             self.start_from_scene(fallback_scene);
         } else {
             self.active_scene = self.scene_manager.current_scene.clone();
             self.reset_timing_state();
+            self.game_state.flow = RuntimeGameFlow::Playing;
+            self.game_state.loading_label = None;
         }
     }
 
@@ -86,6 +135,8 @@ impl RuntimeState {
         self.last_frame_at = None;
         self.started_scripts.clear();
         self.input = RuntimeInput::default();
+        self.last_stage = RuntimeFrameStage::Idle;
+        self.game_state = RuntimeGameState::default();
     }
 
     pub fn sync_with_mode(
@@ -98,6 +149,8 @@ impl RuntimeState {
         if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
             self.active_scene = self.scene_manager.current_scene.clone();
             self.reset_timing_state();
+            self.game_state.flow = RuntimeGameFlow::Playing;
+            self.game_state.loading_label = None;
         }
 
         match mode {
@@ -106,12 +159,14 @@ impl RuntimeState {
                     self.stop();
                 }
                 self.window_open = false;
+                self.game_state.flow = RuntimeGameFlow::Editing;
             }
             EditorPlayState::Playing => {
                 if self.active_scene.is_none() {
                     self.start_from_scene(source_scene);
                 }
                 self.window_open = true;
+                self.game_state.flow = RuntimeGameFlow::Playing;
                 self.update_frame(project_root, ground_y);
             }
             EditorPlayState::Paused => {
@@ -121,6 +176,8 @@ impl RuntimeState {
                 self.window_open = true;
                 self.delta_time = 0.0;
                 self.last_frame_at = Some(Instant::now());
+                self.last_stage = RuntimeFrameStage::Idle;
+                self.game_state.flow = RuntimeGameFlow::Paused;
             }
         }
     }
@@ -140,6 +197,7 @@ impl RuntimeState {
         self.last_frame_at = Some(Instant::now());
         self.started_scripts.clear();
         self.input = RuntimeInput::default();
+        self.last_stage = RuntimeFrameStage::Idle;
     }
 
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
@@ -154,8 +212,26 @@ impl RuntimeState {
         self.elapsed_time += dt;
         self.frame_count += 1;
 
+        let player_input = systems::input_system::player_axis(&self.input);
+
         if let Some(scene) = &mut self.active_scene {
             let mut camera_follow_target = None;
+
+            self.last_stage = RuntimeFrameStage::CaptureInput;
+
+            self.last_stage = RuntimeFrameStage::ApplyPlayerInput;
+            if player_input != eframe::egui::Vec2::ZERO {
+                systems::apply_player_controller_input(
+                    &mut scene.entities,
+                    project_root,
+                    dt,
+                    player_input,
+                );
+            }
+
+            self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
+            self.last_stage = RuntimeFrameStage::ApplyPhysics;
+            self.last_stage = RuntimeFrameStage::ResolveCollisions;
             let runtime_command = systems::update_entities_runtime(
                 &mut scene.entities,
                 dt,
@@ -164,9 +240,13 @@ impl RuntimeState {
                 &mut camera_follow_target,
                 ground_y,
             );
+
+            self.last_stage = RuntimeFrameStage::UpdateCamera;
             if let Some((x, y)) = camera_follow_target {
                 camera::set_main_camera_position(&mut scene.entities, x, y);
             }
+
+            self.last_stage = RuntimeFrameStage::FinalizeFrame;
             self.scene_manager.current_scene = Some(scene.clone());
 
             if let Some(command) = runtime_command {
@@ -176,10 +256,9 @@ impl RuntimeState {
                     }
                     RuntimeCommand::ReloadScene => {
                         self.scene_manager.change_scene(
-                            self.scene_manager
-                                .current_path
-                                .clone()
-                                .unwrap_or_else(|| project_root.join("assets/scenes/fase1.scene.json")),
+                            self.scene_manager.current_path.clone().unwrap_or_else(|| {
+                                project_root.join("assets/scenes/fase1.scene.json")
+                            }),
                         );
                     }
                 }

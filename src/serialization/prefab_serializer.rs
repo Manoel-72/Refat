@@ -11,12 +11,26 @@ pub fn prefab_to_json(prefab: &Prefab) -> String {
 }
 
 pub fn try_prefab_from_json(json: &str) -> Result<Prefab, String> {
-    let trimmed = json.trim();
-    if trimmed.is_empty() {
-        return Err("Falha ao desserializar prefab: JSON vazio.".to_string());
-    }
+    let value: serde_json::Value = serde_json::from_str(json)
+        .map_err(|error| format!("Falha ao desserializar prefab: {}", error))?;
 
-    serde_json::from_str(trimmed).map_err(|error| format!("Falha ao desserializar prefab: {}", error))
+    let name = value
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("prefab")
+        .to_string();
+
+    let root_entity = value
+        .get("root_entity")
+        .cloned()
+        .ok_or_else(|| "Falha ao desserializar prefab: campo 'root_entity' ausente.".to_string())?;
+
+    serde_json::from_value(serde_json::json!({
+        "name": name,
+        "root_entity": root_entity,
+    }))
+    .map_err(|error| format!("Falha ao desserializar prefab: {}", error))
 }
 
 pub fn prefab_from_json(json: &str) -> Option<Prefab> {
@@ -27,33 +41,35 @@ pub fn save_prefab_to_path(prefab: &Prefab, path: &Path) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
-    let json = prefab_to_json(prefab);
-    if json.trim().is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Falha ao serializar prefab '{}'.", prefab.name),
-        ));
-    }
-
-    std::fs::write(path, json)
+    std::fs::write(path, prefab_to_json(prefab))
 }
 
 pub fn try_load_prefab_from_path(path: &Path) -> Result<Prefab, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("Falha ao ler prefab '{}': {}", path.display(), error))?;
     try_prefab_from_json(&content)
-        .map_err(|error| format!("{} (arquivo: {})", error, path.display()))
 }
 
 pub fn load_prefab_from_path(path: &Path) -> Option<Prefab> {
     try_load_prefab_from_path(path).ok()
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::{entity::Entity, prefab::Prefab};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_prefab_path() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("rs2br_prefab_serializer_{}", unique))
+            .join("assets/prefabs/teste.prefab.json")
+    }
 
     #[test]
     fn prefab_roundtrip_works() {
@@ -64,8 +80,27 @@ mod tests {
     }
 
     #[test]
-    fn invalid_prefab_json_reports_error() {
-        let result = try_prefab_from_json("{ invalid json }");
-        assert!(result.is_err());
+    fn invalid_prefab_json_fails_cleanly() {
+        let error = try_prefab_from_json("{ invalido }").unwrap_err();
+        assert!(error.contains("Falha ao desserializar prefab"));
+    }
+
+    #[test]
+    fn missing_root_entity_fails_with_clear_message() {
+        let error = try_prefab_from_json(r#"{"name":"SemRaiz"}"#).unwrap_err();
+        assert!(error.contains("root_entity"));
+    }
+
+    #[test]
+    fn save_and_load_prefab_path_work() {
+        let path = temp_prefab_path();
+        let prefab = Prefab::new("TesteSalvar", Entity::new("EntidadeSalvar"));
+        save_prefab_to_path(&prefab, &path).unwrap();
+
+        let loaded = try_load_prefab_from_path(&path).unwrap();
+        assert_eq!(loaded.name, "TesteSalvar");
+
+        let root = path.parent().unwrap().parent().unwrap().parent().unwrap();
+        let _ = std::fs::remove_dir_all(root);
     }
 }

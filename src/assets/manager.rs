@@ -171,7 +171,7 @@ impl AssetManager {
         if path.exists() {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe uma cena com esse nome."));
         }
-        let scene = crate::core::scene::Scene::new(name);
+        let scene = crate::core::scene::Scene::new(&sanitized);
         crate::serialization::scene_serializer::save_scene_to_path(&scene, &path)?;
         Ok(path)
     }
@@ -191,20 +191,42 @@ impl AssetManager {
     }
 
     pub fn rename_path(&self, path: &Path, new_name: &str) -> io::Result<PathBuf> {
+        if !path.exists() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "O asset selecionado não existe mais no disco."));
+        }
+
         let trimmed = sanitize_asset_name(new_name);
         if trimmed.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Nome não pode ficar vazio."));
         }
 
         let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
+        let current_file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
 
-        let final_name = if path.is_file() && Path::new(&trimmed).extension().is_none() && path.extension().is_some() {
-            format!("{}.{}", trimmed, path.extension().and_then(|e| e.to_str()).unwrap_or_default())
+        let final_name = if path.is_file() {
+            if current_file_name.ends_with(".scene.json") {
+                format!("{}.scene.json", trimmed.trim_end_matches(".scene.json"))
+            } else if current_file_name.ends_with(".prefab.json") {
+                format!("{}.prefab.json", trimmed.trim_end_matches(".prefab.json"))
+            } else if current_file_name.ends_with(".matr.json") {
+                format!("{}.matr.json", trimmed.trim_end_matches(".matr.json"))
+            } else if Path::new(&trimmed).extension().is_none() && path.extension().is_some() {
+                format!("{}.{}", trimmed, path.extension().and_then(|e| e.to_str()).unwrap_or_default())
+            } else {
+                trimmed.clone()
+            }
         } else {
-            trimmed
+            trimmed.clone()
         };
 
         let target = parent.join(final_name);
+        if target == path {
+            return Ok(target);
+        }
+        if target.exists() {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um asset com esse nome nessa pasta."));
+        }
+
         fs::rename(path, &target)?;
         Ok(target)
     }
@@ -223,7 +245,9 @@ impl AssetManager {
     }
 
     pub fn delete_path(&self, path: &Path) -> io::Result<()> {
-        if !path.exists() { return Ok(()); }
+        if !path.exists() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "O asset selecionado já não existe mais."));
+        }
         if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) }
     }
 
@@ -307,4 +331,72 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(prefix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("rs2br_{}_{}", prefix, unique));
+        fs::create_dir_all(root.join("assets")).unwrap();
+        root
+    }
+
+    #[test]
+    fn sanitize_asset_name_removes_invalid_chars() {
+        assert_eq!(sanitize_asset_name(" Meu asset?.png "), "Meu_asset.png");
+    }
+
+    #[test]
+    fn create_scene_file_and_script_work() {
+        let root = temp_root("asset_manager_create");
+        let manager = AssetManager::new(root.clone());
+        let scene_path = manager.create_scene_file(&root.join("assets/scenes"), "fase_01").unwrap();
+        let script_path = manager.create_rs2_script_file(&root.join("assets/scripts"), "jogador").unwrap();
+
+        assert!(scene_path.exists());
+        assert!(script_path.exists());
+        assert!(scene_path.file_name().unwrap().to_string_lossy().ends_with(".scene.json"));
+        assert!(script_path.file_name().unwrap().to_string_lossy().ends_with(".rs2"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rename_scene_keeps_compound_extension() {
+        let root = temp_root("asset_manager_scene_rename");
+        let manager = AssetManager::new(root.clone());
+        let scene = manager.create_scene_file(&root.join("assets/scenes"), "fase_teste").unwrap();
+        let renamed = manager.rename_path(&scene, "fase_final").unwrap();
+
+        assert!(renamed.file_name().unwrap().to_string_lossy().ends_with(".scene.json"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn duplicate_and_rename_asset_keep_file_alive() {
+        let root = temp_root("asset_manager_ops");
+        let manager = AssetManager::new(root.clone());
+        let sprites = root.join("assets/sprites");
+        fs::create_dir_all(&sprites).unwrap();
+        let original = sprites.join("hero.png");
+        fs::write(&original, b"fake").unwrap();
+
+        let duplicate = manager.duplicate_path(&original).unwrap();
+        let renamed = manager.rename_path(&duplicate, "hero_copia").unwrap();
+
+        assert!(original.exists());
+        assert!(renamed.exists());
+        assert!(renamed.file_name().unwrap().to_string_lossy().contains("hero_copia"));
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

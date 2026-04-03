@@ -18,8 +18,10 @@ pub struct ScriptBehavior {
     pub player_controller_speed: f32,
     pub camera_follow: bool,
     pub start_message: Option<String>,
+    pub on_start: Vec<String>,
     pub on_update: Vec<String>,
     pub on_collision: Vec<ScriptAction>,
+    pub on_trigger: Vec<ScriptAction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,6 +186,12 @@ pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
         if clean == "@camera_follow" || clean == "camera_follow = true" {
             behavior.camera_follow = true;
         }
+        if let Some(rest) = clean.strip_prefix("@on_start") {
+            let trimmed = rest.trim();
+            if !trimmed.is_empty() {
+                behavior.on_start.push(trimmed.to_string());
+            }
+        }
         if let Some(rest) = clean.strip_prefix("@on_update") {
             let trimmed = rest.trim();
             if !trimmed.is_empty() {
@@ -193,6 +201,11 @@ pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
         if let Some(rest) = clean.strip_prefix("@on_collision") {
             if let Some(action) = parse_script_action(rest.trim()) {
                 behavior.on_collision.push(action);
+            }
+        }
+        if let Some(rest) = clean.strip_prefix("@on_trigger") {
+            if let Some(action) = parse_script_action(rest.trim()) {
+                behavior.on_trigger.push(action);
             }
         }
     }
@@ -257,21 +270,21 @@ fn validate_directive_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptE
                 ));
             }
         }
-        "@on_update" => {
+        "@on_start" | "@on_update" => {
             let rest = clean.trim_start_matches(token).trim();
             if rest.is_empty() {
                 errors.push(script_error(
                     line_no,
-                    "@on_update precisa de uma instrução ou descrição após a diretiva.".to_string(),
+                    format!("{} precisa de uma instrução ou descrição após a diretiva.", token),
                 ));
             }
         }
-        "@on_collision" => {
+        "@on_collision" | "@on_trigger" => {
             let rest = clean.trim_start_matches(token).trim();
             if parse_script_action(rest).is_none() {
                 errors.push(script_error(
                     line_no,
-                    "@on_collision precisa de uma ação válida: change_scene \"caminho\" ou reload_scene.".to_string(),
+                    format!("{} precisa de uma ação válida: change_scene \"caminho\" ou reload_scene.", token),
                 ));
             }
         }
@@ -388,4 +401,37 @@ fn parse_script_action(raw: &str) -> Option<ScriptAction> {
         return Some(ScriptAction::ReloadScene);
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_script_accepts_valid_script() {
+        let source = "@start_message \"Olá\"\n@move_x 10\n@camera_follow\n@on_start boot\n@on_collision reload_scene\n@on_trigger change_scene \"fases/menu.scene.json\"";
+        let errors = validate_script(source);
+        assert!(errors.is_empty(), "expected no errors, got {:?}", errors);
+    }
+
+    #[test]
+    fn validate_script_reports_invalid_command_line() {
+        let source = "@move_x abc";
+        let errors = validate_script(source);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].line, 1);
+    }
+
+    #[test]
+    fn parser_supports_single_and_double_quotes() {
+        let source = "@start_message 'Oi'\n@on_start boot\n@on_collision change_scene \"fases/menu.scene.json\"\n@on_trigger reload_scene";
+        let behavior = parse_rs2_script(source);
+        assert_eq!(behavior.start_message.as_deref(), Some("Oi"));
+        assert_eq!(behavior.on_start, vec!["boot".to_string()]);
+        assert_eq!(
+            behavior.on_collision,
+            vec![ScriptAction::ChangeScene("fases/menu.scene.json".to_string())]
+        );
+        assert_eq!(behavior.on_trigger, vec![ScriptAction::ReloadScene]);
+    }
 }

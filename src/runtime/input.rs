@@ -14,7 +14,6 @@ pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
 
     app.runtime.input = systems::input_system::capture_runtime_input(ctx);
 
-    let player_input = systems::input_system::player_axis(&app.runtime.input);
     let camera_input = systems::input_system::camera_axis(&app.runtime.input);
     let zoom_input = systems::input_system::zoom_delta(ctx);
     let reload_scene = ctx.input(|i| i.key_pressed(egui::Key::R));
@@ -27,15 +26,6 @@ pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
     let Some(scene) = app.runtime.active_scene.as_mut() else {
         return;
     };
-
-    if player_input != egui::Vec2::ZERO {
-        systems::apply_player_controller_input(
-            &mut scene.entities,
-            &app.project_root,
-            step,
-            player_input,
-        );
-    }
 
     if camera_input != egui::Vec2::ZERO || zoom_input.abs() > f32::EPSILON {
         let camera_speed = 260.0 * step;

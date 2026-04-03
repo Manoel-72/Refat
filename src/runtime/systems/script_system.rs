@@ -1,6 +1,9 @@
 use std::{collections::HashSet, path::Path};
 
-use crate::{core::{component::Component, entity::Entity}, runtime::script::{load_script_behavior_checked, ScriptAction}};
+use crate::{
+    core::{component::Component, entity::Entity},
+    runtime::script::{load_script_behavior_checked, ScriptAction},
+};
 
 #[derive(Debug, Default)]
 pub struct ScriptScanResult {
@@ -9,6 +12,7 @@ pub struct ScriptScanResult {
     pub rotate_speed: f32,
     pub should_follow_camera: bool,
     pub collision_actions: Vec<ScriptAction>,
+    pub trigger_actions: Vec<ScriptAction>,
     pub gravity_scale: Option<f32>,
     pub is_static: bool,
     pub collider_half_height: f32,
@@ -39,12 +43,18 @@ pub fn scan_script_behavior(
                         } else {
                             println!("▶ Script '{}' iniciado em '{}'", script.file_path, entity.name);
                         }
+
+                        for event in &behavior.on_start {
+                            println!("▶ on_start '{}' em '{}': {}", script.file_path, entity.name, event);
+                        }
                     }
+
                     result.move_x += behavior.move_x;
                     result.move_y += behavior.move_y;
                     result.rotate_speed += behavior.rotate_speed;
                     result.should_follow_camera |= behavior.camera_follow;
                     result.collision_actions.extend(behavior.on_collision.into_iter());
+                    result.trigger_actions.extend(behavior.on_trigger.into_iter());
                 }
             }
             _ => {}

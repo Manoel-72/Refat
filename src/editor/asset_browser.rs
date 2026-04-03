@@ -13,7 +13,7 @@ use crate::{
     component::{Camera2D, Component},
     entity::Entity,
 };
-use super::EditorApp;
+use super::{AssetBrowserFilter, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     let assets_root = app.project_root.join("assets");
@@ -27,6 +27,10 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 .hint_text("sprite, MATR, script rs2...")
                 .desired_width(180.0),
         );
+        if ui.button("✖ Limpar").clicked() {
+            app.asset_search.clear();
+            app.asset_filter = AssetBrowserFilter::All;
+        }
 
         if ui.button("📥 Importar Sprite").clicked() {
             import_sprite_file(app, &assets_root);
@@ -52,7 +56,22 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         }
         if ui.button("🔄 Recarregar").clicked() {
             app.assets.refresh();
+            app.status_msg = "✅ Assets recarregados.".to_string();
         }
+    });
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Filtros rápidos:");
+        for (label, filter) in quick_filters() {
+            let selected = app.asset_filter == filter;
+            if ui.selectable_label(selected, label).clicked() {
+                app.asset_filter = filter;
+            }
+        }
+
+        let total_assets = app.assets.list_asset_records().len();
+        ui.separator();
+        ui.small(format!("{} registros", total_assets));
     });
 
     ui.label(
@@ -62,6 +81,22 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         .small()
         .weak(),
     );
+
+    if let Some(selected_asset) = app.selected_asset.clone() {
+        let record = app.assets.asset_record_for(&selected_asset);
+        let (color, status_label) = if record.validation.is_valid {
+            (egui::Color32::from_rgb(120, 220, 140), "válido")
+        } else {
+            (egui::Color32::from_rgb(255, 120, 120), "com problema")
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.small("Selecionado:");
+            ui.colored_label(color, format!("{} ({})", record.name, status_label));
+            if !record.validation.is_valid {
+                ui.label(egui::RichText::new(&record.validation.message).small().weak());
+            }
+        });
+    }
     ui.separator();
 
     ui.columns(2, |columns| {
@@ -111,6 +146,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                             &tree,
                             &app.selected_asset,
                             &app.asset_search,
+                            app.asset_filter,
                             &mut action,
                             &mut app.dragging_asset_path,
                         );
@@ -242,11 +278,12 @@ fn show_node(
     ui: &mut egui::Ui,
     node: &AssetNode,
     selected: &Option<PathBuf>,
-    filter: &str,
+    search: &str,
+    asset_filter: AssetBrowserFilter,
     action: &mut Option<AssetAction>,
     dragging_asset: &mut Option<PathBuf>,
 ) {
-    if !matches_filter(node, filter) {
+    if !matches_filter(node, search, asset_filter) {
         return;
     }
 
@@ -260,10 +297,10 @@ fn show_node(
 
         let response = egui::CollapsingHeader::new(&header)
             .id_source(node_path.to_string_lossy().to_string())
-            .default_open(filter.trim().is_empty())
+            .default_open(search.trim().is_empty() && matches!(asset_filter, AssetBrowserFilter::All))
             .show(ui, |ui: &mut egui::Ui| {
                 for child in &children {
-                    show_node(ui, child, selected, filter, action, dragging_asset);
+                    show_node(ui, child, selected, search, asset_filter, action, dragging_asset);
                 }
             });
 
@@ -429,6 +466,8 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
         ui.label(format!("Status: {}", status_text));
         if !record.validation.is_valid {
             ui.colored_label(egui::Color32::YELLOW, format!("⚠ {}", record.validation.message));
+        } else {
+            ui.colored_label(egui::Color32::LIGHT_GREEN, "✔ Validação OK");
         }
 
         if let Some(rel) = &relative {
@@ -597,14 +636,46 @@ fn import_sprite_file(app: &mut EditorApp, assets_root: &Path) {
     }
 }
 
-fn matches_filter(node: &AssetNode, filter: &str) -> bool {
-    let query = filter.trim().to_lowercase();
-    if query.is_empty() {
-        return true;
-    }
+fn quick_filters() -> [(&'static str, AssetBrowserFilter); 7] {
+    [
+        ("Todos", AssetBrowserFilter::All),
+        ("Imagens", AssetBrowserFilter::Images),
+        ("Scripts", AssetBrowserFilter::Scripts),
+        ("Scenes", AssetBrowserFilter::Scenes),
+        ("Prefabs", AssetBrowserFilter::Prefabs),
+        ("Áudio", AssetBrowserFilter::Audio),
+        ("Fontes", AssetBrowserFilter::Fonts),
+    ]
+}
 
-    node.name.to_lowercase().contains(&query)
-        || node.children.iter().any(|child| matches_filter(child, filter))
+fn matches_filter(node: &AssetNode, search: &str, asset_filter: AssetBrowserFilter) -> bool {
+    let query = search.trim().to_lowercase();
+    let search_matches = query.is_empty() || node.name.to_lowercase().contains(&query);
+    let type_matches = node.is_dir || asset_matches_filter(&node.path, asset_filter);
+
+    (search_matches && type_matches)
+        || node.children.iter().any(|child| matches_filter(child, search, asset_filter))
+}
+
+fn asset_matches_filter(path: &Path, asset_filter: AssetBrowserFilter) -> bool {
+    match asset_filter {
+        AssetBrowserFilter::All => true,
+        AssetBrowserFilter::Images => is_image_file(path),
+        AssetBrowserFilter::Scripts => is_rs2_file(path),
+        AssetBrowserFilter::Scenes => matches!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some(name) if name.ends_with(".scene.json")
+        ),
+        AssetBrowserFilter::Prefabs => is_matr_file(path),
+        AssetBrowserFilter::Audio => matches!(
+            path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+            Some("wav") | Some("ogg") | Some("mp3")
+        ),
+        AssetBrowserFilter::Fonts => matches!(
+            path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+            Some("ttf") | Some("otf")
+        ),
+    }
 }
 
 fn is_image_file(path: &Path) -> bool {
