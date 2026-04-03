@@ -2,7 +2,9 @@ use std::{collections::HashSet, path::Path};
 
 use crate::{
     core::{component::Component, entity::Entity},
-    runtime::script::{load_script_behavior_checked, ScriptAction},
+    runtime::script::{
+        load_script_behavior_checked, parse_event_instruction, ScriptAction, ScriptEventInstruction,
+    },
 };
 
 #[derive(Debug, Default)]
@@ -37,7 +39,9 @@ pub fn scan_script_behavior(
             Component::Script(script) => {
                 if let Ok(behavior) = load_script_behavior_checked(project_root, &script.file_path) {
                     let script_key = format!("{}::{}", entity.id, script.file_path);
-                    if started_scripts.insert(script_key) {
+                    let is_first_start = started_scripts.insert(script_key);
+
+                    if is_first_start {
                         if let Some(message) = &behavior.start_message {
                             println!("▶ Script '{}' em '{}': {}", script.file_path, entity.name, message);
                         } else {
@@ -45,8 +49,12 @@ pub fn scan_script_behavior(
                         }
 
                         for event in &behavior.on_start {
-                            println!("▶ on_start '{}' em '{}': {}", script.file_path, entity.name, event);
+                            execute_event_instruction(event, &entity.name, &script.file_path, &mut result, true);
                         }
+                    }
+
+                    for event in &behavior.on_update {
+                        execute_event_instruction(event, &entity.name, &script.file_path, &mut result, false);
                     }
 
                     result.move_x += behavior.move_x;
@@ -62,4 +70,29 @@ pub fn scan_script_behavior(
     }
 
     result
+}
+
+fn execute_event_instruction(
+    event: &str,
+    entity_name: &str,
+    script_path: &str,
+    result: &mut ScriptScanResult,
+    is_start: bool,
+) {
+    let Some(instruction) = parse_event_instruction(event) else {
+        return;
+    };
+
+    match instruction {
+        ScriptEventInstruction::Print(text) => {
+            let stage = if is_start { "on_start" } else { "on_update" };
+            println!("▶ {} '{}' em '{}': {}", stage, script_path, entity_name, text);
+        }
+        ScriptEventInstruction::MoveX(value) => {
+            result.move_x += value;
+        }
+        ScriptEventInstruction::MoveY(value) => {
+            result.move_y += value;
+        }
+    }
 }

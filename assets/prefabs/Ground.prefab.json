@@ -1,0 +1,46 @@
+{
+  "name": "Ground",
+  "root_entity": {
+    "id": "ground-001",
+    "name": "Ground",
+    "visible": true,
+    "children": [],
+    "components": [
+      {
+        "Transform": {
+          "x": 7.2020483,
+          "y": -92.75681,
+          "rotation": 0.0,
+          "scale_x": 1.0,
+          "scale_y": 1.0
+        }
+      },
+      {
+        "RigidBody2D": {
+          "gravity_scale": 0.0,
+          "is_static": true,
+          "grounded": true
+        }
+      },
+      {
+        "BoxCollider": {
+          "width": 800.0,
+          "height": 32.0,
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "is_trigger": false
+        }
+      },
+      {
+        "Sprite": {
+          "texture_path": "sprites/player.png",
+          "color_r": 1.0,
+          "color_g": 1.0,
+          "color_b": 1.0,
+          "color_a": 1.0
+        }
+      }
+    ],
+    "matr_source": null
+  }
+}

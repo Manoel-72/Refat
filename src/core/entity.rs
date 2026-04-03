@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::component::{Component, Transform};
+use super::component::{Component, Transform, Velocity};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
@@ -56,6 +56,21 @@ impl Entity {
     pub fn transform_mut(&mut self) -> Option<&mut Transform> {
         self.components.iter_mut().find_map(|component| match component {
             Component::Transform(transform) => Some(transform),
+            _ => None,
+        })
+    }
+
+
+    pub fn velocity(&self) -> Option<&Velocity> {
+        self.components.iter().find_map(|component| match component {
+            Component::Velocity(velocity) => Some(velocity),
+            _ => None,
+        })
+    }
+
+    pub fn velocity_mut(&mut self) -> Option<&mut Velocity> {
+        self.components.iter_mut().find_map(|component| match component {
+            Component::Velocity(velocity) => Some(velocity),
             _ => None,
         })
     }
@@ -120,8 +135,9 @@ fn component_kind(component: &Component) -> u8 {
         Component::Sprite(_) => 1,
         Component::Camera2D(_) => 2,
         Component::RigidBody2D(_) => 3,
-        Component::BoxCollider(_) => 4,
-        Component::Script(_) => 5,
-        Component::Audio(_) => 6,
+        Component::Velocity(_) => 4,
+        Component::BoxCollider(_) => 5,
+        Component::Script(_) => 6,
+        Component::Audio(_) => 7,
     }
 }

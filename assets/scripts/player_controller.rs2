@@ -1,4 +1,6 @@
-// Script RS2BR-Engine
-@start_message Cena de teste carregada
-@player_controller 220
-@camera_follow
+@start_message "Player controller V0.7-A carregado"
+@player_controller 100
+@on_start
+print("on_start do player executado")
+@on_update
+print("on_update ativo")

@@ -99,6 +99,7 @@ fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut 
                     });
                 }
             }
+            Component::Velocity(_) => {}
             Component::Script(script_component) => {
                 let script_path = script_component.file_path.trim();
                 if script_path.is_empty() {

@@ -18,6 +18,8 @@ pub enum Component {
     Camera2D(Camera2D),
     /// Corpo de física simples
     RigidBody2D(RigidBody2D),
+    /// Velocidade linear simples usada pelo runtime V0.7-A
+    Velocity(Velocity),
     /// Colisão em caixa
     BoxCollider(BoxCollider),
     /// Script RS2 interpretado (caminho do arquivo .rs2)
@@ -34,6 +36,7 @@ impl Component {
             Component::Sprite(_)       => "Sprite",
             Component::Camera2D(_)     => "Camera 2D",
             Component::RigidBody2D(_)  => "RigidBody 2D",
+            Component::Velocity(_)     => "Velocity",
             Component::BoxCollider(_)  => "Box Collider",
             Component::Script(_)       => "Script RS2",
             Component::Audio(_)        => "Audio",
@@ -98,11 +101,27 @@ impl Default for Camera2D {
 pub struct RigidBody2D {
     pub gravity_scale: f32,
     pub is_static: bool,
+    #[serde(default)]
+    pub grounded: bool,
 }
 
 impl Default for RigidBody2D {
     fn default() -> Self {
-        Self { gravity_scale: 1.0, is_static: false }
+        Self { gravity_scale: 1.0, is_static: false, grounded: false }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Velocity {
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+}
+
+impl Default for Velocity {
+    fn default() -> Self {
+        Self { x: 0.0, y: 0.0 }
     }
 }
 

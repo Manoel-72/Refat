@@ -9,27 +9,33 @@ use crate::{
     editor::EditorPlayState,
     runtime::{
         camera,
+        input::{input_state::InputState, key_code::KeyCode},
         scene_manager::SceneManager,
         systems::{self, audio_system::AudioRuntime, RuntimeCommand},
     },
 };
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct RuntimeInput {
-    pub key_w: bool,
-    pub key_a: bool,
-    pub key_s: bool,
-    pub key_d: bool,
-    pub key_up: bool,
-    pub key_down: bool,
-    pub key_left: bool,
-    pub key_right: bool,
-    pub key_space: bool,
-    pub key_enter: bool,
+    pub keyboard: InputState,
     pub mouse_left: bool,
     pub mouse_right: bool,
     pub mouse_middle: bool,
     pub mouse_pos: (f32, f32),
+}
+
+impl RuntimeInput {
+    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
+        self.keyboard.is_pressed(key)
+    }
+
+    pub fn is_key_held(&self, key: KeyCode) -> bool {
+        self.keyboard.is_held(key)
+    }
+
+    pub fn is_key_released(&self, key: KeyCode) -> bool {
+        self.keyboard.is_released(key)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

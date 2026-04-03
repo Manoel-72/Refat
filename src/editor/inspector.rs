@@ -7,7 +7,7 @@
 use eframe::egui;
 use crate::{
     assets::is_rs2_script_file,
-    component::{Audio, BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite},
+    component::{Audio, BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite, Velocity},
 };
 use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
@@ -261,6 +261,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                     Component::RigidBody2D(rb) => {
                         let mut gravity = rb.gravity_scale;
                         let mut is_static = rb.is_static;
+                        let grounded = rb.grounded;
                         let mut changed = false;
 
                         egui::Grid::new(format!("rb_{}", i))
@@ -273,6 +274,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 ui.label("Estático:");
                                 changed |= ui.checkbox(&mut is_static, "").changed();
                                 ui.end_row();
+                                ui.label("Grounded:");
+                                ui.label(if grounded { "Sim" } else { "Não" });
+                                ui.end_row();
                             });
                         if changed {
                             updated_components.push((
@@ -280,8 +284,30 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 Component::RigidBody2D(RigidBody2D {
                                     gravity_scale: gravity,
                                     is_static,
+                                    grounded,
                                 }),
                             ));
+                        }
+                    }
+
+                    Component::Velocity(vel) => {
+                        let mut vx = vel.x;
+                        let mut vy = vel.y;
+                        let mut changed = false;
+
+                        egui::Grid::new(format!("vel_{}", i))
+                            .num_columns(2)
+                            .spacing([8.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("Vel X:");
+                                changed |= ui.add(egui::DragValue::new(&mut vx).speed(1.0)).changed();
+                                ui.end_row();
+                                ui.label("Vel Y:");
+                                changed |= ui.add(egui::DragValue::new(&mut vy).speed(1.0)).changed();
+                                ui.end_row();
+                            });
+                        if changed {
+                            updated_components.push((i, Component::Velocity(Velocity { x: vx, y: vy })));
                         }
                     }
 

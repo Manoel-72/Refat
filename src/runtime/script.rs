@@ -10,6 +10,13 @@ pub enum ScriptAction {
     ReloadScene,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptEventInstruction {
+    Print(String),
+    MoveX(f32),
+    MoveY(f32),
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ScriptBehavior {
     pub move_x: f32,
@@ -137,6 +144,7 @@ pub fn format_script_errors(errors: &[ScriptError]) -> Vec<String> {
 
 pub fn validate_script(code: &str) -> Vec<ScriptError> {
     let mut errors = Vec::new();
+    let mut current_event: Option<&str> = None;
 
     for (index, raw_line) in code.lines().enumerate() {
         let line_no = index + 1;
@@ -145,9 +153,47 @@ pub fn validate_script(code: &str) -> Vec<ScriptError> {
             continue;
         }
 
+        if let Some(rest) = clean.strip_prefix("@on_start") {
+            let trimmed = rest.trim();
+            current_event = if trimmed.is_empty() { Some("@on_start") } else { None };
+            if !trimmed.is_empty() && parse_event_instruction(trimmed).is_none() {
+                errors.push(script_error(
+                    line_no,
+                    "@on_start precisa usar print(\"texto\"), move_x(numero) ou move_y(numero).".to_string(),
+                ));
+            }
+            continue;
+        }
+
+        if let Some(rest) = clean.strip_prefix("@on_update") {
+            let trimmed = rest.trim();
+            current_event = if trimmed.is_empty() { Some("@on_update") } else { None };
+            if !trimmed.is_empty() && parse_event_instruction(trimmed).is_none() {
+                errors.push(script_error(
+                    line_no,
+                    "@on_update precisa usar print(\"texto\"), move_x(numero) ou move_y(numero).".to_string(),
+                ));
+            }
+            continue;
+        }
+
         if clean.starts_with('@') {
+            current_event = None;
             validate_directive_line(clean, line_no, &mut errors);
-        } else if clean.contains('=') {
+            continue;
+        }
+
+        if let Some(_event) = current_event {
+            if parse_event_instruction(clean).is_none() {
+                errors.push(script_error(
+                    line_no,
+                    "Evento de script inválido. Use print(\"texto\"), move_x(numero) ou move_y(numero).".to_string(),
+                ));
+            }
+            continue;
+        }
+
+        if clean.contains('=') {
             validate_assignment_line(clean, line_no, &mut errors);
         }
     }
@@ -157,6 +203,7 @@ pub fn validate_script(code: &str) -> Vec<ScriptError> {
 
 pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
     let mut behavior = ScriptBehavior::default();
+    let mut current_event: Option<&str> = None;
 
     for line in source.lines() {
         if let Some(value) = parse_script_number(line, &["@move_x", "move_x"]) {
@@ -183,30 +230,57 @@ pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
         }
 
         let clean = normalize_script_line(line);
+        if clean.is_empty() {
+            continue;
+        }
+
         if clean == "@camera_follow" || clean == "camera_follow = true" {
             behavior.camera_follow = true;
+            current_event = None;
+            continue;
         }
         if let Some(rest) = clean.strip_prefix("@on_start") {
             let trimmed = rest.trim();
+            current_event = if trimmed.is_empty() { Some("@on_start") } else { None };
             if !trimmed.is_empty() {
                 behavior.on_start.push(trimmed.to_string());
             }
+            continue;
         }
         if let Some(rest) = clean.strip_prefix("@on_update") {
             let trimmed = rest.trim();
+            current_event = if trimmed.is_empty() { Some("@on_update") } else { None };
             if !trimmed.is_empty() {
                 behavior.on_update.push(trimmed.to_string());
             }
+            continue;
         }
         if let Some(rest) = clean.strip_prefix("@on_collision") {
+            current_event = None;
             if let Some(action) = parse_script_action(rest.trim()) {
                 behavior.on_collision.push(action);
             }
+            continue;
         }
         if let Some(rest) = clean.strip_prefix("@on_trigger") {
+            current_event = None;
             if let Some(action) = parse_script_action(rest.trim()) {
                 behavior.on_trigger.push(action);
             }
+            continue;
+        }
+        if clean.starts_with('@') {
+            current_event = None;
+            continue;
+        }
+        if clean.contains('=') {
+            continue;
+        }
+
+        match current_event {
+            Some("@on_start") => behavior.on_start.push(clean.to_string()),
+            Some("@on_update") => behavior.on_update.push(clean.to_string()),
+            _ => {}
         }
     }
 
@@ -272,10 +346,10 @@ fn validate_directive_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptE
         }
         "@on_start" | "@on_update" => {
             let rest = clean.trim_start_matches(token).trim();
-            if rest.is_empty() {
+            if !rest.is_empty() && parse_event_instruction(rest).is_none() {
                 errors.push(script_error(
                     line_no,
-                    format!("{} precisa de uma instrução ou descrição após a diretiva.", token),
+                    format!("{} só aceita print(\"texto\"), move_x(numero) ou move_y(numero).", token),
                 ));
             }
         }
@@ -389,6 +463,34 @@ fn parse_text_value(raw: &str) -> Option<String> {
     }
 }
 
+pub fn parse_event_instruction(raw: &str) -> Option<ScriptEventInstruction> {
+    let cleaned = raw.trim().trim_end_matches(';').trim();
+
+    if let Some(rest) = cleaned.strip_prefix("print") {
+        let text = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        let text = text.trim_matches('"').trim_matches('\'');
+        if !text.is_empty() {
+            return Some(ScriptEventInstruction::Print(text.to_string()));
+        }
+    }
+
+    if let Some(rest) = cleaned.strip_prefix("move_x") {
+        let value = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        if let Ok(parsed) = value.parse::<f32>() {
+            return Some(ScriptEventInstruction::MoveX(parsed));
+        }
+    }
+
+    if let Some(rest) = cleaned.strip_prefix("move_y") {
+        let value = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        if let Ok(parsed) = value.parse::<f32>() {
+            return Some(ScriptEventInstruction::MoveY(parsed));
+        }
+    }
+
+    None
+}
+
 fn parse_script_action(raw: &str) -> Option<ScriptAction> {
     let cleaned = raw.trim().trim_end_matches(';').trim();
     if let Some(rest) = cleaned.strip_prefix("change_scene") {
@@ -409,7 +511,7 @@ mod tests {
 
     #[test]
     fn validate_script_accepts_valid_script() {
-        let source = "@start_message \"Olá\"\n@move_x 10\n@camera_follow\n@on_start boot\n@on_collision reload_scene\n@on_trigger change_scene \"fases/menu.scene.json\"";
+        let source = "@start_message \"Olá\"\n@move_x 10\n@camera_follow\n@on_start print(\"boot\")\n@on_collision reload_scene\n@on_trigger change_scene \"fases/menu.scene.json\"";
         let errors = validate_script(source);
         assert!(errors.is_empty(), "expected no errors, got {:?}", errors);
     }
@@ -424,10 +526,10 @@ mod tests {
 
     #[test]
     fn parser_supports_single_and_double_quotes() {
-        let source = "@start_message 'Oi'\n@on_start boot\n@on_collision change_scene \"fases/menu.scene.json\"\n@on_trigger reload_scene";
+        let source = "@start_message 'Oi'\n@on_start print(\"boot\")\n@on_collision change_scene \"fases/menu.scene.json\"\n@on_trigger reload_scene";
         let behavior = parse_rs2_script(source);
         assert_eq!(behavior.start_message.as_deref(), Some("Oi"));
-        assert_eq!(behavior.on_start, vec!["boot".to_string()]);
+        assert_eq!(behavior.on_start, vec!["print(\"boot\")".to_string()]);
         assert_eq!(
             behavior.on_collision,
             vec![ScriptAction::ChangeScene("fases/menu.scene.json".to_string())]

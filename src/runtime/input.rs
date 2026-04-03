@@ -1,3 +1,6 @@
+pub mod input_state;
+pub mod key_code;
+
 use eframe::egui;
 
 use crate::{
@@ -12,7 +15,8 @@ pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
         app.runtime.delta_time.max(1.0 / 120.0)
     };
 
-    app.runtime.input = systems::input_system::capture_runtime_input(ctx);
+    let previous_input = app.runtime.input.clone();
+    app.runtime.input = systems::input_system::capture_runtime_input(ctx, &previous_input);
 
     let camera_input = systems::input_system::camera_axis(&app.runtime.input);
     let zoom_input = systems::input_system::zoom_delta(ctx);

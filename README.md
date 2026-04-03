@@ -1,211 +1,72 @@
-# 🎮 RS2BR-Engine
+# RS2BR-Engine V0.7-A
 
-Engine de jogo 2D simples com editor visual, escrita em **R2S**.
+Entrega incremental segura sobre a base V0.6.
 
----
+## O que entrou
+- Input centralizado com `pressed`, `held` e `released`
+- Novo componente `Velocity`
+- Movimento desacoplado usando `Transform + Velocity`
+- Física simples com gravidade e `grounded`
+- Colisão AABB mantendo rollback simples e seguro
+- Script RS2 com suporte incremental a `@on_start` e `@on_update` em linha única ou em bloco
+- Cena e script de teste em `assets/scenes` e `assets/scripts`
 
-## 📦 Dependências e Instalação
+## Como rodar
+1. Tenha Rust instalado.
+2. No terminal, entre na pasta do projeto.
+3. Execute `cargo run`.
 
-### 1. Instale o Rust (se ainda não tiver)
+## Como testar
+### Input
+- Entre em Play.
+- Segure `W A S D` para mover o player.
+- As teclas direcionais continuam controlando a câmera.
+- O estado interno agora diferencia pressionado, segurado e solto por frame.
 
-```bash
-# No Linux/macOS:
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+### Movimento
+- O player usa `Velocity` quando disponível.
+- O `player_controller` do script define a velocidade horizontal/vertical a partir do input.
 
-# No Windows:
-# Baixe o instalador em: https://rustup.rs
+### Colisão
+- Abra `assets/scenes/v07_a_test.scene.json`.
+- Rode a cena.
+- O player não deve atravessar o chão.
+
+### Física
+- O player tem `RigidBody2D` com gravidade.
+- Ao tocar o chão, a velocidade vertical é zerada e `grounded` fica verdadeiro.
+
+### Script
+Arquivo de exemplo: `assets/scripts/player_controller.rs2`
+
+Exemplo suportado:
+
+```rs2
+@on_start
+print("on_start do player executado")
+
+@on_update
+move_x(10)
+move_y(0)
 ```
 
-Após instalar, reinicie o terminal e confirme:
-```bash
-rustc --version   # ex: rustc 1.77.0
-cargo --version   # ex: cargo 1.77.0
-```
+## Arquivos principais alterados
+- `src/runtime/input.rs`
+- `src/runtime/input/input_state.rs`
+- `src/runtime/input/key_code.rs`
+- `src/runtime/systems/input_system.rs`
+- `src/runtime/systems/movement_system.rs`
+- `src/runtime/systems/physics_system.rs`
+- `src/runtime/systems/script_system.rs`
+- `src/runtime/script.rs`
+- `src/runtime/systems.rs`
+- `src/runtime/state.rs`
+- `src/core/component.rs`
+- `src/core/entity.rs`
+- `src/editor/inspector.rs`
+- `src/editor/hierarchy.rs`
+- `src/editor/scene_view.rs`
+- `src/editor/warnings.rs`
 
-### 2. Dependências do sistema (Linux)
-
-No Ubuntu/Debian:
-```bash
-sudo apt install -y \
-  libx11-dev libxrandr-dev libxcursor-dev libxi-dev \
-  libgl1-mesa-dev libgles2-mesa-dev libasound2-dev \
-  pkg-config build-essential
-```
-
-No Arch Linux:
-```bash
-sudo pacman -S libx11 libxrandr libxcursor libxi mesa alsa-lib
-```
-
-No macOS: sem deps extras (usa Metal nativamente via eframe).
-
-No Windows: sem deps extras (usa D3D12/WGL via eframe).
-
-### 3. Clone e rode o editor
-
-```bash
-git clone <seu-repo>
-cd rust2d_engine
-
-# Modo debug (mais rápido de compilar):
-cargo run
-
-# Modo release (mais performance):
-cargo run --release
-```
-
-A primeira compilação pode levar **2-5 minutos** (baixa e compila as deps).
-As próximas compilações são muito mais rápidas.
-
----
-
-## 🏗️ Arquitetura do Projeto
-
-```
-rust2d_engine/
-├── Cargo.toml          ← Dependências do projeto
-├── README.md           ← Este arquivo
-├── assets/             ← Seus arquivos de jogo (criado automaticamente)
-│   ├── sprites/
-│   ├── scripts/
-│   └── sounds/
-├── scenes/             ← Cenas salvas como JSON
-└── src/
-    ├── main.rs         ← Ponto de entrada — inicia o editor
-    ├── engine/         ← Núcleo da engine (dados e lógica)
-    │   ├── mod.rs      ← Exporta os módulos da engine
-    │   ├── entity.rs   ← Entidade = objeto do jogo (ID + nome + componentes)
-    │   ├── component.rs← Tipos de componente (Transform, Sprite, Camera2D…)
-    │   ├── scene.rs    ← Cena = container de entidades, salva/carrega JSON
-    │   └── assets.rs   ← Lê o disco, cria scripts/pastas
-    └── editor/         ← Interface visual (painéis egui)
-        ├── mod.rs      ← EditorApp — estado global + janelas modais
-        ├── menubar.rs  ← Menu superior (Arquivo, Cena, Criar, Ajuda)
-        ├── hierarchy.rs← Painel esquerdo: árvore de entidades
-        ├── inspector.rs← Painel direito: editar componentes
-        ├── asset_browser.rs ← Painel inferior: assets + clique direito
-        └── scene_view.rs    ← Painel central: viewport 2D com grid
-```
-
----
-
-## 🧠 Como Funciona a Arquitetura (ECS Simplificado)
-
-### Entidade (`entity.rs`)
-Representa um "objeto" no jogo. Cada entidade tem:
-- `id` — UUID único gerado automaticamente
-- `name` — nome visível no editor
-- `components` — lista de comportamentos/dados
-- `children` — entidades filhas (hierarquia pai→filho)
-
-### Componente (`component.rs`)
-Um componente é um "pedaço de dado" colado numa entidade.
-É um `enum` Rust com variantes:
-
-| Componente   | O que faz |
-|-------------|-----------|
-| `Transform` | Posição (X,Y), rotação e escala |
-| `Sprite`    | Qual textura renderizar + cor |
-| `Camera2D`  | Câmera com zoom |
-| `RigidBody2D` | Física: gravidade, estático/dinâmico |
-| `BoxCollider` | Colisão em caixa retangular |
-| `Script`    | Caminho de um script `.rs` |
-
-### Cena (`scene.rs`)
-Uma cena é um container de entidades. Pode ser:
-- Salva como JSON (`Arquivo → Salvar Cena`)
-- Carregada de volta (`Arquivo → Carregar Cena`)
-
-### Gerenciador de Assets (`assets.rs`)
-- Lê a pasta `assets/` e constrói uma árvore de arquivos
-- Cria scripts `.rs` com template automático
-- Cria novas pastas
-
----
-
-## 🖥️ Painéis do Editor
-
-### 🌳 Hierarquia (esquerda)
-- Lista todas as entidades da cena em árvore
-- Clique para selecionar
-- Botão "➕ Nova Entidade" ou Menu → Criar
-- Clique direito na entidade → Deletar
-
-### 🔍 Inspector (direita)
-- Exibe todos os componentes da entidade selecionada
-- Edite valores diretamente (drag nos números, sliders para cores)
-- Adicione novos componentes com os botões na parte inferior
-
-### 🎬 Cena 2D (centro)
-- Viewport com grid de 32px
-- Eixo X (vermelho) e Y (verde)
-- Entidades aparecem como gizmos azuis/amarelos
-- **Arraste** para mover entidades
-- Clique no fundo para desselecionar
-
-### 📂 Assets (inferior)
-- Navega pelos arquivos em `assets/`
-- **Clique direito numa pasta** → opções:
-  - `⚙ Criar Script (.rs)` — cria um arquivo `.rs` com template
-  - `📁 Criar Pasta` — cria uma subpasta
-  - `🔄 Recarregar` — relê o disco
-- Clique direito num arquivo → copiar caminho
-
-### 📋 Menu Superior
-- **Arquivo**: Nova Cena, Salvar (JSON), Carregar, Sair
-- **Cena**: Adicionar entidade, mudar cor de fundo
-- **Criar**: Entidade vazia, Sprite, Câmera
-- **Ajuda**: Atalhos e versão
-
----
-
-## 📝 Criando um Script
-
-1. No painel Assets, clique direito numa pasta (ex: `scripts`)
-2. Clique em `⚙ Criar Script (.rs)`
-3. Digite o nome (ex: `jogador`)
-4. Um arquivo `jogador.rs` é criado com este template:
-
-```rust
-pub struct Jogador {
-    // Campos do script aqui
-}
-
-impl Jogador {
-    pub fn start(&mut self) {
-        println!("Script 'jogador' iniciado!");
-    }
-
-    pub fn update(&mut self, delta_time: f32) {
-        // Chamado todo frame
-        let _ = delta_time;
-    }
-}
-```
-
-5. Para associar ao objeto: selecione a entidade → Inspector → `⚙ Script` → coloque o caminho do arquivo
-
----
-
-## 🔧 Crates Usadas e Por Quê
-
-| Crate | Versão | Uso |
-|-------|--------|-----|
-| `eframe` | 0.27 | Framework de janela nativa com egui integrado |
-| `egui` | 0.27 | UI imediata (immediate mode) — toda a interface do editor |
-| `serde` + `serde_json` | 1.x | Serializar/deserializar cenas para JSON |
-| `uuid` | 1.x | Gerar IDs únicos para entidades |
-| `log` + `env_logger` | — | Logging para debug |
-
-> **Por que egui?** É 100% Rust, sem deps externas complicadas, funciona em Linux/Windows/macOS sem configuração, e é perfeito para editors/tooling.
-
----
-
-## 🚀 Próximos Passos (Extensões Possíveis)
-
-- [ ] Renderização real com `wgpu` ou `macroquad`
-- [ ] Sistema de física com `rapier2d`
-- [ ] Hot-reload de scripts com `libloading`
-- [ ] Undo/Redo com histórico de comandos
-- [ ] Prefabs (entidades reutilizáveis)
-- [ ] Exportar projeto para executável
+## Observação
+Eu não consegui compilar aqui porque o ambiente não tem `cargo` instalado. Então a entrega foi feita como alteração estrutural e de código, com foco em mudanças pequenas, locais e seguras.

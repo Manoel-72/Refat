@@ -63,11 +63,12 @@ fn update_entities_runtime_recursive(
         let my_collider_data = find_entity_collider(entity);
         let old_position = entity.transform().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0));
 
-        // Ordem oficial do frame no runtime por entidade:
-        // 1) movimento controlado por script/player
-        // 2) física simples
-        // 3) colisões e triggers
-        // 4) pós-processos (chão/câmera)
+        // Ordem incremental segura da V0.7-A:
+        // 1) aplicar comandos do script ao estado da entidade
+        // 2) atualizar física simples/gravidade
+        // 3) mover usando Velocity quando existir
+        // 4) resolver colisões simples e chão
+        // 5) atualizar câmera
         movement_system::apply_script_movement(
             entity,
             delta_time,
@@ -79,6 +80,8 @@ fn update_entities_runtime_recursive(
         if !script_data.is_static {
             physics_system::apply_gravity(entity, delta_time, script_data.gravity_scale);
         }
+
+        movement_system::apply_velocity(entity, delta_time);
 
         let collision_state =
             handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
@@ -168,6 +171,8 @@ fn handle_entity_collisions(
 
             transform.x = old_position.0;
             transform.y = old_position.1;
+            physics_system::zero_velocity(entity);
+            physics_system::set_grounded(entity, true);
             state.collided = true;
             return state;
         }
@@ -223,7 +228,7 @@ pub fn apply_player_controller_input(
         }
 
         if controller_speed > 0.0 {
-            movement_system::apply_player_controller(entity, delta_time, input, controller_speed);
+            movement_system::apply_player_controller(entity, input, controller_speed);
         }
 
         apply_player_controller_input(&mut entity.children, project_root, delta_time, input);
