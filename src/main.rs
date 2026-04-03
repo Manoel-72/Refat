@@ -12,7 +12,7 @@ pub mod renderer;
 
 use editor::EditorApp;
 
-pub use crate::core::{component, entity, prefab, scene};
+pub use crate::core::{component, entity, prefab, scene, version};
 
 
 fn load_app_icon() -> egui::IconData {
@@ -35,7 +35,7 @@ fn main() {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("RS2BR-Engine")
+            .with_title(&format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION))
             .with_inner_size([1280.0, 720.0])
             .with_min_inner_size([800.0, 600.0])
             .with_icon(load_app_icon()),
@@ -43,7 +43,7 @@ fn main() {
     };
 
     eframe::run_native(
-        "RS2BR-Engine",
+        &format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION),
         options,
         Box::new(|cc| Ok(Box::new(EditorApp::new(cc)))),
     )

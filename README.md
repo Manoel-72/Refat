@@ -1,72 +1,92 @@
-# RS2BR-Engine V0.7-A
+# RS2BR-Engine V0.7-B
 
-Entrega incremental segura sobre a base V0.6.
+Entrega incremental da V0.7-B com foco em mudanças pequenas, seguras e locais.
 
-## O que entrou
-- Input centralizado com `pressed`, `held` e `released`
-- Novo componente `Velocity`
-- Movimento desacoplado usando `Transform + Velocity`
-- Física simples com gravidade e `grounded`
-- Colisão AABB mantendo rollback simples e seguro
-- Script RS2 com suporte incremental a `@on_start` e `@on_update` em linha única ou em bloco
-- Cena e script de teste em `assets/scenes` e `assets/scripts`
+## O que foi fechado nesta correção
+
+- popup inicial com versão atual da engine e botão **OK**
+- título da janela com versão **V0.7-B** e status **EM TESTE**
+- HUD mínimo no runtime
+- menu principal mínimo quando a cena ativa é uma cena de menu
+- pause/resume por botão e por **ESC**
+- loading simples durante troca de cena
+- spawn simples via fila no fim do frame
+- destroy simples via fila no fim do frame
+- cenas de teste em `assets/scenes`
+
+## Estrutura de teste
+
+- `assets/scenes/menu.scene.json`
+- `assets/scenes/fase1.scene.json`
+- `assets/scripts/player_controller.rs2`
 
 ## Como rodar
-1. Tenha Rust instalado.
-2. No terminal, entre na pasta do projeto.
-3. Execute `cargo run`.
+
+1. Abra o projeto Rust normalmente.
+2. Compile e execute a engine.
+3. Ao iniciar, aparecerá um pop-up com a versão atual. Clique em **OK**.
+4. Abra a cena `assets/scenes/menu.scene.json` ou `assets/scenes/fase1.scene.json`.
+5. Entre em **Play**.
 
 ## Como testar
-### Input
+
+### Menu
+- Abra `menu.scene.json`.
 - Entre em Play.
-- Segure `W A S D` para mover o player.
-- As teclas direcionais continuam controlando a câmera.
-- O estado interno agora diferencia pressionado, segurado e solto por frame.
+- O overlay **Menu Principal** deve aparecer.
+- Clique em **Play** para agendar a primeira cena jogável encontrada.
+- Clique em **Exit** para sair do runtime.
 
-### Movimento
-- O player usa `Velocity` quando disponível.
-- O `player_controller` do script define a velocidade horizontal/vertical a partir do input.
+### Play
+- Abra `fase1.scene.json`.
+- Entre em Play.
+- O player deve aparecer na cena.
 
-### Colisão
-- Abra `assets/scenes/v07_a_test.scene.json`.
-- Rode a cena.
-- O player não deve atravessar o chão.
+### Pause
+- Durante o runtime, use o botão **Pause/Resume** ou pressione **ESC**.
+- Em pausa, o gameplay deve congelar.
 
-### Física
-- O player tem `RigidBody2D` com gravidade.
-- Ao tocar o chão, a velocidade vertical é zerada e `grounded` fica verdadeiro.
+### Scene transition
+- Use os botões de troca de cena no runtime.
+- A troca deve ser agendada com pending scene change.
+- O texto `Loading...` pode aparecer durante a transição.
 
-### Script
-Arquivo de exemplo: `assets/scripts/player_controller.rs2`
+### Camera follow
+- Na cena `fase1.scene.json`, o script do player usa `@camera_follow`.
+- Ao mover o player, a câmera principal deve seguir.
 
-Exemplo suportado:
+### Spawn
+- No runtime, clique em **Spawn Enemy**.
+- A entidade é criada por fila no final do frame.
 
-```rs2
-@on_start
-print("on_start do player executado")
+### Destroy
+- Após spawnar, clique em **Destroy Last Spawn**.
+- A última entidade spawnada é removida por fila no final do frame.
 
-@on_update
-move_x(10)
-move_y(0)
-```
+### Loading
+- Troque de cena no runtime.
+- O estado de fluxo entra em `Loading` antes de voltar para `Playing`.
 
-## Arquivos principais alterados
-- `src/runtime/input.rs`
-- `src/runtime/input/input_state.rs`
-- `src/runtime/input/key_code.rs`
-- `src/runtime/systems/input_system.rs`
-- `src/runtime/systems/movement_system.rs`
-- `src/runtime/systems/physics_system.rs`
-- `src/runtime/systems/script_system.rs`
-- `src/runtime/script.rs`
-- `src/runtime/systems.rs`
+## Limitações atuais
+
+- o spawn usa template simples interno, não prefab completo
+- o HUD é mínimo
+- o menu principal é um overlay simples
+- o loading é textual
+- não houve validação de build neste ambiente
+
+## Arquivos alterados principais
+
+- `src/core/version.rs`
+- `src/core/mod.rs`
+- `src/main.rs`
+- `src/editor/mod.rs`
+- `src/runtime/mod.rs`
 - `src/runtime/state.rs`
-- `src/core/component.rs`
-- `src/core/entity.rs`
-- `src/editor/inspector.rs`
-- `src/editor/hierarchy.rs`
-- `src/editor/scene_view.rs`
-- `src/editor/warnings.rs`
+- `src/runtime/systems/input_system.rs`
+- `src/runtime/input/key_code.rs`
+- `Cargo.toml`
 
 ## Observação
-Eu não consegui compilar aqui porque o ambiente não tem `cargo` instalado. Então a entrega foi feita como alteração estrutural e de código, com foco em mudanças pequenas, locais e seguras.
+
+A prioridade desta entrega foi manter o projeto incremental e estável, sem refatoração grande.

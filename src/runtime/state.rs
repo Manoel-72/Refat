@@ -5,7 +5,11 @@ use std::{
 };
 
 use crate::{
-    core::scene::Scene,
+    core::{
+        scene::Scene,
+        entity::Entity,
+        component::{Component, Sprite, BoxCollider, RigidBody2D, Velocity},
+    },
     editor::EditorPlayState,
     runtime::{
         camera,
@@ -14,6 +18,19 @@ use crate::{
         systems::{self, audio_system::AudioRuntime, RuntimeCommand},
     },
 };
+
+
+#[derive(Debug, Clone)]
+pub struct PendingSpawnRequest {
+    pub template: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingDestroyRequest {
+    pub entity_id: String,
+}
 
 #[derive(Clone, Default)]
 pub struct RuntimeInput {
@@ -82,6 +99,9 @@ pub struct RuntimeState {
     pub last_stage: RuntimeFrameStage,
     pub started_audio: HashSet<String>,
     pub audio_runtime: AudioRuntime,
+    pub pending_spawns: Vec<PendingSpawnRequest>,
+    pub pending_destroys: Vec<PendingDestroyRequest>,
+    pub last_spawned_entity_id: Option<String>,
 }
 
 impl RuntimeState {
@@ -100,6 +120,9 @@ impl RuntimeState {
             last_stage: RuntimeFrameStage::Idle,
             started_audio: HashSet::new(),
             audio_runtime: AudioRuntime::new(),
+            pending_spawns: Vec::new(),
+            pending_destroys: Vec::new(),
+            last_spawned_entity_id: None,
         }
     }
 
@@ -148,6 +171,9 @@ impl RuntimeState {
         self.audio_runtime.stop_all();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
+        self.pending_spawns.clear();
+        self.pending_destroys.clear();
+        self.last_spawned_entity_id = None;
         self.game_state = RuntimeGameState::default();
     }
 
@@ -194,6 +220,28 @@ impl RuntimeState {
         }
     }
 
+    pub fn queue_spawn(&mut self, template: impl Into<String>, x: f32, y: f32) {
+        self.pending_spawns.push(PendingSpawnRequest {
+            template: template.into(),
+            x,
+            y,
+        });
+    }
+
+    pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
+        self.pending_destroys.push(PendingDestroyRequest {
+            entity_id: entity_id.into(),
+        });
+    }
+
+    pub fn queue_destroy_last_spawned(&mut self) -> bool {
+        let Some(id) = self.last_spawned_entity_id.clone() else {
+            return false;
+        };
+        self.queue_destroy(id);
+        true
+    }
+
     pub fn estimated_fps(&self) -> f32 {
         if self.delta_time <= f32::EPSILON {
             0.0
@@ -212,6 +260,9 @@ impl RuntimeState {
         self.audio_runtime.stop_all();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
+        self.pending_spawns.clear();
+        self.pending_destroys.clear();
+        self.last_spawned_entity_id = None;
     }
 
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
@@ -268,6 +319,14 @@ impl RuntimeState {
             }
 
             self.last_stage = RuntimeFrameStage::FinalizeFrame;
+            let pending_destroys = std::mem::take(&mut self.pending_destroys);
+            let pending_spawns = std::mem::take(&mut self.pending_spawns);
+            Self::apply_pending_entity_commands(
+                scene,
+                pending_destroys,
+                pending_spawns,
+                &mut self.last_spawned_entity_id,
+            );
             self.scene_manager.current_scene = Some(scene.clone());
 
             if let Some(command) = runtime_command {
@@ -285,5 +344,64 @@ impl RuntimeState {
                 }
             }
         }
+    }
+
+    fn apply_pending_entity_commands(
+        scene: &mut Scene,
+        pending_destroys: Vec<PendingDestroyRequest>,
+        pending_spawns: Vec<PendingSpawnRequest>,
+        last_spawned_entity_id: &mut Option<String>,
+    ) {
+        for entity_id in pending_destroys.into_iter().map(|request| request.entity_id) {
+            if scene.remove_entity_by_id(&entity_id) {
+                if last_spawned_entity_id.as_deref() == Some(entity_id.as_str()) {
+                    *last_spawned_entity_id = None;
+                }
+            }
+        }
+
+        for request in pending_spawns {
+            let entity = Self::build_spawn_entity(&request.template, request.x, request.y);
+            *last_spawned_entity_id = Some(entity.id.clone());
+            scene.add_entity(entity);
+        }
+    }
+
+    fn build_spawn_entity(template: &str, x: f32, y: f32) -> Entity {
+        let template_name = template.trim().to_ascii_lowercase();
+        let mut entity = Entity::new(match template_name.as_str() {
+            "enemy" => "Enemy",
+            other if !other.is_empty() => other,
+            _ => "Spawned Entity",
+        });
+
+        if let Some(transform) = entity.transform_mut() {
+            transform.x = x;
+            transform.y = y;
+            transform.scale_x = 1.0;
+            transform.scale_y = 1.0;
+        }
+
+        entity.add_component(Component::Velocity(Velocity::default()));
+        entity.add_component(Component::RigidBody2D(RigidBody2D {
+            gravity_scale: 1.0,
+            is_static: false,
+            grounded: false,
+        }));
+        entity.add_component(Component::BoxCollider(BoxCollider {
+            width: 32.0,
+            height: 32.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            is_trigger: false,
+        }));
+        entity.add_component(Component::Sprite(Sprite {
+            texture_path: String::new(),
+            color_r: 0.85,
+            color_g: 0.25,
+            color_b: 0.25,
+            color_a: 1.0,
+        }));
+        entity
     }
 }

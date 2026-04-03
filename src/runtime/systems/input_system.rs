@@ -20,6 +20,7 @@ pub fn capture_runtime_input(ctx: &egui::Context, previous: &RuntimeInput) -> Ru
         keyboard.set_key_down(KeyCode::Right, i.key_down(egui::Key::ArrowRight));
         keyboard.set_key_down(KeyCode::Space, i.key_down(egui::Key::Space));
         keyboard.set_key_down(KeyCode::Enter, i.key_down(egui::Key::Enter));
+        keyboard.set_key_down(KeyCode::Escape, i.key_down(egui::Key::Escape));
 
         RuntimeInput {
             keyboard,

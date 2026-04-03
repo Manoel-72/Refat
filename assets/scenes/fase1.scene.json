@@ -1,0 +1,131 @@
+{
+  "name": "Fase 1",
+  "background_color": [
+    0.14,
+    0.14,
+    0.18
+  ],
+  "entities": [
+    {
+      "id": "camera-fase",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "matr_source": null,
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "player-1",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "matr_source": null,
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 48.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.2,
+            "color_g": 0.9,
+            "color_b": 0.35,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false
+          }
+        },
+        {
+          "Script": {
+            "file_path": "player_controller.rs2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ground-1",
+      "name": "Ground",
+      "visible": true,
+      "children": [],
+      "matr_source": null,
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -244.0,
+            "rotation": 0.0,
+            "scale_x": 12.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.45,
+            "color_g": 0.32,
+            "color_b": 0.18,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 640.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false
+          }
+        }
+      ]
+    }
+  ]
+}

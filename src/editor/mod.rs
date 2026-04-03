@@ -25,6 +25,7 @@ use crate::{
         scene::Scene,
     },
     runtime::{self, RuntimeState},
+    core::version,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,7 +168,10 @@ pub struct EditorApp {
     pub new_folder_dialog: Option<(PathBuf, String)>,
     /// Diálogo de nova entidade (nome)
     pub new_entity_dialog: Option<String>,
+    /// Pop-up inicial com a versão atual da engine
+    pub show_version_popup: bool,
 }
+
 
 impl EditorApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
@@ -221,7 +225,31 @@ impl EditorApp {
             new_script_dialog: None,
             new_folder_dialog: None,
             new_entity_dialog: None,
+            show_version_popup: true,
         }
+    }
+
+
+    fn show_version_popup(&mut self, ctx: &egui::Context) {
+        if !self.show_version_popup {
+            return;
+        }
+
+        egui::Window::new("RS2BR Engine - Versão atual")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.heading(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION));
+                ui.label(format!("Status: {}", version::ENGINE_STATUS));
+                ui.label("Esta versão está em teste.");
+                ui.label("Clique em OK para continuar e confirmar qual versão está aberta.");
+                ui.separator();
+                if ui.button("OK").clicked() {
+                    self.show_version_popup = false;
+                    self.status_msg = format!("{}", version::startup_message());
+                }
+            });
     }
 
     pub fn find_entity_mut(&mut self, id: &str) -> Option<&mut Entity> {
@@ -1092,6 +1120,7 @@ impl eframe::App for EditorApp {
         self.show_rename_asset_dialog(ctx);
         self.show_rename_entity_dialog(ctx);
         self.show_delete_confirmation_dialog(ctx);
+        self.show_version_popup(ctx);
 
         runtime::show_viewport(self, ctx);
 

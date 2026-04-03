@@ -10,4 +10,5 @@ pub enum KeyCode {
     Right,
     Space,
     Enter,
+    Escape,
 }
