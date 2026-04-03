@@ -10,10 +10,15 @@ use super::component::{Component, Transform};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
+    #[serde(default = "default_entity_id")]
     pub id: String,
+    #[serde(default = "default_entity_name")]
     pub name: String,
+    #[serde(default = "default_entity_visible")]
     pub visible: bool,
+    #[serde(default)]
     pub children: Vec<Entity>,
+    #[serde(default = "default_entity_components")]
     pub components: Vec<Component>,
     #[serde(default)]
     pub matr_source: Option<String>,
@@ -123,4 +128,21 @@ fn component_kind(component: &Component) -> u8 {
         Component::BoxCollider(_) => 4,
         Component::Script(_) => 5,
     }
+}
+
+
+fn default_entity_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
+fn default_entity_name() -> String {
+    "Entity".to_string()
+}
+
+fn default_entity_visible() -> bool {
+    true
+}
+
+fn default_entity_components() -> Vec<Component> {
+    vec![Component::transform_default()]
 }

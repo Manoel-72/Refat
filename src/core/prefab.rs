@@ -6,7 +6,9 @@ pub const PREFAB_FILE_EXTENSION: &str = "prefab.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prefab {
+    #[serde(default = "default_prefab_name")]
     pub name: String,
+    #[serde(default = "default_prefab_root_entity")]
     pub root_entity: Entity,
 }
 
@@ -25,4 +27,13 @@ impl Prefab {
     pub fn from_json(json: &str) -> Option<Self> {
         crate::serialization::prefab_serializer::prefab_from_json(json)
     }
+}
+
+
+fn default_prefab_name() -> String {
+    "prefab".to_string()
+}
+
+fn default_prefab_root_entity() -> Entity {
+    Entity::new("PrefabRoot")
 }

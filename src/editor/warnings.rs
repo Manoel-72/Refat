@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use crate::{
+    assets::types::{validate_asset_path, validate_reference_path, AssetType},
     core::{component::Component, entity::Entity, scene::Scene},
     runtime::script,
 };
@@ -36,6 +37,7 @@ pub fn collect_scene_warnings(project_root: &Path, scene: &Scene) -> Vec<EditorW
     }
 
     collect_prefab_asset_warnings(project_root, &mut warnings);
+    dedupe_warnings(&mut warnings);
     warnings
 }
 
@@ -50,69 +52,89 @@ fn scene_has_main_camera(scene: &Scene) -> bool {
 }
 
 fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut Vec<EditorWarning>) {
+    if let Some(prefab_reference) = entity.matr_source.as_deref() {
+        let prefab_validation = validate_reference_path(project_root, prefab_reference, AssetType::Prefab);
+        if !prefab_validation.is_valid {
+            warnings.push(EditorWarning {
+                kind: EditorWarningKind::Prefab,
+                label: format!("Prefab referenciado inválido em '{}'", entity.name),
+                details: prefab_validation.message,
+            });
+        }
+    }
+
     for component in &entity.components {
         match component {
-            Component::Sprite(sprite) => {
-                let texture_path = sprite.texture_path.trim();
-                if texture_path.is_empty() {
-                    warnings.push(EditorWarning {
-                        kind: EditorWarningKind::Sprite,
-                        label: format!("Sprite sem textura em '{}'", entity.name),
-                        details: "Defina uma textura válida no componente Sprite para evitar placeholder no runtime.".to_string(),
-                    });
-                } else if resolve_project_path(project_root, texture_path).is_none() {
-                    warnings.push(EditorWarning {
-                        kind: EditorWarningKind::Sprite,
-                        label: format!("Textura ausente em '{}'", entity.name),
-                        details: format!("O arquivo '{}' não foi encontrado no projeto.", texture_path),
-                    });
-                }
-            }
-            Component::Script(script_component) => {
-                let script_path = script_component.file_path.trim();
-                if script_path.is_empty() {
-                    warnings.push(EditorWarning {
-                        kind: EditorWarningKind::Script,
-                        label: format!("Script vazio em '{}'", entity.name),
-                        details: "Associe um arquivo .rs2 ou remova o componente Script RS2.".to_string(),
-                    });
-                } else if let Some(script_full_path) = script::resolve_script_path(project_root, script_path) {
-                    match fs::read_to_string(&script_full_path) {
-                        Ok(source) => {
-                            let script_errors = script::validate_script(&source);
-                            if !script_errors.is_empty() {
-                                let details = script::format_script_errors(&script_errors)
-                                    .into_iter()
-                                    .take(3)
-                                    .collect::<Vec<_>>()
-                                    .join(" | ");
-                                warnings.push(EditorWarning {
-                                    kind: EditorWarningKind::Script,
-                                    label: format!("Script inválido em '{}'", entity.name),
-                                    details,
-                                });
-                            }
-                        }
-                        Err(_) => warnings.push(EditorWarning {
-                            kind: EditorWarningKind::Script,
-                            label: format!("Script inválido em '{}'", entity.name),
-                            details: format!("Falha ao ler o script: {}", script_full_path.display()),
-                        }),
-                    }
-                } else if let Err(error) = script::validate_script_reference(project_root, script_path) {
-                    warnings.push(EditorWarning {
-                        kind: EditorWarningKind::Script,
-                        label: format!("Script inválido em '{}'", entity.name),
-                        details: error,
-                    });
-                }
-            }
+            Component::Sprite(sprite) => collect_sprite_warning(project_root, entity, sprite.texture_path.trim(), warnings),
+            Component::Script(script_component) => collect_script_warning(project_root, entity, script_component.file_path.trim(), warnings),
             _ => {}
         }
     }
 
     for child in &entity.children {
         collect_entity_warnings(project_root, child, warnings);
+    }
+}
+
+fn collect_sprite_warning(project_root: &Path, entity: &Entity, texture_path: &str, warnings: &mut Vec<EditorWarning>) {
+    if texture_path.is_empty() {
+        warnings.push(EditorWarning {
+            kind: EditorWarningKind::Sprite,
+            label: format!("Sprite sem textura em '{}'", entity.name),
+            details: "Defina uma textura válida no componente Sprite para evitar placeholder no runtime.".to_string(),
+        });
+        return;
+    }
+
+    let validation = validate_reference_path(project_root, texture_path, AssetType::Texture);
+    if !validation.is_valid {
+        warnings.push(EditorWarning {
+            kind: EditorWarningKind::Sprite,
+            label: format!("Textura inválida em '{}'", entity.name),
+            details: validation.message,
+        });
+    }
+}
+
+fn collect_script_warning(project_root: &Path, entity: &Entity, script_path: &str, warnings: &mut Vec<EditorWarning>) {
+    if script_path.is_empty() {
+        warnings.push(EditorWarning {
+            kind: EditorWarningKind::Script,
+            label: format!("Script vazio em '{}'", entity.name),
+            details: "Associe um arquivo .rs2 ou remova o componente Script RS2.".to_string(),
+        });
+        return;
+    }
+
+    if let Some(script_full_path) = script::resolve_script_path(project_root, script_path) {
+        match fs::read_to_string(&script_full_path) {
+            Ok(source) => {
+                let script_errors = script::validate_script(&source);
+                if !script_errors.is_empty() {
+                    let details = script::format_script_errors(&script_errors)
+                        .into_iter()
+                        .take(3)
+                        .collect::<Vec<_>>()
+                        .join(" | ");
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Script,
+                        label: format!("Script inválido em '{}'", entity.name),
+                        details,
+                    });
+                }
+            }
+            Err(_) => warnings.push(EditorWarning {
+                kind: EditorWarningKind::Script,
+                label: format!("Script inválido em '{}'", entity.name),
+                details: format!("Falha ao ler o script: {}", script_full_path.display()),
+            }),
+        }
+    } else if let Err(error) = script::validate_script_reference(project_root, script_path) {
+        warnings.push(EditorWarning {
+            kind: EditorWarningKind::Script,
+            label: format!("Script inválido em '{}'", entity.name),
+            details: error,
+        });
     }
 }
 
@@ -134,32 +156,26 @@ fn collect_prefab_asset_warnings(project_root: &Path, warnings: &mut Vec<EditorW
             continue;
         }
 
-        let Some(content) = fs::read_to_string(&path).ok() else {
-            warnings.push(EditorWarning {
-                kind: EditorWarningKind::Prefab,
-                label: format!("Prefab inacessível: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("arquivo")),
-                details: "Não foi possível ler o arquivo de prefab no disco.".to_string(),
-            });
-            continue;
-        };
-
-        let valid = crate::serialization::prefab_serializer::prefab_from_json(&content).is_some()
-            || crate::core::entity::Entity::from_json(&content).is_some();
-        if !valid {
+        let validation = validate_asset_path(&path, AssetType::Prefab);
+        if !validation.is_valid {
             warnings.push(EditorWarning {
                 kind: EditorWarningKind::Prefab,
                 label: format!("Prefab quebrado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("arquivo")),
-                details: "O JSON do prefab não pôde ser interpretado como Prefab nem como Entity legacy.".to_string(),
+                details: validation.message,
             });
         }
     }
 }
 
-fn resolve_project_path(project_root: &Path, relative_or_full: &str) -> Option<std::path::PathBuf> {
-    let normalized = relative_or_full.trim().replace('\\', "/");
-    let candidates = [
-        project_root.join(&normalized),
-        project_root.join("assets").join(&normalized),
-    ];
-    candidates.into_iter().find(|candidate| candidate.exists())
+fn dedupe_warnings(warnings: &mut Vec<EditorWarning>) {
+    let mut unique = Vec::new();
+    for warning in warnings.drain(..) {
+        let exists = unique.iter().any(|item: &EditorWarning| {
+            item.kind == warning.kind && item.label == warning.label && item.details == warning.details
+        });
+        if !exists {
+            unique.push(warning);
+        }
+    }
+    *warnings = unique;
 }

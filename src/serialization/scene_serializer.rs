@@ -11,7 +11,12 @@ pub fn scene_to_json(scene: &Scene) -> String {
 }
 
 pub fn try_scene_from_json(json: &str) -> Result<Scene, String> {
-    serde_json::from_str(json).map_err(|error| format!("Falha ao desserializar cena: {}", error))
+    let trimmed = json.trim();
+    if trimmed.is_empty() {
+        return Err("Falha ao desserializar cena: JSON vazio.".to_string());
+    }
+
+    serde_json::from_str(trimmed).map_err(|error| format!("Falha ao desserializar cena: {}", error))
 }
 
 pub fn scene_from_json(json: &str) -> Option<Scene> {
@@ -25,19 +30,28 @@ pub fn save_scene_to_path(scene: &Scene, path: &Path) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, scene_to_json(scene))
+
+    let json = scene_to_json(scene);
+    if json.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Falha ao serializar cena '{}'.", scene.name),
+        ));
+    }
+
+    std::fs::write(path, json)
 }
 
 pub fn try_load_scene_from_path(path: &Path) -> Result<Scene, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("Falha ao ler cena '{}': {}", path.display(), error))?;
     try_scene_from_json(&content)
+        .map_err(|error| format!("{} (arquivo: {})", error, path.display()))
 }
 
 pub fn load_scene_from_path(path: &Path) -> Option<Scene> {
     try_load_scene_from_path(path).ok()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -50,5 +64,11 @@ mod tests {
         let json = scene_to_json(&scene);
         let loaded = try_scene_from_json(&json).expect("scene should deserialize");
         assert_eq!(loaded.name, scene.name);
+    }
+
+    #[test]
+    fn invalid_scene_json_reports_error() {
+        let result = try_scene_from_json("{ invalid json }");
+        assert!(result.is_err());
     }
 }
