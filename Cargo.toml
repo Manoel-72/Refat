@@ -27,6 +27,7 @@ uuid = { version = "1", features = ["v4"] }
 # Log
 log = "0.4"
 env_logger = "0.11"
+rodio = "0.17"
 
 [profile.release]
 opt-level = 3

@@ -10,7 +10,7 @@ use crate::{
     runtime::{
         camera,
         scene_manager::SceneManager,
-        systems::{self, RuntimeCommand},
+        systems::{self, audio_system::AudioRuntime, RuntimeCommand},
     },
 };
 
@@ -74,6 +74,8 @@ pub struct RuntimeState {
     pub scene_manager: SceneManager,
     pub game_state: RuntimeGameState,
     pub last_stage: RuntimeFrameStage,
+    pub started_audio: HashSet<String>,
+    pub audio_runtime: AudioRuntime,
 }
 
 impl RuntimeState {
@@ -90,6 +92,8 @@ impl RuntimeState {
             scene_manager: SceneManager::new(),
             game_state: RuntimeGameState::default(),
             last_stage: RuntimeFrameStage::Idle,
+            started_audio: HashSet::new(),
+            audio_runtime: AudioRuntime::new(),
         }
     }
 
@@ -134,6 +138,8 @@ impl RuntimeState {
         self.frame_count = 0;
         self.last_frame_at = None;
         self.started_scripts.clear();
+        self.started_audio.clear();
+        self.audio_runtime.stop_all();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
         self.game_state = RuntimeGameState::default();
@@ -196,6 +202,8 @@ impl RuntimeState {
         self.frame_count = 0;
         self.last_frame_at = Some(Instant::now());
         self.started_scripts.clear();
+        self.started_audio.clear();
+        self.audio_runtime.stop_all();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
     }
@@ -230,6 +238,13 @@ impl RuntimeState {
             }
 
             self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
+            systems::apply_audio_autoplay(
+                &scene.entities,
+                project_root,
+                &mut self.started_audio,
+                &mut self.audio_runtime,
+            );
+            self.audio_runtime.maintain();
             self.last_stage = RuntimeFrameStage::ApplyPhysics;
             self.last_stage = RuntimeFrameStage::ResolveCollisions;
             let runtime_command = systems::update_entities_runtime(

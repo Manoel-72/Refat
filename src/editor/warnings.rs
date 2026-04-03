@@ -2,7 +2,7 @@ use std::{collections::HashSet, fs, path::Path};
 
 use crate::{
     core::{component::Component, entity::Entity, scene::Scene},
-    runtime::script,
+    runtime::{script, systems::audio_system},
 };
 
 #[repr(u8)]
@@ -11,6 +11,7 @@ pub enum EditorWarningKind {
     Scene,
     Sprite,
     Script,
+    Audio,
     Prefab,
 }
 
@@ -138,6 +139,24 @@ fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut 
                         severity: EditorWarningSeverity::Error,
                         label: format!("Script inválido em '{}'", entity.name),
                         details: error,
+                    });
+                }
+            }
+            Component::Audio(audio_component) => {
+                let audio_path = audio_component.file_path.trim();
+                if audio_path.is_empty() {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Audio,
+                        severity: EditorWarningSeverity::Warning,
+                        label: format!("Áudio sem arquivo em '{}'", entity.name),
+                        details: "Associe um .wav, .ogg ou .mp3 ao componente Audio.".to_string(),
+                    });
+                } else if !audio_system::validate_audio_path(project_root, audio_path) {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Audio,
+                        severity: EditorWarningSeverity::Error,
+                        label: format!("Áudio ausente em '{}'", entity.name),
+                        details: format!("O arquivo '{}' não foi encontrado no projeto.", audio_path),
                     });
                 }
             }

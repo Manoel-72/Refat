@@ -212,6 +212,7 @@ fn entity_icon(entity: &Entity) -> &'static str {
             Component::Camera2D(_) => return "📷",
             Component::Sprite(_) => return "🖼",
             Component::Script(_) => return "📜",
+            Component::Audio(_) => return "🔊",
             Component::RigidBody2D(_) => return "⚙",
             Component::BoxCollider(_) => return "📐",
             Component::Transform(_) => {}

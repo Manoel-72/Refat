@@ -7,7 +7,7 @@
 use eframe::egui;
 use crate::{
     assets::is_rs2_script_file,
-    component::{BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite},
+    component::{Audio, BoxCollider, Camera2D, Component, RigidBody2D, Script, Sprite},
 };
 use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
@@ -330,6 +330,10 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                     Component::Script(sc) => {
                         draw_script_component_ui(app, ui, &selected_id, i, sc, &mut updated_components);
                     }
+
+                    Component::Audio(audio) => {
+                        draw_audio_component_ui(app, ui, i, audio, &mut updated_components);
+                    }
                 }
 
                 if i > 0 && ui.small_button("🗑 Remover").clicked() {
@@ -384,7 +388,111 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                 }));
             }
         }
+        if ui.button("🔊 Audio").clicked() {
+            if let Some(e) = app.find_entity_mut(&selected_id) {
+                e.add_component(Component::Audio(Audio::default()));
+            }
+        }
     });
+}
+
+
+fn draw_audio_component_ui(
+    app: &mut EditorApp,
+    ui: &mut egui::Ui,
+    index: usize,
+    audio: &Audio,
+    updated_components: &mut Vec<(usize, Component)>,
+) {
+    use std::fs;
+
+    let candidate_dirs = [app.project_root.join("sounds"), app.project_root.join("assets/sounds")];
+    let mut audio_files: Vec<String> = Vec::new();
+    for dir in candidate_dirs {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase());
+                let is_audio = matches!(ext.as_deref(), Some("wav") | Some("ogg") | Some("mp3"));
+                if is_audio {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        let prefix = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("sounds");
+                        audio_files.push(format!("{}/{}", prefix, name));
+                    }
+                }
+            }
+        }
+    }
+    audio_files.sort();
+    audio_files.dedup();
+
+    let mut path = audio.file_path.clone();
+    let mut play_on_start = audio.play_on_start;
+    let mut looped = audio.looped;
+    let mut volume = audio.volume;
+    let mut changed = false;
+
+    let popup_id = egui::Id::new(format!("select_audio_popup_{}", index));
+
+    ui.horizontal(|ui| {
+        let select_btn = ui.button("Selecionar áudio");
+        if select_btn.clicked() {
+            ui.memory_mut(|mem| mem.open_popup(popup_id));
+        }
+
+        egui::popup::popup_below_widget(
+            ui,
+            popup_id,
+            &select_btn,
+            egui::popup::PopupCloseBehavior::CloseOnClickOutside,
+            |ui: &mut egui::Ui| {
+                ui.label("Selecione um arquivo de áudio:");
+                for audio_name in &audio_files {
+                    if ui.button(audio_name).clicked() {
+                        path = audio_name.clone();
+                        changed = true;
+                        ui.memory_mut(|mem| mem.close_popup());
+                    }
+                }
+            },
+        );
+    });
+
+    egui::Grid::new(format!("audio_{}", index))
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Arquivo:");
+            changed |= ui.text_edit_singleline(&mut path).changed();
+            ui.end_row();
+            ui.label("Play on start:");
+            changed |= ui.checkbox(&mut play_on_start, "").changed();
+            ui.end_row();
+            ui.label("Loop:");
+            changed |= ui.checkbox(&mut looped, "").changed();
+            ui.end_row();
+            ui.label("Volume:");
+            changed |= ui.add(egui::Slider::new(&mut volume, 0.0..=1.5)).changed();
+            ui.end_row();
+        });
+
+    if !path.trim().is_empty() && !crate::runtime::systems::audio_system::validate_audio_path(&app.project_root, &path) {
+        ui.colored_label(egui::Color32::YELLOW, "Arquivo de áudio não encontrado no projeto.");
+    } else if !path.trim().is_empty() {
+        ui.colored_label(egui::Color32::GREEN, "Áudio válido para o runtime.");
+    }
+
+    if changed {
+        updated_components.push((
+            index,
+            Component::Audio(Audio {
+                file_path: path,
+                play_on_start,
+                looped,
+                volume,
+            }),
+        ));
+    }
 }
 
 fn draw_script_component_ui(

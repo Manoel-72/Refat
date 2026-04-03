@@ -1,27 +1,26 @@
 {
   "name": "Entidade",
   "root_entity": {
-    "id": "bdad179e-6a68-4890-816c-f7a513053598",
+    "id": "7c610da1-ea70-4847-9a85-219212cc95e0",
     "name": "Entidade",
     "visible": true,
     "children": [],
     "components": [
       {
         "Transform": {
-          "x": -945.3693,
-          "y": -60.192024,
+          "x": 0.0,
+          "y": 0.0,
           "rotation": 0.0,
           "scale_x": 1.0,
           "scale_y": 1.0
         }
       },
       {
-        "Sprite": {
-          "texture_path": "sprites/player.png",
-          "color_r": 1.0,
-          "color_g": 1.0,
-          "color_b": 1.0,
-          "color_a": 1.0
+        "Audio": {
+          "file_path": "sounds/sound.wav",
+          "play_on_start": true,
+          "looped": false,
+          "volume": 1.0
         }
       }
     ],

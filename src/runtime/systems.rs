@@ -229,3 +229,35 @@ pub fn apply_player_controller_input(
         apply_player_controller_input(&mut entity.children, project_root, delta_time, input);
     }
 }
+
+pub fn apply_audio_autoplay(
+    entities: &[Entity],
+    project_root: &Path,
+    started_audio: &mut HashSet<String>,
+    audio_runtime: &mut audio_system::AudioRuntime,
+) {
+    for entity in entities {
+        for component in &entity.components {
+            if let Component::Audio(audio) = component {
+                if !audio.play_on_start {
+                    continue;
+                }
+
+                let key = format!("{}::{}", entity.id, audio.file_path);
+                if !started_audio.insert(key.clone()) {
+                    continue;
+                }
+
+                if let Some(audio_path) = audio_system::resolve_audio_path(project_root, &audio.file_path) {
+                    if let Err(error) = audio_runtime.play_once(&key, &audio_path, audio.looped, audio.volume) {
+                        println!("Audio error: {}", error);
+                    }
+                } else {
+                    println!("Audio error: file not found {}", audio.file_path);
+                }
+            }
+        }
+
+        apply_audio_autoplay(&entity.children, project_root, started_audio, audio_runtime);
+    }
+}

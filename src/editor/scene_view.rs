@@ -667,6 +667,7 @@ fn component_badges(entity: &Entity) -> String {
             Component::RigidBody2D(_) => badges.push("RigidBody2D"),
             Component::BoxCollider(collider) => badges.push(if collider.is_trigger { "Trigger" } else { "Collider" }),
             Component::Script(_) => badges.push("Script"),
+            Component::Audio(_) => badges.push("Audio"),
             Component::Transform(_) => {}
         }
     }

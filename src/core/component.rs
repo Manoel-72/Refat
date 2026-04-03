@@ -5,7 +5,7 @@
 //  cola numa entidade (igual ao Unity/Godot).
 // ============================================================
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Todos os tipos de componente suportados
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +22,8 @@ pub enum Component {
     BoxCollider(BoxCollider),
     /// Script RS2 interpretado (caminho do arquivo .rs2)
     Script(Script),
+    /// Áudio simples reproduzido pelo runtime
+    Audio(Audio),
 }
 
 impl Component {
@@ -34,6 +36,7 @@ impl Component {
             Component::RigidBody2D(_)  => "RigidBody 2D",
             Component::BoxCollider(_)  => "Box Collider",
             Component::Script(_)       => "Script RS2",
+            Component::Audio(_)        => "Audio",
         }
     }
 
@@ -123,4 +126,31 @@ impl Default for BoxCollider {
 pub struct Script {
     /// Caminho do arquivo .rs2 relativo ao projeto
     pub file_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Audio {
+    /// Caminho relativo ao arquivo de áudio no projeto
+    pub file_path: String,
+    #[serde(default)]
+    pub play_on_start: bool,
+    #[serde(default)]
+    pub looped: bool,
+    #[serde(default = "default_audio_volume")]
+    pub volume: f32,
+}
+
+impl Default for Audio {
+    fn default() -> Self {
+        Self {
+            file_path: String::new(),
+            play_on_start: true,
+            looped: false,
+            volume: 1.0,
+        }
+    }
+}
+
+fn default_audio_volume() -> f32 {
+    1.0
 }

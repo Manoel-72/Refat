@@ -122,5 +122,6 @@ fn component_kind(component: &Component) -> u8 {
         Component::RigidBody2D(_) => 3,
         Component::BoxCollider(_) => 4,
         Component::Script(_) => 5,
+        Component::Audio(_) => 6,
     }
 }

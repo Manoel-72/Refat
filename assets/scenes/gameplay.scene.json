@@ -60,12 +60,21 @@
             "width": 40.0,
             "height": 40.0,
             "offset_x": 0.0,
-            "offset_y": 0.0
+            "offset_y": 0.0,
+            "is_trigger": false
           }
         },
         {
           "Script": {
             "file_path": "scripts/player_test.rs2"
+          }
+        },
+        {
+          "Audio": {
+            "file_path": "sounds/sound.wav",
+            "play_on_start": true,
+            "looped": false,
+            "volume": 1.0
           }
         }
       ],
@@ -106,7 +115,8 @@
             "width": 70.0,
             "height": 70.0,
             "offset_x": 0.0,
-            "offset_y": 0.0
+            "offset_y": 0.0,
+            "is_trigger": false
           }
         }
       ],
@@ -147,7 +157,8 @@
             "width": 64.0,
             "height": 64.0,
             "offset_x": 0.0,
-            "offset_y": 0.0
+            "offset_y": 0.0,
+            "is_trigger": false
           }
         }
       ],
@@ -188,12 +199,39 @@
             "width": 96.0,
             "height": 96.0,
             "offset_x": 0.0,
-            "offset_y": 0.0
+            "offset_y": 0.0,
+            "is_trigger": false
           }
         },
         {
           "Script": {
             "file_path": "scripts/portal_gameover.rs2"
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "16f86f81-9710-41c2-a958-cd5069318076",
+      "name": "Entidade",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -199.0,
+            "y": -30.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Audio": {
+            "file_path": "sounds/sound.wav",
+            "play_on_start": true,
+            "looped": false,
+            "volume": 1.0
           }
         }
       ],
