@@ -1127,7 +1127,70 @@ impl eframe::App for EditorApp {
         self.show_delete_confirmation_dialog(ctx);
         self.show_version_popup(ctx);
 
-        runtime::show_viewport(self, ctx);
+        let runtime_active_scene_snapshot = self.scene.clone();
+        let runtime_scene_file_candidates = self.scene_file_candidates();
+        let runtime_open_scenes_snapshot = self.open_scenes.clone();
+        let mut runtime_context = runtime::RuntimeContext {
+            play_state: &mut self.play_state,
+            runtime: &mut self.runtime,
+            status_msg: &mut self.status_msg,
+            project_root: &self.project_root,
+            sprite_textures: &mut self.sprite_textures,
+            scene_file_candidates: runtime_scene_file_candidates,
+            active_scene: &runtime_active_scene_snapshot,
+            open_scenes: &runtime_open_scenes_snapshot,
+        };
+        let runtime_actions = runtime::show_viewport(&mut runtime_context, ctx);
+        drop(runtime_context);
+
+        for action in runtime_actions {
+            match action {
+                runtime::EditorAction::SyncActiveSceneDocument => {
+                    self.sync_active_scene_document();
+                }
+                runtime::EditorAction::QueueSceneChangeFromMemory { scene, source_path, label } => {
+                    self.runtime
+                        .queue_scene_change_snapshot(scene, source_path, Some(label));
+                }
+                runtime::EditorAction::QueueSceneChangeFromPath(path) => {
+                    let normalized_target = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+                    if let Some(doc) = self
+                        .open_scenes
+                        .iter()
+                        .find(|doc| {
+                            doc.file_path
+                                .as_ref()
+                                .map(|scene_path| {
+                                    scene_path
+                                        .to_string_lossy()
+                                        .replace('\\', "/")
+                                        .to_ascii_lowercase()
+                                        == normalized_target
+                                })
+                                .unwrap_or(false)
+                        })
+                        .cloned()
+                    {
+                        let label = doc.scene.name.clone();
+                        self.runtime
+                            .queue_scene_change_snapshot(doc.scene, doc.file_path, Some(label));
+                    } else {
+                        self.runtime.queue_scene_change(path);
+                    }
+                }
+                runtime::EditorAction::CloseRuntime => {
+                    self.play_state = EditorPlayState::Edit;
+                    self.runtime.stop();
+                    self.runtime.window_open = false;
+                }
+                runtime::EditorAction::SetPlayState(state) => {
+                    self.play_state = state;
+                }
+                runtime::EditorAction::SetStatusMsg(message) => {
+                    self.status_msg = message;
+                }
+            }
+        }
 
         if ctx.input(|i| i.pointer.any_released()) {
             self.dragging_asset_path = None;
