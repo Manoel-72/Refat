@@ -18,6 +18,7 @@ pub struct ScriptScanResult {
     pub gravity_scale: Option<f32>,
     pub is_static: bool,
     pub collider_half_height: f32,
+    pub extra_velocity: Option<(f32, f32)>,
 }
 
 pub fn scan_script_behavior(
@@ -64,6 +65,10 @@ pub fn scan_script_behavior(
                     result.collision_actions.extend(behavior.on_collision.into_iter());
                     result.trigger_actions.extend(behavior.on_trigger.into_iter());
                 }
+            }
+            Component::LuaScript(_script) => {
+                // Preparação V0.8.5: a execução Lua real entra na V0.9.
+                result.extra_velocity.get_or_insert((0.0, 0.0));
             }
             _ => {}
         }

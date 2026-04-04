@@ -16,6 +16,7 @@ pub enum AssetKind {
     Scene,
     Sprite,
     ScriptRs2,
+    ScriptLua,
     Audio,
     Font,
     Prefab,
@@ -48,6 +49,7 @@ pub fn detect_asset_kind(path: &Path) -> AssetKind {
         .as_deref()
     {
         Some("rs2") => AssetKind::ScriptRs2,
+        Some("lua") => AssetKind::ScriptLua,
         Some("png") | Some("jpg") | Some("jpeg") | Some("webp") => AssetKind::Sprite,
         Some("wav") | Some("ogg") | Some("mp3") => AssetKind::Audio,
         Some("ttf") | Some("otf") => AssetKind::Font,
@@ -73,6 +75,10 @@ pub fn sanitize_asset_name(name: &str) -> String {
 
 pub fn is_rs2_script_file(path: &Path) -> bool {
     matches!(detect_asset_kind(path), AssetKind::ScriptRs2)
+}
+
+pub fn is_lua_script_file(path: &Path) -> bool {
+    matches!(detect_asset_kind(path), AssetKind::ScriptLua)
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +121,7 @@ impl AssetNode {
             AssetKind::Scene => "🎬",
             AssetKind::Sprite => "🖼",
             AssetKind::ScriptRs2 => "📜",
+            AssetKind::ScriptLua => "🌙",
             AssetKind::Audio => "🔊",
             AssetKind::Font => "🔤",
             AssetKind::Prefab => "🧱",
@@ -265,6 +272,31 @@ impl AssetManager {
 
         let template = "// Script RS2BR-Engine
 @start_message Novo script
+";
+        fs::write(&path, template)?;
+        Ok(path)
+    }
+
+    pub fn create_lua_script_file(&self, parent: &Path, name: &str) -> io::Result<PathBuf> {
+        fs::create_dir_all(parent)?;
+
+        let base_name = name.trim_end_matches(".lua");
+        let sanitized = sanitize_asset_name(base_name);
+        let final_name = format!("{sanitized}.lua");
+
+        let path = parent.join(&final_name);
+        if path.exists() {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um script Lua com esse nome."));
+        }
+
+        let template = "-- Script Lua (preparação V0.8.5)
+-- A execução Lua entra na V0.9.
+
+function on_start()
+end
+
+function on_update(dt)
+end
 ";
         fs::write(&path, template)?;
         Ok(path)

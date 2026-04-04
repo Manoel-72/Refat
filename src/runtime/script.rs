@@ -77,7 +77,7 @@ impl fmt::Display for ScriptLoadError {
         match self {
             ScriptLoadError::EmptyPath => write!(f, "Caminho do script está vazio."),
             ScriptLoadError::InvalidExtension(path) => {
-                write!(f, "'{path}' não é um arquivo .rs2 válido.")
+                write!(f, "'{path}' não é um arquivo de script válido (.rs2 ou .lua).")
             }
             ScriptLoadError::FileNotFound(path) => {
                 write!(f, "Arquivo de script não encontrado: {path}")
@@ -93,6 +93,10 @@ impl fmt::Display for ScriptLoadError {
 
 pub fn is_valid_rs2_script(path: &str) -> bool {
     path.trim().to_ascii_lowercase().ends_with(".rs2")
+}
+
+pub fn is_valid_lua_script(path: &str) -> bool {
+    path.trim().to_ascii_lowercase().ends_with(".lua")
 }
 
 pub fn load_script_behavior(project_root: &Path, raw_path: &str) -> Option<ScriptBehavior> {
@@ -153,9 +157,33 @@ pub fn load_script_behavior_checked(
 }
 
 pub fn validate_script_reference(project_root: &Path, raw_path: &str) -> Result<(), String> {
+    let trimmed = raw_path.trim();
+    if is_valid_lua_script(trimmed) {
+        return validate_lua_script_reference(project_root, trimmed);
+    }
+
     load_script_behavior_checked(project_root, raw_path)
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+pub fn validate_lua_script_reference(project_root: &Path, raw_path: &str) -> Result<(), String> {
+    let full_path = resolve_script_path(project_root, raw_path)
+        .ok_or_else(|| resolve_script_error(project_root, raw_path).to_string())?;
+
+    let is_lua = full_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("lua"))
+        .unwrap_or(false);
+
+    if !is_lua {
+        return Err(format!("'{}' não é um arquivo .lua válido.", raw_path.trim()));
+    }
+
+    fs::read_to_string(&full_path)
+        .map(|_| ())
+        .map_err(|_| format!("Falha ao ler o script Lua: {}", full_path.display()))
 }
 
 pub fn resolve_script_path(project_root: &Path, raw_path: &str) -> Option<PathBuf> {
@@ -171,7 +199,14 @@ pub fn resolve_script_path(project_root: &Path, raw_path: &str) -> Option<PathBu
         project_root.join("assets/scripts").join(&normalized),
     ];
 
-    candidates.into_iter().find(|path| path.exists())
+    candidates.into_iter().find(|path| {
+        path.exists()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("rs2") || ext.eq_ignore_ascii_case("lua"))
+                .unwrap_or(false)
+    })
 }
 
 pub fn validate_rs2_source(source: &str) -> Vec<String> {
@@ -180,6 +215,14 @@ pub fn validate_rs2_source(source: &str) -> Vec<String> {
 
 pub fn format_script_errors(errors: &[ScriptError]) -> Vec<String> {
     errors.iter().map(ScriptError::display).collect()
+}
+
+pub fn validate_lua_source(source: &str) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if source.trim().is_empty() {
+        warnings.push("Script Lua vazio.".to_string());
+    }
+    warnings
 }
 
 pub fn validate_script(code: &str) -> Vec<ScriptError> {
@@ -332,7 +375,7 @@ fn resolve_script_error(project_root: &Path, raw_path: &str) -> ScriptLoadError 
     if trimmed.is_empty() {
         return ScriptLoadError::EmptyPath;
     }
-    if !is_valid_rs2_script(trimmed) {
+    if !is_valid_rs2_script(trimmed) && !is_valid_lua_script(trimmed) {
         return ScriptLoadError::InvalidExtension(trimmed.to_string());
     }
     let normalized = trimmed.replace('\\', "/");

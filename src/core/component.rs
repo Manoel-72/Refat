@@ -17,6 +17,7 @@ pub enum Component {
     Velocity(Velocity),
     BoxCollider(BoxCollider),
     Script(Script),
+    LuaScript(LuaScript),
     Audio(Audio),
     Animator(Animator),
     TextLabel(TextLabel),
@@ -33,6 +34,7 @@ impl Component {
             Component::Velocity(_) => "Velocity",
             Component::BoxCollider(_) => "Box Collider",
             Component::Script(_) => "Script RS2",
+            Component::LuaScript(_) => "Script Lua",
             Component::Audio(_) => "Audio",
             Component::Animator(_) => "Animator",
             Component::TextLabel(_) => "Text Label",
@@ -139,6 +141,11 @@ impl Default for BoxCollider {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Script {
+    pub file_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LuaScript {
     pub file_path: String,
 }
 

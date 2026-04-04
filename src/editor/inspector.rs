@@ -7,7 +7,7 @@
 use eframe::egui;
 use crate::{
     assets::is_rs2_script_file,
-    component::{AnimationClip, Animator, Audio, BoxCollider, UIButton, Camera2D, Component, RigidBody2D, Script, Sprite, TextLabel, Velocity},
+    component::{AnimationClip, Animator, Audio, BoxCollider, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
 };
 use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
@@ -357,6 +357,10 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                         draw_script_component_ui(app, ui, &selected_id, i, sc, &mut updated_components);
                     }
 
+                    Component::LuaScript(sc) => {
+                        draw_lua_script_component_ui(app, ui, i, sc, &mut updated_components);
+                    }
+
                     Component::Animator(animator) => {
                         draw_animator_component_ui(ui, i, animator, &mut updated_components);
                     }
@@ -422,6 +426,13 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
         if ui.button("📜 Script RS2").clicked() {
             if let Some(e) = app.find_entity_mut(&selected_id) {
                 e.add_component(Component::Script(Script {
+                    file_path: String::new(),
+                }));
+            }
+        }
+        if ui.button("🌙 LuaScript").clicked() {
+            if let Some(e) = app.find_entity_mut(&selected_id) {
+                e.add_component(Component::LuaScript(LuaScript {
                     file_path: String::new(),
                 }));
             }
@@ -765,6 +776,60 @@ fn draw_script_component_ui(
         .small()
         .weak(),
     );
+}
+
+fn draw_lua_script_component_ui(
+    app: &mut EditorApp,
+    ui: &mut egui::Ui,
+    index: usize,
+    sc: &LuaScript,
+    updated_components: &mut Vec<(usize, Component)>,
+) {
+    let mut path = sc.file_path.clone();
+    let mut changed = false;
+
+    ui.horizontal(|ui| {
+        if ui.button("Criar LuaScript").clicked() {
+            let scripts_dir = app.project_root.join("assets/scripts");
+            match app.assets.create_lua_script_file(&scripts_dir, "novo_script_lua") {
+                Ok(new_path) => {
+                    path = format!(
+                        "assets/scripts/{}",
+                        new_path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua")
+                    );
+                    changed = true;
+                }
+                Err(err) => {
+                    app.status_msg = format!("❌ Erro ao criar LuaScript: {}", err);
+                }
+            }
+        }
+    });
+
+    egui::Grid::new(format!("lua_script_{}", index))
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Arquivo Lua:");
+            changed |= ui
+                .add(egui::TextEdit::singleline(&mut path).hint_text("assets/scripts/meu_script.lua").desired_width(f32::INFINITY))
+                .changed();
+            ui.end_row();
+        });
+
+    if changed {
+        updated_components.push((index, Component::LuaScript(LuaScript { file_path: path.clone() })));
+    }
+
+    if path.trim().is_empty() {
+        ui.label(egui::RichText::new("Preparação V0.8.5: componente pronto para a integração Lua da V0.9.").small().weak());
+    } else if !crate::runtime::script::is_valid_lua_script(&path) {
+        ui.colored_label(egui::Color32::YELLOW, "Use um arquivo com extensão .lua.");
+    } else if let Err(error) = crate::runtime::script::validate_lua_script_reference(&app.project_root, &path) {
+        ui.colored_label(egui::Color32::RED, error);
+    } else {
+        ui.colored_label(egui::Color32::GREEN, "LuaScript localizado. Execução Lua entra na V0.9.");
+    }
 }
 
 fn draw_animator_component_ui(

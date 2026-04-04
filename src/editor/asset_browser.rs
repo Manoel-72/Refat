@@ -19,12 +19,12 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     let assets_root = app.project_root.join("assets");
 
     ui.horizontal_wrapped(|ui| {
-        ui.heading("📂 Assets");
+        ui.heading("Assets");
         ui.separator();
         ui.label("Buscar:");
         ui.add(
             egui::TextEdit::singleline(&mut app.asset_search)
-                .hint_text("sprite, MATR, script rs2...")
+                .hint_text("sprite, MATR, script rs2/lua...")
                 .desired_width(180.0),
         );
         if ui.button("✖ Limpar").clicked() {
@@ -99,70 +99,93 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     }
     ui.separator();
 
-    ui.columns(2, |columns| {
-        // ── Árvore de assets ──
-        columns[0].vertical(|ui| {
-            let blank_response = ui.allocate_response(
-                egui::vec2(ui.available_width(), 6.0),
-                egui::Sense::click(),
-            );
+    let content_height = ui.available_height().max(120.0);
+    egui::ScrollArea::vertical()
+        .id_source("asset_panel_root_scroll")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.set_min_height(content_height);
+            ui.columns(2, |columns| {
+                // ── Árvore de assets ──
+                columns[0].vertical(|ui| {
+                    ui.set_min_height(content_height - 8.0);
+                    let blank_response = ui.allocate_response(
+                        egui::vec2(ui.available_width(), 6.0),
+                        egui::Sense::click(),
+                    );
 
-            let mut action: Option<AssetAction> = None;
-            blank_response.context_menu(|ui| {
-                ui.label(egui::RichText::new("Raiz de assets").strong());
-                ui.separator();
-                if ui.button("📥 Importar Sprite").clicked() {
-                    action = Some(AssetAction::ImportSprite);
-                    ui.close_menu();
-                }
-                if ui.button("🎬 Criar Cena (.scene.json)").clicked() {
-                    action = Some(AssetAction::NewScene(assets_root.join("scenes")));
-                    ui.close_menu();
-                }
-                if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
-                    action = Some(AssetAction::NewScript(assets_root.join("scripts")));
-                    ui.close_menu();
-                }
-                if ui.button("📁 Criar Pasta").clicked() {
-                    action = Some(AssetAction::NewFolder(assets_root.clone()));
-                    ui.close_menu();
-                }
-                if ui.button("🔷 Criar Entidade").clicked() {
-                    action = Some(AssetAction::CreateEntity);
-                    ui.close_menu();
-                }
-                if ui.button("📷 Criar Câmera").clicked() {
-                    action = Some(AssetAction::CreateCamera);
-                    ui.close_menu();
-                }
-            });
+                    let mut action: Option<AssetAction> = None;
+                    blank_response.context_menu(|ui| {
+                        ui.label(egui::RichText::new("Raiz de assets").strong());
+                        ui.separator();
+                        if ui.button("📥 Importar Sprite").clicked() {
+                            action = Some(AssetAction::ImportSprite);
+                            ui.close_menu();
+                        }
+                        if ui.button("🎬 Criar Cena (.scene.json)").clicked() {
+                            action = Some(AssetAction::NewScene(assets_root.join("scenes")));
+                            ui.close_menu();
+                        }
+                        if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
+                            action = Some(AssetAction::NewScript(assets_root.join("scripts")));
+                            ui.close_menu();
+                        }
+                        if ui.button("🌙 Criar Script Lua (.lua)").clicked() {
+                            match app.assets.create_lua_script_file(&assets_root.join("scripts"), "novo_script_lua") {
+                                Ok(path) => app.status_msg = format!("🌙 Script Lua criado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua")),
+                                Err(err) => app.status_msg = format!("❌ Falha ao criar script Lua: {}", err),
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("📁 Criar Pasta").clicked() {
+                            action = Some(AssetAction::NewFolder(assets_root.clone()));
+                            ui.close_menu();
+                        }
+                        if ui.button("🔷 Criar Entidade").clicked() {
+                            action = Some(AssetAction::CreateEntity);
+                            ui.close_menu();
+                        }
+                        if ui.button("📷 Criar Câmera").clicked() {
+                            action = Some(AssetAction::CreateCamera);
+                            ui.close_menu();
+                        }
+                    });
 
-            egui::ScrollArea::both()
-                .id_source("asset_browser_scroll")
-                .show(ui, |ui: &mut egui::Ui| {
-                    if let Some(tree) = app.assets.tree.clone() {
-                        show_node(
-                            ui,
-                            &tree,
-                            &app.selected_asset,
-                            &app.asset_search,
-                            app.asset_filter,
-                            &mut action,
-                            &mut app.dragging_asset_path,
-                        );
-                    } else {
-                        ui.label("Pasta 'assets' não encontrada.");
-                    }
+                    egui::Frame::group(ui.style()).show(ui, |ui| {
+                        ui.set_min_height((content_height - 28.0).max(96.0));
+                        egui::ScrollArea::vertical()
+                            .id_source("asset_browser_tree_scroll")
+                            .auto_shrink([false, false])
+                            .show(ui, |ui: &mut egui::Ui| {
+                                if let Some(tree) = app.assets.tree.clone() {
+                                    show_node(
+                                        ui,
+                                        &tree,
+                                        &app.selected_asset,
+                                        &app.asset_search,
+                                        app.asset_filter,
+                                        &mut action,
+                                        &mut app.dragging_asset_path,
+                                    );
+                                } else {
+                                    ui.label("Pasta 'assets' não encontrada.");
+                                }
+                            });
+                    });
+
+                    apply_asset_action(app, action, &assets_root);
                 });
 
-            apply_asset_action(app, action, &assets_root);
+                // ── Painel de detalhes do asset selecionado ──
+                columns[1].vertical(|ui| {
+                    ui.set_min_height(content_height - 8.0);
+                    egui::Frame::group(ui.style()).show(ui, |ui| {
+                        ui.set_min_height((content_height - 28.0).max(96.0));
+                        show_selected_asset_panel(app, ui, &assets_root);
+                    });
+                });
+            });
         });
-
-        // ── Painel de detalhes do asset selecionado ──
-        columns[1].vertical(|ui| {
-            show_selected_asset_panel(app, ui, &assets_root);
-        });
-    });
 }
 
 /// Ações disparadas pelo clique do usuário
@@ -352,7 +375,7 @@ fn show_node(
     } else {
         let node_path = node.path.clone();
         let label = format!("{} {}", node.icon(), node.name);
-        let can_drag = is_image_file(&node_path) || is_matr_file(&node_path) || is_rs2_file(&node_path);
+        let can_drag = is_image_file(&node_path) || is_matr_file(&node_path) || is_rs2_file(&node_path) || is_lua_file(&node_path);
 
         ui.horizontal(|ui: &mut egui::Ui| {
             ui.add_space(8.0);
@@ -453,6 +476,7 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
             AssetType::Audio => "áudio",
             AssetType::Font => "fonte",
             AssetType::ScriptRs2 => "script RS2",
+            AssetType::ScriptLua => "script Lua",
             AssetType::Json => "json",
             AssetType::Unknown => "desconhecido",
         };
@@ -491,6 +515,16 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                 }
                 if ui.button("📜 Criar Script RS2").clicked() {
                     app.new_script_dialog = Some((path.clone(), "meu_script".to_string()));
+                }
+                if ui.button("🌙 Criar Script Lua").clicked() {
+                    match app.assets.create_lua_script_file(&path, "novo_script_lua") {
+                        Ok(new_path) => {
+                            app.assets.refresh();
+                            app.selected_asset = Some(new_path.clone());
+                            app.status_msg = format!("🌙 Script Lua criado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua"));
+                        }
+                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    }
                 }
                 if ui.button("📁 Criar Pasta").clicked() {
                     app.new_folder_dialog = Some((path.clone(), "nova_pasta".to_string()));
@@ -604,6 +638,13 @@ fn is_rs2_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_lua_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("lua"))
+        .unwrap_or(false)
+}
+
 fn import_sprite_file(app: &mut EditorApp, assets_root: &Path) {
     let Some(source_path) = FileDialog::new()
         .add_filter("Imagens", &["png", "jpg", "jpeg", "webp"])
@@ -661,7 +702,7 @@ fn asset_matches_filter(path: &Path, asset_filter: AssetBrowserFilter) -> bool {
     match asset_filter {
         AssetBrowserFilter::All => true,
         AssetBrowserFilter::Images => is_image_file(path),
-        AssetBrowserFilter::Scripts => is_rs2_file(path),
+        AssetBrowserFilter::Scripts => is_rs2_file(path) || is_lua_file(path),
         AssetBrowserFilter::Scenes => matches!(
             path.file_name().and_then(|n| n.to_str()),
             Some(name) if name.ends_with(".scene.json")

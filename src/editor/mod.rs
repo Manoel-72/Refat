@@ -992,7 +992,39 @@ fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.set_visuals(egui::Visuals::dark());
+        let mut visuals = egui::Visuals::dark();
+        visuals.override_text_color = Some(egui::Color32::from_rgb(232, 236, 242));
+        visuals.panel_fill = egui::Color32::from_rgb(42, 48, 58);
+        visuals.faint_bg_color = egui::Color32::from_rgb(56, 63, 76);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(32, 37, 46);
+        visuals.code_bg_color = egui::Color32::from_rgb(36, 42, 52);
+        visuals.window_fill = egui::Color32::from_rgb(46, 52, 63);
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 54, 66);
+        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(52, 59, 72);
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(61, 68, 82);
+        visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(70, 78, 94);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(86, 96, 115);
+        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(96, 107, 128);
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(90, 126, 189);
+        visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(80, 112, 168);
+        visuals.widgets.open.bg_fill = egui::Color32::from_rgb(76, 85, 102);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(92, 134, 214);
+        visuals.selection.stroke.color = egui::Color32::from_rgb(225, 236, 252);
+        visuals.hyperlink_color = egui::Color32::from_rgb(120, 180, 255);
+        visuals.window_stroke.color = egui::Color32::from_rgb(92, 100, 118);
+        visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::from_rgb(88, 97, 115);
+        visuals.widgets.inactive.bg_stroke.color = egui::Color32::from_rgb(98, 108, 128);
+        visuals.widgets.hovered.bg_stroke.color = egui::Color32::from_rgb(125, 137, 160);
+        visuals.widgets.active.bg_stroke.color = egui::Color32::from_rgb(160, 190, 240);
+        visuals.widgets.open.bg_stroke.color = egui::Color32::from_rgb(112, 123, 145);
+        visuals.window_rounding = 4.0.into();
+        visuals.menu_rounding = 4.0.into();
+        visuals.widgets.noninteractive.rounding = 4.0.into();
+        visuals.widgets.inactive.rounding = 4.0.into();
+        visuals.widgets.hovered.rounding = 4.0.into();
+        visuals.widgets.active.rounding = 4.0.into();
+        visuals.widgets.open.rounding = 4.0.into();
+        ctx.set_visuals(visuals);
         self.sync_active_scene_document();
 
         if self.delete_confirmation.is_none()
@@ -1127,70 +1159,7 @@ impl eframe::App for EditorApp {
         self.show_delete_confirmation_dialog(ctx);
         self.show_version_popup(ctx);
 
-        let runtime_active_scene_snapshot = self.scene.clone();
-        let runtime_scene_file_candidates = self.scene_file_candidates();
-        let runtime_open_scenes_snapshot = self.open_scenes.clone();
-        let mut runtime_context = runtime::RuntimeContext {
-            play_state: &mut self.play_state,
-            runtime: &mut self.runtime,
-            status_msg: &mut self.status_msg,
-            project_root: &self.project_root,
-            sprite_textures: &mut self.sprite_textures,
-            scene_file_candidates: runtime_scene_file_candidates,
-            active_scene: &runtime_active_scene_snapshot,
-            open_scenes: &runtime_open_scenes_snapshot,
-        };
-        let runtime_actions = runtime::show_viewport(&mut runtime_context, ctx);
-        drop(runtime_context);
-
-        for action in runtime_actions {
-            match action {
-                runtime::EditorAction::SyncActiveSceneDocument => {
-                    self.sync_active_scene_document();
-                }
-                runtime::EditorAction::QueueSceneChangeFromMemory { scene, source_path, label } => {
-                    self.runtime
-                        .queue_scene_change_snapshot(scene, source_path, Some(label));
-                }
-                runtime::EditorAction::QueueSceneChangeFromPath(path) => {
-                    let normalized_target = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
-                    if let Some(doc) = self
-                        .open_scenes
-                        .iter()
-                        .find(|doc| {
-                            doc.file_path
-                                .as_ref()
-                                .map(|scene_path| {
-                                    scene_path
-                                        .to_string_lossy()
-                                        .replace('\\', "/")
-                                        .to_ascii_lowercase()
-                                        == normalized_target
-                                })
-                                .unwrap_or(false)
-                        })
-                        .cloned()
-                    {
-                        let label = doc.scene.name.clone();
-                        self.runtime
-                            .queue_scene_change_snapshot(doc.scene, doc.file_path, Some(label));
-                    } else {
-                        self.runtime.queue_scene_change(path);
-                    }
-                }
-                runtime::EditorAction::CloseRuntime => {
-                    self.play_state = EditorPlayState::Edit;
-                    self.runtime.stop();
-                    self.runtime.window_open = false;
-                }
-                runtime::EditorAction::SetPlayState(state) => {
-                    self.play_state = state;
-                }
-                runtime::EditorAction::SetStatusMsg(message) => {
-                    self.status_msg = message;
-                }
-            }
-        }
+        runtime::show_viewport(self, ctx);
 
         if ctx.input(|i| i.pointer.any_released()) {
             self.dragging_asset_path = None;

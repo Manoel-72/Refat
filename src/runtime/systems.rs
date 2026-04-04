@@ -71,11 +71,12 @@ fn update_entities_runtime_recursive(
         // 5) atualizar câmera
         script_system::advance_animator(entity, delta_time);
 
+        let (extra_x, extra_y) = script_data.extra_velocity.unwrap_or((0.0, 0.0));
         movement_system::apply_script_movement(
             entity,
             delta_time,
-            script_data.move_x,
-            script_data.move_y,
+            script_data.move_x + extra_x,
+            script_data.move_y + extra_y,
             script_data.rotate_speed,
         );
 
