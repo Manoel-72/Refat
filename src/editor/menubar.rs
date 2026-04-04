@@ -165,23 +165,19 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     if ui.button("▶ Play").clicked() {
                         app.play_state = EditorPlayState::Playing;
                         app.runtime.window_open = true;
+                        app.sync_active_scene_document();
 
-                        let maybe_path = app
-                            .open_scenes
-                            .get(app.active_scene_index)
-                            .and_then(|doc| doc.file_path.clone());
+                        let active_doc = app.open_scenes.get(app.active_scene_index).cloned();
 
-                        if let Some(path) = maybe_path {
-                            if let Err(error) = app.runtime.start_from_path(path.clone()) {
-                                app.runtime.start_from_scene(&app.scene);
-                                app.status_msg = format!("▶ Play iniciado com cena em memória (falha ao carregar arquivo: {})", error);
-                            } else {
-                                let label = path.file_stem()
-                                    .and_then(|n| n.to_str())
-                                    .map(|name| name.replace(".scene", ""))
-                                    .unwrap_or_else(|| app.scene.name.clone());
-                                app.status_msg = format!("▶ Modo Play iniciado com a cena '{}'", label);
-                            }
+                        if let Some(doc) = active_doc {
+                            let label = doc.display_name();
+                            let source_path = doc.file_path.clone();
+                            app.runtime.start_from_document(&doc.scene, source_path);
+                            app.status_msg = format!(
+                                "▶ Modo Play iniciado com a cena em memória '{}'{}",
+                                label,
+                                if doc.file_path.is_some() { " (preserva alterações não salvas)" } else { "" }
+                            );
                         } else {
                             app.runtime.start_from_scene(&app.scene);
                             app.status_msg = "▶ Modo Play iniciado com a cena atual em memória.".to_string();

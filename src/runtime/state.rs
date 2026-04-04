@@ -127,7 +127,12 @@ impl RuntimeState {
     }
 
     pub fn start_from_scene(&mut self, scene: &Scene) {
+        self.start_from_document(scene, None);
+    }
+
+    pub fn start_from_document(&mut self, scene: &Scene, source_path: Option<PathBuf>) {
         self.scene_manager.set_editor_scene(scene.clone());
+        self.scene_manager.current_path = source_path;
         self.active_scene = self.scene_manager.current_scene.clone();
         self.reset_timing_state();
         self.game_state.flow = RuntimeGameFlow::Playing;
@@ -145,6 +150,21 @@ impl RuntimeState {
         self.game_state.flow = RuntimeGameFlow::Loading;
         self.game_state.loading_label = Some(path.display().to_string());
         self.scene_manager.change_scene(path);
+    }
+
+    pub fn queue_scene_change_snapshot(
+        &mut self,
+        scene: Scene,
+        source_path: Option<PathBuf>,
+        label: Option<String>,
+    ) {
+        self.game_state.flow = RuntimeGameFlow::Loading;
+        self.game_state.loading_label = Some(
+            label
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| scene.name.clone()),
+        );
+        self.scene_manager.change_scene_snapshot(scene, source_path);
     }
 
     pub fn reload_current_scene(&mut self, fallback_scene: &Scene) {

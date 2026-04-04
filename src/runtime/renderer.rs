@@ -3,8 +3,9 @@ use eframe::egui;
 use crate::{
     editor::EditorApp,
     core::{
-        component::{Component, Sprite},
+        component::{Component, Sprite, TextLabel, UIButton},
         entity::Entity,
+        scene::Scene,
     },
 };
 
@@ -73,20 +74,33 @@ pub fn draw_runtime_entity(
         .map(|t| (t.x, t.y, t.rotation, t.scale_x, t.scale_y))
         .unwrap_or((0.0, 0.0, 0.0, 1.0, 1.0));
 
-    let screen_pos = egui::pos2(
+    let world_screen_pos = egui::pos2(
         center.x + ((ex - camera.x) * camera.zoom),
         center.y - ((ey - camera.y) * camera.zoom),
     );
+    let screen_space_pos = egui::pos2(center.x + ex, center.y - ey);
 
     let mut sprite: Option<&Sprite> = None;
+    let mut text_label: Option<&TextLabel> = None;
+    let mut ui_button: Option<&UIButton> = None;
     let mut has_camera = false;
 
     for component in &entity.components {
         match component {
             Component::Sprite(s) => sprite = Some(s),
+            Component::TextLabel(label) => text_label = Some(label),
+            Component::UIButton(button) => ui_button = Some(button),
             Component::Camera2D(_) => has_camera = true,
             _ => {}
         }
+    }
+
+    if let Some(label) = text_label {
+        draw_text_label(painter, world_screen_pos, screen_space_pos, label);
+    }
+
+    if let Some(button) = ui_button {
+        draw_ui_button(app, ui, painter, world_screen_pos, screen_space_pos, entity, button);
     }
 
     if let Some(sprite_comp) = sprite {
@@ -112,7 +126,7 @@ pub fn draw_runtime_entity(
                 paint_rotated_image(
                     painter,
                     texture.id(),
-                    screen_pos,
+                    world_screen_pos,
                     draw_size,
                     rotation,
                     tint,
@@ -122,7 +136,7 @@ pub fn draw_runtime_entity(
             } else {
                 paint_rotated_placeholder(
                     painter,
-                    screen_pos,
+                    world_screen_pos,
                     default_size,
                     rotation,
                     tint.linear_multiply(0.25),
@@ -132,7 +146,7 @@ pub fn draw_runtime_entity(
         } else {
             paint_rotated_placeholder(
                 painter,
-                screen_pos,
+                world_screen_pos,
                 default_size,
                 rotation,
                 tint.linear_multiply(0.25),
@@ -140,14 +154,14 @@ pub fn draw_runtime_entity(
             );
         }
     } else if has_camera {
-        let rect = egui::Rect::from_center_size(screen_pos, egui::vec2(80.0, 52.0));
+        let rect = egui::Rect::from_center_size(world_screen_pos, egui::vec2(80.0, 52.0));
         painter.rect_stroke(
             rect,
             4.0,
             egui::Stroke::new(1.5, egui::Color32::from_rgb(180, 120, 255)),
         );
     } else {
-        painter.circle_filled(screen_pos, 5.0, egui::Color32::from_rgb(120, 190, 255));
+        painter.circle_filled(world_screen_pos, 5.0, egui::Color32::from_rgb(120, 190, 255));
     }
 
     for child in &entity.children {
@@ -226,4 +240,255 @@ fn paint_rotated_placeholder(
 ) {
     let points = rotated_rect_points(center, size, rotation_deg);
     painter.add(egui::Shape::convex_polygon(points.to_vec(), fill, stroke));
+}
+
+
+fn draw_text_label(
+    painter: &egui::Painter,
+    world_screen_pos: egui::Pos2,
+    screen_space_pos: egui::Pos2,
+    label: &TextLabel,
+) {
+    let pos = if label.screen_space {
+        screen_space_pos
+    } else {
+        world_screen_pos
+    };
+
+    let color = egui::Color32::from_rgba_unmultiplied(
+        (label.color_r.clamp(0.0, 1.0) * 255.0) as u8,
+        (label.color_g.clamp(0.0, 1.0) * 255.0) as u8,
+        (label.color_b.clamp(0.0, 1.0) * 255.0) as u8,
+        (label.color_a.clamp(0.0, 1.0) * 255.0) as u8,
+    );
+
+    painter.text(
+        pos,
+        egui::Align2::CENTER_CENTER,
+        &label.text,
+        egui::FontId::proportional(label.font_size.max(8.0)),
+        color,
+    );
+}
+
+fn normalize_scene_key(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+}
+
+fn find_open_scene_snapshot(app: &EditorApp, resolved_path: &std::path::Path) -> Option<(Scene, Option<std::path::PathBuf>)> {
+    let resolved_key = normalize_scene_key(resolved_path);
+
+    app.open_scenes
+        .iter()
+        .find_map(|doc| {
+            let doc_path = doc.file_path.as_ref()?;
+            let doc_key = normalize_scene_key(doc_path);
+            if doc_key == resolved_key {
+                Some((doc.scene.clone(), Some(doc_path.clone())))
+            } else {
+                None
+            }
+        })
+}
+
+fn resolve_scene_target_path(app: &EditorApp, target_scene: &str) -> Result<std::path::PathBuf, String> {
+    use std::path::{Path, PathBuf};
+
+    let raw = target_scene.trim();
+    if raw.is_empty() {
+        return Err("UIButton sem target_scene configurado".to_string());
+    }
+
+    let normalized = raw.replace('\\', "/");
+    let target_path = Path::new(&normalized);
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if target_path.is_absolute() {
+        candidates.push(target_path.to_path_buf());
+    } else {
+        candidates.push(app.project_root.join(&normalized));
+
+        if let Some(current_path) = app.runtime.scene_manager.current_path.as_ref() {
+            if let Some(current_dir) = current_path.parent() {
+                candidates.push(current_dir.join(&normalized));
+            }
+        }
+
+        if !normalized.starts_with("assets/") {
+            candidates.push(app.project_root.join("assets/scenes").join(&normalized));
+        }
+
+        let has_scene_suffix = normalized.ends_with(".scene.json");
+        if !has_scene_suffix {
+            candidates.push(app.project_root.join(format!("{}.scene.json", normalized)));
+            candidates.push(app.project_root.join("assets/scenes").join(format!("{}.scene.json", normalized)));
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!("Cena alvo não encontrada: {}", normalized))
+}
+
+fn draw_ui_button(
+    app: &mut EditorApp,
+    ui: &mut egui::Ui,
+    painter: &egui::Painter,
+    world_screen_pos: egui::Pos2,
+    screen_space_pos: egui::Pos2,
+    entity: &Entity,
+    button: &UIButton,
+) {
+    let pos = if button.screen_space {
+        screen_space_pos
+    } else {
+        world_screen_pos
+    };
+
+    let size = egui::vec2(button.width.max(72.0), button.height.max(28.0));
+    let rect = egui::Rect::from_center_size(pos, size);
+    let id = egui::Id::new(format!("runtime_ui_button_{}", entity.id));
+    let response = ui.interact(rect, id, egui::Sense::click());
+
+    if response.hovered() {
+        ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+    }
+
+    let hover_t = ui.ctx().animate_bool(id.with("hover"), response.hovered());
+    let press_t = ui
+        .ctx()
+        .animate_bool(id.with("press"), response.is_pointer_button_down_on());
+
+    let to_u8 = |value: f32| -> u8 { (value.clamp(0.0, 1.0) * 255.0).round() as u8 };
+    let brighten = |value: u8, amount: u8| -> u8 { value.saturating_add(amount) };
+    let darken = |value: u8, amount: u8| -> u8 { value.saturating_sub(amount) };
+    let lerp_u8 = |from: u8, to: u8, t: f32| -> u8 {
+        ((from as f32) + ((to as f32) - (from as f32)) * t.clamp(0.0, 1.0)).round() as u8
+    };
+
+    let base_r = to_u8(button.color_r);
+    let base_g = to_u8(button.color_g);
+    let base_b = to_u8(button.color_b);
+    let base_a = to_u8(button.color_a.max(0.85));
+
+    let hover_r = brighten(base_r, 20);
+    let hover_g = brighten(base_g, 20);
+    let hover_b = brighten(base_b, 20);
+    let press_r = darken(base_r, 18);
+    let press_g = darken(base_g, 18);
+    let press_b = darken(base_b, 18);
+
+    let mut fill_r = lerp_u8(base_r, hover_r, hover_t);
+    let mut fill_g = lerp_u8(base_g, hover_g, hover_t);
+    let mut fill_b = lerp_u8(base_b, hover_b, hover_t);
+    fill_r = lerp_u8(fill_r, press_r, press_t);
+    fill_g = lerp_u8(fill_g, press_g, press_t);
+    fill_b = lerp_u8(fill_b, press_b, press_t);
+
+    let fill = egui::Color32::from_rgba_unmultiplied(fill_r, fill_g, fill_b, base_a);
+    let border = egui::Color32::from_rgba_unmultiplied(
+        brighten(fill_r, 26),
+        brighten(fill_g, 26),
+        brighten(fill_b, 26),
+        base_a,
+    );
+    let top_highlight = egui::Color32::from_rgba_unmultiplied(
+        brighten(fill_r, 38),
+        brighten(fill_g, 38),
+        brighten(fill_b, 38),
+        darken(base_a, 18),
+    );
+    let shadow_alpha = lerp_u8(72, 112, hover_t.max(press_t * 0.5));
+    let shadow = egui::Color32::from_rgba_unmultiplied(0, 0, 0, shadow_alpha);
+    let text_color = egui::Color32::from_rgba_unmultiplied(
+        to_u8(button.text_r),
+        to_u8(button.text_g),
+        to_u8(button.text_b),
+        to_u8(button.text_a),
+    );
+
+    let visual_offset_y = 5.0 - (hover_t * 1.0) - (press_t * 3.0);
+    let visual_rect = rect.translate(egui::vec2(0.0, -press_t * 2.0));
+    let shadow_rect = rect.translate(egui::vec2(0.0, visual_offset_y));
+    let gloss_rect = egui::Rect::from_min_max(
+        egui::pos2(visual_rect.left() + 6.0, visual_rect.top() + 6.0),
+        egui::pos2(visual_rect.right() - 6.0, visual_rect.top() + visual_rect.height() * (0.40 - press_t * 0.08)),
+    );
+
+    painter.rect_filled(shadow_rect, 16.0, shadow);
+    painter.rect_filled(visual_rect, 16.0, fill);
+    painter.rect_stroke(visual_rect, 16.0, egui::Stroke::new(1.5 + hover_t * 0.5, border));
+    painter.rect_filled(
+        gloss_rect,
+        12.0,
+        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(12, 28, hover_t)),
+    );
+    painter.line_segment(
+        [
+            egui::pos2(visual_rect.left() + 10.0, visual_rect.top() + 7.0),
+            egui::pos2(visual_rect.right() - 10.0, visual_rect.top() + 7.0),
+        ],
+        egui::Stroke::new(1.0, top_highlight),
+    );
+
+    let accent_rect = egui::Rect::from_min_max(
+        egui::pos2(visual_rect.left() + 8.0, visual_rect.bottom() - 8.0),
+        egui::pos2(visual_rect.right() - 8.0, visual_rect.bottom() - 5.0),
+    );
+    painter.rect_filled(
+        accent_rect,
+        2.0,
+        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(18, 30, hover_t)),
+    );
+
+    painter.text(
+        visual_rect.center() + egui::vec2(0.0, -press_t),
+        egui::Align2::CENTER_CENTER,
+        &button.text,
+        egui::FontId::proportional(button.font_size.max(12.0)),
+        text_color,
+    );
+
+    if response.clicked() {
+        app.sync_active_scene_document();
+        let mut action_messages = Vec::new();
+
+        if !button.target_scene.trim().is_empty() {
+            match resolve_scene_target_path(app, &button.target_scene) {
+                Ok(scene_path) => {
+                    if let Some((scene_snapshot, source_path)) = find_open_scene_snapshot(app, &scene_path) {
+                        let label = scene_snapshot.name.clone();
+                        app.runtime.queue_scene_change_snapshot(scene_snapshot, source_path, Some(label.clone()));
+                        action_messages.push(format!("troca de cena -> {} (memória)", label));
+                    } else {
+                        app.runtime.queue_scene_change(scene_path.clone());
+                        let label = scene_path.file_name().and_then(|n| n.to_str()).unwrap_or("cena");
+                        action_messages.push(format!("troca de cena -> {}", label));
+                    }
+                }
+                Err(error) => {
+                    app.status_msg = format!("Erro no UIButton '{}': {}", button.text, error);
+                }
+            }
+        }
+
+        if button.close_runtime {
+            app.play_state = crate::editor::EditorPlayState::Edit;
+            app.runtime.stop();
+            app.runtime.window_open = false;
+            action_messages.push("fechar runtime".to_string());
+        }
+
+        if !action_messages.is_empty() {
+            app.status_msg = format!(
+                "UIButton '{}' acionado com sucesso: {}",
+                button.text,
+                action_messages.join(" | ")
+            );
+        }
+    }
 }

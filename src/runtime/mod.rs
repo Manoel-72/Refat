@@ -61,27 +61,19 @@ pub fn show_viewport(app: &mut EditorApp, ctx: &egui::Context) {
                     if ui.button("▶ Play").clicked() {
                         app.play_state = EditorPlayState::Playing;
                         app.runtime.window_open = true;
+                        app.sync_active_scene_document();
 
-                        let maybe_path = app
-                            .open_scenes
-                            .get(app.active_scene_index)
-                            .and_then(|doc| doc.file_path.clone());
+                        let active_doc = app.open_scenes.get(app.active_scene_index).cloned();
 
-                        if let Some(path) = maybe_path {
-                            if let Err(error) = app.runtime.start_from_path(path.clone()) {
-                                app.runtime.start_from_scene(&app.scene);
-                                app.status_msg = format!(
-                                    "▶ Runtime iniciado com cena em memória (falha ao carregar arquivo: {})",
-                                    error
-                                );
-                            } else {
-                                app.status_msg = format!(
-                                    "▶ Runtime iniciado com '{}'",
-                                    path.file_name()
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or("cena")
-                                );
-                            }
+                        if let Some(doc) = active_doc {
+                            let label = doc.display_name();
+                            let source_path = doc.file_path.clone();
+                            app.runtime.start_from_document(&doc.scene, source_path);
+                            app.status_msg = format!(
+                                "▶ Runtime iniciado com a cena em memória '{}'{}",
+                                label,
+                                if doc.file_path.is_some() { " (preserva alterações não salvas)" } else { "" }
+                            );
                         } else {
                             app.runtime.start_from_scene(&app.scene);
                             app.status_msg = "▶ Runtime iniciado com a cena atual em memória".to_string();
@@ -257,112 +249,6 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         );
     }
 
-    if runtime_scene.name.to_ascii_lowercase().contains("menu") {
-        let menu_center = available.center();
-        egui::Area::new(egui::Id::new("runtime_main_menu_overlay"))
-            .fixed_pos(egui::pos2(menu_center.x - 140.0, menu_center.y - 88.0))
-            .show(ui.ctx(), |ui| {
-                egui::Frame::window(ui.style())
-                    .fill(egui::Color32::from_rgba_unmultiplied(18, 20, 24, 240))
-                    .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgb(92, 76, 140)))
-                    .rounding(egui::Rounding::same(14.0))
-                    .inner_margin(egui::Margin::symmetric(18.0, 16.0))
-                    .show(ui, |ui| {
-                        ui.set_min_width(280.0);
-                        ui.vertical_centered(|ui| {
-                            ui.heading(
-                                egui::RichText::new("Menu Principal")
-                                    .size(28.0)
-                                    .strong()
-                                    .color(egui::Color32::from_rgb(235, 238, 245)),
-                            );
-                            ui.add_space(6.0);
-                            ui.label(
-                                egui::RichText::new("Selecione uma ação para continuar")
-                                    .size(13.0)
-                                    .color(egui::Color32::from_rgb(165, 172, 185)),
-                            );
-                        });
-
-                        ui.add_space(14.0);
-
-                        let button_size = egui::vec2(220.0, 44.0);
-
-                        ui.vertical_centered(|ui| {
-                            let play_response = ui.scope(|ui| {
-                                let visuals = &mut ui.style_mut().visuals;
-                                visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(36, 148, 76);
-                                visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(46, 168, 90);
-                                visuals.widgets.active.bg_fill = egui::Color32::from_rgb(28, 125, 64);
-                                visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(36, 148, 76);
-                                visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(46, 168, 90);
-                                visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(28, 125, 64);
-                                visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(72, 190, 108));
-                                visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(108, 210, 136));
-                                visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(56, 170, 92));
-
-                                ui.add_sized(
-                                    button_size,
-                                    egui::Button::new(
-                                        egui::RichText::new("▶ Entrar no Jogo")
-                                            .size(20.0)
-                                            .strong(),
-                                    ),
-                                )
-                            }).inner;
-
-                            if play_response.clicked() {
-                                if let Some(path) = app.scene_file_candidates().into_iter().find(|path| {
-                                    path.file_stem()
-                                        .and_then(|n| n.to_str())
-                                        .map(|name| !name.to_ascii_lowercase().contains("menu"))
-                                        .unwrap_or(false)
-                                }) {
-                                    app.runtime.queue_scene_change(path.clone());
-                                    app.status_msg = format!("Cena agendada: {}", path.display());
-                                }
-                            }
-
-                            ui.add_space(10.0);
-
-                            let exit_response = ui.scope(|ui| {
-                                let visuals = &mut ui.style_mut().visuals;
-                                visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(172, 52, 52);
-                                visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(194, 66, 66);
-                                visuals.widgets.active.bg_fill = egui::Color32::from_rgb(144, 40, 40);
-                                visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(172, 52, 52);
-                                visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(194, 66, 66);
-                                visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(144, 40, 40);
-                                visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-                                visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(215, 94, 94));
-                                visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(228, 118, 118));
-                                visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(192, 76, 76));
-
-                                ui.add_sized(
-                                    button_size,
-                                    egui::Button::new(
-                                        egui::RichText::new("✕ Sair")
-                                            .size(20.0)
-                                            .strong(),
-                                    ),
-                                )
-                            }).inner;
-
-                            if exit_response.clicked() {
-                                app.play_state = EditorPlayState::Edit;
-                                app.runtime.stop();
-                                app.runtime.window_open = false;
-                                app.status_msg = "Runtime encerrado pelo menu".to_string();
-                            }
-                        });
-                    });
-            });
-    }
 
     painter.text(
         egui::pos2(available.left() + 8.0, available.top() + 8.0),
@@ -381,7 +267,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         egui::pos2(available.right() - 8.0, available.top() + 8.0),
         egui::Align2::RIGHT_TOP,
         format!(
-            "HUD  •  Cena: {}  •  Score: {}  •  Flow: {:?}",
+            "HUD/UI  •  Cena: {}  •  Score: {}  •  Flow: {:?}",
             runtime_scene.name,
             app.runtime.game_state.score,
             app.runtime.game_state.flow,

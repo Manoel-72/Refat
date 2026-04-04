@@ -13,6 +13,8 @@ pub enum EditorWarningKind {
     Script,
     Audio,
     Prefab,
+    Animation,
+    Ui,
 }
 
 #[repr(u8)]
@@ -141,6 +143,78 @@ fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut 
                         label: format!("Script inválido em '{}'", entity.name),
                         details: error,
                     });
+                }
+            }
+            Component::Animator(animator) => {
+                let current = animator.current.trim();
+                if current.is_empty() {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Animation,
+                        severity: EditorWarningSeverity::Warning,
+                        label: format!("Animator sem clip atual em '{}'", entity.name),
+                        details: "Defina o campo current e pelo menos um frame válido no Animator.".to_string(),
+                    });
+                } else if animator.clips.get(current).map(|clip| clip.frames.is_empty()).unwrap_or(true) {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Animation,
+                        severity: EditorWarningSeverity::Warning,
+                        label: format!("Animator vazio em '{}'", entity.name),
+                        details: format!("O clip '{}' não possui frames configurados.", current),
+                    });
+                }
+            }
+            Component::TextLabel(label) => {
+                if label.text.trim().is_empty() {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Ui,
+                        severity: EditorWarningSeverity::Info,
+                        label: format!("TextLabel vazio em '{}'", entity.name),
+                        details: "Defina um texto para o HUD ou diálogo aparecer no runtime.".to_string(),
+                    });
+                }
+            }
+            Component::UIButton(button) => {
+                if button.text.trim().is_empty() {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Ui,
+                        severity: EditorWarningSeverity::Warning,
+                        label: format!("UIButton sem texto em '{}'", entity.name),
+                        details: "Defina um label visível para o botão.".to_string(),
+                    });
+                }
+                if button.width < 72.0 || button.height < 28.0 {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Ui,
+                        severity: EditorWarningSeverity::Info,
+                        label: format!("UIButton muito pequeno em '{}'", entity.name),
+                        details: "Para clique confortável, use pelo menos 72x28 no botão.".to_string(),
+                    });
+                }
+                if button.target_scene.trim().is_empty() && !button.close_runtime {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Ui,
+                        severity: EditorWarningSeverity::Info,
+                        label: format!("UIButton sem ação em '{}'", entity.name),
+                        details: "O botão renderiza no runtime, mas ainda não troca cena nem fecha o runtime.".to_string(),
+                    });
+                } else if !button.target_scene.trim().is_empty() {
+                    let raw = button.target_scene.trim().replace('\\', "/");
+                    let direct = project_root.join(&raw);
+                    let scenes_dir = project_root.join("assets/scenes").join(&raw);
+                    let alt_scene = if raw.ends_with(".scene.json") {
+                        project_root.join(&raw)
+                    } else {
+                        project_root.join("assets/scenes").join(format!("{}.scene.json", raw))
+                    };
+
+                    if !direct.exists() && !scenes_dir.exists() && !alt_scene.exists() {
+                        warnings.push(EditorWarning {
+                            kind: EditorWarningKind::Ui,
+                            severity: EditorWarningSeverity::Warning,
+                            label: format!("UIButton com target_scene inválido em '{}'", entity.name),
+                            details: format!("A cena '{}' não foi encontrada em caminhos comuns do projeto.", raw),
+                        });
+                    }
                 }
             }
             Component::Audio(audio_component) => {
