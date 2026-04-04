@@ -10,10 +10,17 @@ use crate::{entity::Entity, scene::Scene};
 use super::{EditorApp, EditorPlayState};
 
 pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
-    egui::TopBottomPanel::top("menubar").show(ctx, |ui| {
+    egui::TopBottomPanel::top("menubar")
+        .frame(
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgb(20, 24, 30))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(52, 60, 72)))
+                .inner_margin(egui::Margin::symmetric(10.0, 8.0)),
+        )
+        .show(ctx, |ui| {
         ui.vertical(|ui| {
             egui::menu::bar(ui, |ui| {
-                ui.menu_button("📁 Arquivo", |ui| {
+                ui.menu_button("Arquivo", |ui| {
                     if ui.button("🔄 Restaurar Layout").clicked() {
                         app.layout = crate::editor::EditorLayout::default();
                         app.save_layout_to_disk();
@@ -73,7 +80,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                 });
 
-                ui.menu_button("🎬 Cena", |ui| {
+                ui.menu_button("Cena", |ui| {
                     ui.label(format!("Cenas abertas: {}", app.open_scenes.len()));
                     ui.label(format!("Cena ativa: {}", app.scene.name));
                     ui.separator();
@@ -100,7 +107,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     });
                 });
 
-                ui.menu_button("🎮 Criar", |ui| {
+                ui.menu_button("Criar", |ui| {
                     if ui.button("🔷 Entidade Vazia").clicked() {
                         app.push_undo_state();
                         let e = Entity::new("Entidade");
@@ -135,8 +142,8 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                 });
 
-                ui.menu_button("❓ Ajuda", |ui| {
-                    ui.label("RS2BR-Engine v0.6.0");
+                ui.menu_button("Ajuda", |ui| {
+                    ui.label(format!("{}", crate::core::version::startup_message()));
                     ui.separator();
                     ui.label("Atalhos:");
                     ui.label("• Ctrl + Z / Ctrl + Y = desfazer / refazer");
@@ -146,7 +153,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("⏹ Parar").clicked() {
+                    if ui.add(egui::Button::new("⏹ Parar").fill(egui::Color32::from_rgb(138, 45, 55))).clicked() {
                         app.play_state = EditorPlayState::Edit;
                         app.runtime.stop();
                         app.runtime.window_open = false;
@@ -155,14 +162,14 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     if ui
                         .add_enabled(
                             app.play_state == EditorPlayState::Playing,
-                            egui::Button::new("⏸ Pause"),
+                            egui::Button::new("⏸ Pausa").fill(egui::Color32::from_rgb(120, 92, 36)),
                         )
                         .clicked()
                     {
                         app.play_state = EditorPlayState::Paused;
                         app.status_msg = "⏸ Simulação pausada.".to_string();
                     }
-                    if ui.button("▶ Play").clicked() {
+                    if ui.add(egui::Button::new("▶ Play").fill(egui::Color32::from_rgb(28, 110, 62))).clicked() {
                         app.play_state = EditorPlayState::Playing;
                         app.runtime.window_open = true;
                         app.sync_active_scene_document();
@@ -186,7 +193,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     ui.separator();
                     ui.label(
                         egui::RichText::new(format!(
-                            "🌐 {} | abertas: {}",
+                            "Cena: {} | abertas: {}",
                             app.scene.name,
                             app.open_scenes.len()
                         ))
@@ -208,7 +215,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 for (index, label) in tabs {
                     let selected = app.active_scene_index == index;
                     if ui
-                        .selectable_label(selected, format!("🎬 {}", label))
+                        .selectable_label(selected, format!("▣ {}", label))
                         .clicked()
                     {
                         app.activate_scene_tab(index);
@@ -223,10 +230,10 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
 
             ui.add_space(2.0);
             ui.horizontal_centered(|ui| {
-                if ui.button("↶ Desfazer").clicked() {
+                if ui.add(egui::Button::new("↶ Desfazer").min_size(egui::vec2(110.0, 28.0))).clicked() {
                     app.undo_scene();
                 }
-                if ui.button("↷ Refazer").clicked() {
+                if ui.add(egui::Button::new("↷ Refazer").min_size(egui::vec2(110.0, 28.0))).clicked() {
                     app.redo_scene();
                 }
             });

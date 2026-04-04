@@ -28,7 +28,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // Cabeçalho da viewport
     ui.horizontal_wrapped(|ui| {
-        ui.heading("🎬 Cena 2D");
+        ui.heading(egui::RichText::new("Cena 2D").strong());
         ui.separator();
         ui.label(format!("📌 {}", app.scene.name));
         ui.separator();
@@ -38,15 +38,12 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
         if app.play_state != EditorPlayState::Edit {
             ui.separator();
-            ui.colored_label(
-                egui::Color32::from_rgb(120, 255, 180),
-                "▶ Runtime em janela separada",
-            );
+            ui.colored_label(egui::Color32::from_rgb(120, 220, 140), "Runtime em janela separada");
         }
 
-        ui.checkbox(&mut app.show_entity_names, "🏷 Nomes");
-        ui.checkbox(&mut app.show_colliders, "📐 Colliders");
-        ui.checkbox(&mut app.snap_to_grid, "📏 Snap 32px");
+        ui.checkbox(&mut app.show_entity_names, "Nomes");
+        ui.checkbox(&mut app.show_colliders, "Colliders");
+        ui.checkbox(&mut app.snap_to_grid, "Snap 32px");
 
         if ui.small_button("🎯 Resetar Visão").clicked() {
             app.scene_zoom = 1.0;

@@ -73,7 +73,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     let runtime_warnings = app.collect_runtime_warnings();
     if !runtime_warnings.is_empty() {
-        ui.group(|ui| {
+        egui::Frame::group(ui.style()).fill(egui::Color32::from_rgb(36, 41, 50)).show(ui, |ui| {
             ui.label(egui::RichText::new("⚠ Diagnóstico da cena").strong());
             for warning in runtime_warnings.iter().take(6) {
                 let (icon, color) = match warning.severity {
@@ -92,7 +92,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
         ui.add_space(6.0);
     }
 
-    ui.group(|ui| {
+    egui::Frame::group(ui.style()).fill(egui::Color32::from_rgb(36, 41, 50)).show(ui, |ui| {
         ui.label("Nome:");
         let mut name = entity.name.clone();
         if ui.text_edit_singleline(&mut name).changed() {
