@@ -992,7 +992,39 @@ fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.set_visuals(egui::Visuals::dark());
+        let mut visuals = egui::Visuals::dark();
+        visuals.override_text_color = Some(egui::Color32::from_rgb(232, 236, 242));
+        visuals.panel_fill = egui::Color32::from_rgb(42, 48, 58);
+        visuals.faint_bg_color = egui::Color32::from_rgb(56, 63, 76);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(32, 37, 46);
+        visuals.code_bg_color = egui::Color32::from_rgb(36, 42, 52);
+        visuals.window_fill = egui::Color32::from_rgb(46, 52, 63);
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 54, 66);
+        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(52, 59, 72);
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(61, 68, 82);
+        visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(70, 78, 94);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(86, 96, 115);
+        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(96, 107, 128);
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(90, 126, 189);
+        visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(80, 112, 168);
+        visuals.widgets.open.bg_fill = egui::Color32::from_rgb(76, 85, 102);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(92, 134, 214);
+        visuals.selection.stroke.color = egui::Color32::from_rgb(225, 236, 252);
+        visuals.hyperlink_color = egui::Color32::from_rgb(120, 180, 255);
+        visuals.window_stroke.color = egui::Color32::from_rgb(92, 100, 118);
+        visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::from_rgb(88, 97, 115);
+        visuals.widgets.inactive.bg_stroke.color = egui::Color32::from_rgb(98, 108, 128);
+        visuals.widgets.hovered.bg_stroke.color = egui::Color32::from_rgb(125, 137, 160);
+        visuals.widgets.active.bg_stroke.color = egui::Color32::from_rgb(160, 190, 240);
+        visuals.widgets.open.bg_stroke.color = egui::Color32::from_rgb(112, 123, 145);
+        visuals.window_rounding = 4.0.into();
+        visuals.menu_rounding = 4.0.into();
+        visuals.widgets.noninteractive.rounding = 4.0.into();
+        visuals.widgets.inactive.rounding = 4.0.into();
+        visuals.widgets.hovered.rounding = 4.0.into();
+        visuals.widgets.active.rounding = 4.0.into();
+        visuals.widgets.open.rounding = 4.0.into();
+        ctx.set_visuals(visuals);
         self.sync_active_scene_document();
 
         if self.delete_confirmation.is_none()
