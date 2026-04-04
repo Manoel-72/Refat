@@ -13,11 +13,7 @@ use crate::{
 use super::{DeleteTarget, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.heading(egui::RichText::new("Hierarquia").strong());
-        ui.separator();
-        ui.label(egui::RichText::new("Cena ativa").small().weak());
-    });
+    ui.heading("🌳 Hierarquia");
     ui.separator();
 
     ui.horizontal_wrapped(|ui| {
@@ -114,7 +110,7 @@ fn show_entity_node(
         ui.add_space(indent);
 
         // Ícone de visibilidade funcional
-        let vis_icon = if entity.visible { "◉" } else { "○" };
+        let vis_icon = if entity.visible { "👁" } else { "🙈" };
         if ui.small_button(vis_icon).clicked() {
             app.push_undo_state();
             if let Some(current) = app.find_entity_mut(&entity.id) {
@@ -142,7 +138,7 @@ fn show_entity_node(
 
         // Clique direito → menu de contexto
         response.context_menu(|ui| {
-            if ui.button(if entity.visible { "Ocultar" } else { "Mostrar" }).clicked() {
+            if ui.button(if entity.visible { "🙈 Ocultar" } else { "👁 Mostrar" }).clicked() {
                 app.push_undo_state();
                 if let Some(current) = app.find_entity_mut(&entity.id) {
                     current.visible = !current.visible;
@@ -208,20 +204,20 @@ fn show_entity_node(
 
 fn entity_icon(entity: &Entity) -> &'static str {
     if entity.matr_source.is_some() {
-        return "▧";
+        return "🧱";
     }
 
     for component in &entity.components {
         match component {
-            Component::Camera2D(_) => return "⌖",
-            Component::Sprite(_) => return "▣",
-            Component::Script(_) => return "≣",
-            Component::LuaScript(_) => return "◐",
-            Component::Audio(_) => return "◍",
-            Component::Animator(_) => return "▤",
-            Component::TextLabel(_) => return "T",
-            Component::UIButton(_) => return "◎",
-            Component::RigidBody2D(_) => return "⛭",
+            Component::Camera2D(_) => return "📷",
+            Component::Sprite(_) => return "🖼",
+            Component::Script(_) => return "📜",
+            Component::LuaScript(_) => return "🌙",
+            Component::Audio(_) => return "🔊",
+            Component::Animator(_) => return "🎞",
+            Component::TextLabel(_) => return "🔤",
+            Component::UIButton(_) => return "🔘",
+            Component::RigidBody2D(_) => return "⚙",
             Component::Velocity(_) => return "💨",
             Component::BoxCollider(_) => return "📐",
             Component::Transform(_) => {}

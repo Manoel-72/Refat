@@ -990,59 +990,41 @@ fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
     }
 }
 
-
-
-fn apply_editor_theme(ctx: &egui::Context) {
-    let mut visuals = egui::Visuals::dark();
-    visuals.override_text_color = Some(egui::Color32::from_rgb(229, 231, 235));
-    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(30, 34, 42);
-    visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(37, 41, 50);
-    visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 66, 78));
-    visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(42, 47, 58);
-    visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(42, 47, 58);
-    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 78, 92));
-    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(229, 231, 235));
-    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(50, 88, 156);
-    visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(50, 88, 156);
-    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(88, 144, 255));
-    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.2, egui::Color32::WHITE);
-    visuals.widgets.active.bg_fill = egui::Color32::from_rgb(36, 72, 138);
-    visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(36, 72, 138);
-    visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(110, 166, 255));
-    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.2, egui::Color32::WHITE);
-    visuals.selection.bg_fill = egui::Color32::from_rgba_unmultiplied(58, 134, 255, 110);
-    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(58, 134, 255));
-    visuals.panel_fill = egui::Color32::from_rgb(24, 28, 35);
-    visuals.window_fill = egui::Color32::from_rgb(31, 36, 45);
-    visuals.window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(64, 72, 88));
-    visuals.extreme_bg_color = egui::Color32::from_rgb(18, 22, 28);
-    visuals.faint_bg_color = egui::Color32::from_rgb(35, 39, 48);
-    visuals.code_bg_color = egui::Color32::from_rgb(20, 24, 30);
-    visuals.hyperlink_color = egui::Color32::from_rgb(88, 144, 255);
-    ctx.set_visuals(visuals);
-
-    let mut style = (*ctx.style()).clone();
-    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(10.0, 6.0);
-    style.spacing.indent = 16.0;
-    style.text_styles.insert(egui::TextStyle::Heading, egui::FontId::proportional(20.0));
-    style.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
-    style.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-    style.text_styles.insert(egui::TextStyle::Small, egui::FontId::proportional(12.0));
-    ctx.set_style(style);
-}
-
-fn panel_frame() -> egui::Frame {
-    egui::Frame::none()
-        .fill(egui::Color32::from_rgb(31, 36, 45))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(58, 66, 80)))
-        .inner_margin(egui::Margin::symmetric(10.0, 10.0))
-        .rounding(egui::Rounding::same(10.0))
-}
-
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        apply_editor_theme(ctx);
+        let mut visuals = egui::Visuals::dark();
+        visuals.override_text_color = Some(egui::Color32::from_rgb(232, 236, 242));
+        visuals.panel_fill = egui::Color32::from_rgb(42, 48, 58);
+        visuals.faint_bg_color = egui::Color32::from_rgb(56, 63, 76);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(32, 37, 46);
+        visuals.code_bg_color = egui::Color32::from_rgb(36, 42, 52);
+        visuals.window_fill = egui::Color32::from_rgb(46, 52, 63);
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 54, 66);
+        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(52, 59, 72);
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(61, 68, 82);
+        visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(70, 78, 94);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(86, 96, 115);
+        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(96, 107, 128);
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(90, 126, 189);
+        visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(80, 112, 168);
+        visuals.widgets.open.bg_fill = egui::Color32::from_rgb(76, 85, 102);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(92, 134, 214);
+        visuals.selection.stroke.color = egui::Color32::from_rgb(225, 236, 252);
+        visuals.hyperlink_color = egui::Color32::from_rgb(120, 180, 255);
+        visuals.window_stroke.color = egui::Color32::from_rgb(92, 100, 118);
+        visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::from_rgb(88, 97, 115);
+        visuals.widgets.inactive.bg_stroke.color = egui::Color32::from_rgb(98, 108, 128);
+        visuals.widgets.hovered.bg_stroke.color = egui::Color32::from_rgb(125, 137, 160);
+        visuals.widgets.active.bg_stroke.color = egui::Color32::from_rgb(160, 190, 240);
+        visuals.widgets.open.bg_stroke.color = egui::Color32::from_rgb(112, 123, 145);
+        visuals.window_rounding = 4.0.into();
+        visuals.menu_rounding = 4.0.into();
+        visuals.widgets.noninteractive.rounding = 4.0.into();
+        visuals.widgets.inactive.rounding = 4.0.into();
+        visuals.widgets.hovered.rounding = 4.0.into();
+        visuals.widgets.active.rounding = 4.0.into();
+        visuals.widgets.open.rounding = 4.0.into();
+        ctx.set_visuals(visuals);
         self.sync_active_scene_document();
 
         if self.delete_confirmation.is_none()
@@ -1090,7 +1072,6 @@ impl eframe::App for EditorApp {
         menubar::show(self, ctx);
 
         let hierarchy_response = egui::SidePanel::left("hierarchy_panel")
-            .frame(panel_frame())
             .default_width(self.layout.hierarchy_width)
             .resizable(true)
             .min_width(180.0)
@@ -1101,7 +1082,6 @@ impl eframe::App for EditorApp {
         self.layout.hierarchy_width = hierarchy_response.response.rect.width();
 
         let inspector_response = egui::SidePanel::right("inspector_panel")
-            .frame(panel_frame())
             .default_width(self.layout.inspector_width)
             .resizable(true)
             .min_width(220.0)
@@ -1112,7 +1092,6 @@ impl eframe::App for EditorApp {
         self.layout.inspector_width = inspector_response.response.rect.width();
 
         let asset_response = egui::TopBottomPanel::bottom("asset_panel")
-            .frame(panel_frame())
             .default_height(self.layout.asset_height)
             .resizable(true)
             .min_height(150.0)
@@ -1122,13 +1101,11 @@ impl eframe::App for EditorApp {
             });
         self.layout.asset_height = asset_response.response.rect.height();
 
-        egui::CentralPanel::default()
-            .frame(panel_frame())
-            .show(ctx, |ui| {
-                scene_view::show(self, ui);
-            });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            scene_view::show(self, ui);
+        });
 
-        egui::TopBottomPanel::bottom("status_bar").frame(panel_frame()).show(ctx, |ui| {
+        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let level = infer_status_level(&self.status_msg);
                 let (icon, color) = status_visuals(level);
