@@ -208,7 +208,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     ui.separator();
 
     let available = ui.available_rect_before_wrap();
-    let _response = ui.allocate_rect(available, egui::Sense::hover());
+    let _response = ui.allocate_rect(available, egui::Sense::click_and_drag());
     let painter = ui.painter_at(available);
 
     let bg = runtime_scene.background_color;
