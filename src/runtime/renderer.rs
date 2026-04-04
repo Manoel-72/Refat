@@ -1,13 +1,17 @@
+use std::{collections::HashMap, path::{Path, PathBuf}};
+
 use eframe::egui;
 
-use crate::{
-    editor::EditorApp,
-    core::{
-        component::{Component, Sprite, TextLabel, UIButton},
-        entity::Entity,
-        scene::Scene,
-    },
+use crate::core::{
+    component::{Component, Sprite, TextLabel, UIButton},
+    entity::Entity,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiAction {
+    ChangeScene(PathBuf),
+    CloseRuntime,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CameraView {
@@ -58,15 +62,17 @@ pub fn draw_runtime_grid(
 }
 
 pub fn draw_runtime_entity(
-    app: &mut EditorApp,
     ui: &mut egui::Ui,
     painter: &egui::Painter,
+    project_root: &Path,
+    current_scene_path: Option<&Path>,
+    sprite_textures: &mut HashMap<String, egui::TextureHandle>,
     entity: &Entity,
     center: egui::Pos2,
     camera: CameraView,
-) {
+) -> Option<UiAction> {
     if !entity.visible {
-        return;
+        return None;
     }
 
     let (ex, ey, rotation, scale_x, scale_y) = entity
@@ -99,16 +105,26 @@ pub fn draw_runtime_entity(
         draw_text_label(painter, world_screen_pos, screen_space_pos, label);
     }
 
+    let mut action = None;
     if let Some(button) = ui_button {
-        draw_ui_button(app, ui, painter, world_screen_pos, screen_space_pos, entity, button);
+        action = draw_ui_button(
+            ui,
+            painter,
+            project_root,
+            current_scene_path,
+            world_screen_pos,
+            screen_space_pos,
+            entity,
+            button,
+        );
     }
 
     if let Some(sprite_comp) = sprite {
         let tint = egui::Color32::from_rgba_unmultiplied(
-            (sprite_comp.color_r * 255.0) as u8,
-            (sprite_comp.color_g * 255.0) as u8,
-            (sprite_comp.color_b * 255.0) as u8,
-            (sprite_comp.color_a * 255.0) as u8,
+            (sprite_comp.color_r.clamp(0.0, 1.0) * 255.0) as u8,
+            (sprite_comp.color_g.clamp(0.0, 1.0) * 255.0) as u8,
+            (sprite_comp.color_b.clamp(0.0, 1.0) * 255.0) as u8,
+            (sprite_comp.color_a.clamp(0.0, 1.0) * 255.0) as u8,
         );
 
         let default_size = egui::vec2(
@@ -117,7 +133,12 @@ pub fn draw_runtime_entity(
         );
 
         if !sprite_comp.texture_path.trim().is_empty() {
-            if let Some(texture) = app.load_texture_from_relative_path(ui.ctx(), &sprite_comp.texture_path) {
+            if let Some(texture) = load_texture_from_relative_path(
+                ui.ctx(),
+                project_root,
+                sprite_textures,
+                &sprite_comp.texture_path,
+            ) {
                 let tex_size = texture.size_vec2();
                 let draw_size = egui::vec2(
                     (tex_size.x * scale_x.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0),
@@ -165,8 +186,21 @@ pub fn draw_runtime_entity(
     }
 
     for child in &entity.children {
-        draw_runtime_entity(app, ui, painter, child, center, camera);
+        if let Some(child_action) = draw_runtime_entity(
+            ui,
+            painter,
+            project_root,
+            current_scene_path,
+            sprite_textures,
+            child,
+            center,
+            camera,
+        ) {
+            action = Some(child_action);
+        }
     }
+
+    action
 }
 
 pub fn count_entities(entities: &[Entity]) -> usize {
@@ -242,7 +276,6 @@ fn paint_rotated_placeholder(
     painter.add(egui::Shape::convex_polygon(points.to_vec(), fill, stroke));
 }
 
-
 fn draw_text_label(
     painter: &egui::Painter,
     world_screen_pos: egui::Pos2,
@@ -271,30 +304,50 @@ fn draw_text_label(
     );
 }
 
-fn normalize_scene_key(path: &std::path::Path) -> String {
-    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+fn load_texture_from_relative_path(
+    ctx: &egui::Context,
+    project_root: &Path,
+    sprite_textures: &mut HashMap<String, egui::TextureHandle>,
+    relative_path: &str,
+) -> Option<egui::TextureHandle> {
+    let key = relative_path.replace('\\', "/");
+
+    if let Some(texture) = sprite_textures.get(&key) {
+        return Some(texture.clone());
+    }
+
+    let candidates = [
+        project_root.join("assets").join(&key),
+        project_root.join(&key),
+    ];
+
+    let full_path = candidates.into_iter().find(|p| p.exists())?;
+
+    let image = image::ImageReader::open(&full_path)
+        .ok()?
+        .decode()
+        .ok()?
+        .to_rgba8();
+
+    let size = [image.width() as usize, image.height() as usize];
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+
+    let texture = ctx.load_texture(
+        format!("asset://{}", key),
+        color_image,
+        egui::TextureOptions::LINEAR,
+    );
+
+    sprite_textures.insert(key, texture.clone());
+    Some(texture)
 }
 
-fn find_open_scene_snapshot(app: &EditorApp, resolved_path: &std::path::Path) -> Option<(Scene, Option<std::path::PathBuf>)> {
-    let resolved_key = normalize_scene_key(resolved_path);
-
-    app.open_scenes
-        .iter()
-        .find_map(|doc| {
-            let doc_path = doc.file_path.as_ref()?;
-            let doc_key = normalize_scene_key(doc_path);
-            if doc_key == resolved_key {
-                Some((doc.scene.clone(), Some(doc_path.clone())))
-            } else {
-                None
-            }
-        })
-}
-
-fn resolve_scene_target_path(app: &EditorApp, target_scene: &str) -> Result<std::path::PathBuf, String> {
-    use std::path::{Path, PathBuf};
-
-    let raw = target_scene.trim();
+fn resolve_scene_path(
+    project_root: &Path,
+    current_scene_path: Option<&Path>,
+    target: &str,
+) -> Result<PathBuf, String> {
+    let raw = target.trim();
     if raw.is_empty() {
         return Err("UIButton sem target_scene configurado".to_string());
     }
@@ -306,22 +359,21 @@ fn resolve_scene_target_path(app: &EditorApp, target_scene: &str) -> Result<std:
     if target_path.is_absolute() {
         candidates.push(target_path.to_path_buf());
     } else {
-        candidates.push(app.project_root.join(&normalized));
+        candidates.push(project_root.join(&normalized));
 
-        if let Some(current_path) = app.runtime.scene_manager.current_path.as_ref() {
+        if let Some(current_path) = current_scene_path {
             if let Some(current_dir) = current_path.parent() {
                 candidates.push(current_dir.join(&normalized));
             }
         }
 
         if !normalized.starts_with("assets/") {
-            candidates.push(app.project_root.join("assets/scenes").join(&normalized));
+            candidates.push(project_root.join("assets/scenes").join(&normalized));
         }
 
-        let has_scene_suffix = normalized.ends_with(".scene.json");
-        if !has_scene_suffix {
-            candidates.push(app.project_root.join(format!("{}.scene.json", normalized)));
-            candidates.push(app.project_root.join("assets/scenes").join(format!("{}.scene.json", normalized)));
+        if !normalized.ends_with(".scene.json") {
+            candidates.push(project_root.join(format!("{}.scene.json", normalized)));
+            candidates.push(project_root.join("assets/scenes").join(format!("{}.scene.json", normalized)));
         }
     }
 
@@ -335,14 +387,15 @@ fn resolve_scene_target_path(app: &EditorApp, target_scene: &str) -> Result<std:
 }
 
 fn draw_ui_button(
-    app: &mut EditorApp,
     ui: &mut egui::Ui,
     painter: &egui::Painter,
+    project_root: &Path,
+    current_scene_path: Option<&Path>,
     world_screen_pos: egui::Pos2,
     screen_space_pos: egui::Pos2,
     entity: &Entity,
     button: &UIButton,
-) {
+) -> Option<UiAction> {
     let pos = if button.screen_space {
         screen_space_pos
     } else {
@@ -454,41 +507,17 @@ fn draw_ui_button(
     );
 
     if response.clicked() {
-        app.sync_active_scene_document();
-        let mut action_messages = Vec::new();
-
         if !button.target_scene.trim().is_empty() {
-            match resolve_scene_target_path(app, &button.target_scene) {
-                Ok(scene_path) => {
-                    if let Some((scene_snapshot, source_path)) = find_open_scene_snapshot(app, &scene_path) {
-                        let label = scene_snapshot.name.clone();
-                        app.runtime.queue_scene_change_snapshot(scene_snapshot, source_path, Some(label.clone()));
-                        action_messages.push(format!("troca de cena -> {} (memória)", label));
-                    } else {
-                        app.runtime.queue_scene_change(scene_path.clone());
-                        let label = scene_path.file_name().and_then(|n| n.to_str()).unwrap_or("cena");
-                        action_messages.push(format!("troca de cena -> {}", label));
-                    }
-                }
-                Err(error) => {
-                    app.status_msg = format!("Erro no UIButton '{}': {}", button.text, error);
-                }
+            match resolve_scene_path(project_root, current_scene_path, &button.target_scene) {
+                Ok(scene_path) => return Some(UiAction::ChangeScene(scene_path)),
+                Err(_) => return None,
             }
         }
 
         if button.close_runtime {
-            app.play_state = crate::editor::EditorPlayState::Edit;
-            app.runtime.stop();
-            app.runtime.window_open = false;
-            action_messages.push("fechar runtime".to_string());
-        }
-
-        if !action_messages.is_empty() {
-            app.status_msg = format!(
-                "UIButton '{}' acionado com sucesso: {}",
-                button.text,
-                action_messages.join(" | ")
-            );
+            return Some(UiAction::CloseRuntime);
         }
     }
+
+    None
 }

@@ -16,6 +16,7 @@ pub mod systems;
 use eframe::egui;
 
 use crate::{editor::{EditorApp, EditorPlayState}, core::version};
+use self::renderer::UiAction;
 
 pub use state::{RuntimeInput, RuntimeState};
 
@@ -235,8 +236,56 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         egui::Color32::from_rgb(200, 180, 140),
     );
 
+    let current_scene_path = app.runtime.scene_manager.current_path.clone();
+    let mut pending_ui_action = None;
+
     for entity in &runtime_scene.entities {
-        renderer::draw_runtime_entity(app, ui, &painter, entity, center, camera);
+        if let Some(action) = renderer::draw_runtime_entity(
+            ui,
+            &painter,
+            &app.project_root,
+            current_scene_path.as_deref(),
+            &mut app.sprite_textures,
+            entity,
+            center,
+            camera,
+        ) {
+            pending_ui_action = Some(action);
+        }
+    }
+
+    if let Some(action) = pending_ui_action {
+        match action {
+            UiAction::ChangeScene(path) => {
+                app.sync_active_scene_document();
+
+                let normalized_target = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+                if let Some(doc) = app.open_scenes.iter().find(|doc| {
+                    doc.file_path
+                        .as_ref()
+                        .map(|scene_path| scene_path.to_string_lossy().replace('\\', "/").to_ascii_lowercase() == normalized_target)
+                        .unwrap_or(false)
+                }).cloned() {
+                    let label = doc.scene.name.clone();
+                    app.runtime.queue_scene_change_snapshot(doc.scene, doc.file_path, Some(label.clone()));
+                    app.status_msg = format!("UIButton acionado: troca de cena -> {} (memória)", label);
+                } else {
+                    let label = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("cena")
+                        .to_string();
+                    app.runtime.queue_scene_change(path);
+                    app.status_msg = format!("UIButton acionado: troca de cena -> {}", label);
+                }
+            }
+            UiAction::CloseRuntime => {
+                app.play_state = EditorPlayState::Edit;
+                app.runtime.stop();
+                app.runtime.window_open = false;
+                app.status_msg = "UIButton acionado: fechar runtime".to_string();
+            }
+        }
     }
 
     if matches!(app.runtime.game_state.flow, crate::runtime::state::RuntimeGameFlow::Loading) {
