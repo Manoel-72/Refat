@@ -24,7 +24,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         ui.label("Buscar:");
         ui.add(
             egui::TextEdit::singleline(&mut app.asset_search)
-                .hint_text("sprite, MATR, script rs2...")
+                .hint_text("sprite, MATR, script rs2/lua...")
                 .desired_width(180.0),
         );
         if ui.button("✖ Limpar").clicked() {
@@ -121,6 +121,13 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 }
                 if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
                     action = Some(AssetAction::NewScript(assets_root.join("scripts")));
+                    ui.close_menu();
+                }
+                if ui.button("🌙 Criar Script Lua (.lua)").clicked() {
+                    match app.assets.create_lua_script_file(&assets_root.join("scripts"), "novo_script_lua") {
+                        Ok(path) => app.status_msg = format!("🌙 Script Lua criado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua")),
+                        Err(err) => app.status_msg = format!("❌ Falha ao criar script Lua: {}", err),
+                    }
                     ui.close_menu();
                 }
                 if ui.button("📁 Criar Pasta").clicked() {
@@ -352,7 +359,7 @@ fn show_node(
     } else {
         let node_path = node.path.clone();
         let label = format!("{} {}", node.icon(), node.name);
-        let can_drag = is_image_file(&node_path) || is_matr_file(&node_path) || is_rs2_file(&node_path);
+        let can_drag = is_image_file(&node_path) || is_matr_file(&node_path) || is_rs2_file(&node_path) || is_lua_file(&node_path);
 
         ui.horizontal(|ui: &mut egui::Ui| {
             ui.add_space(8.0);
@@ -453,6 +460,7 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
             AssetType::Audio => "áudio",
             AssetType::Font => "fonte",
             AssetType::ScriptRs2 => "script RS2",
+            AssetType::ScriptLua => "script Lua",
             AssetType::Json => "json",
             AssetType::Unknown => "desconhecido",
         };
@@ -491,6 +499,16 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                 }
                 if ui.button("📜 Criar Script RS2").clicked() {
                     app.new_script_dialog = Some((path.clone(), "meu_script".to_string()));
+                }
+                if ui.button("🌙 Criar Script Lua").clicked() {
+                    match app.assets.create_lua_script_file(&path, "novo_script_lua") {
+                        Ok(new_path) => {
+                            app.assets.refresh();
+                            app.selected_asset = Some(new_path.clone());
+                            app.status_msg = format!("🌙 Script Lua criado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua"));
+                        }
+                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    }
                 }
                 if ui.button("📁 Criar Pasta").clicked() {
                     app.new_folder_dialog = Some((path.clone(), "nova_pasta".to_string()));
@@ -604,6 +622,13 @@ fn is_rs2_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_lua_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("lua"))
+        .unwrap_or(false)
+}
+
 fn import_sprite_file(app: &mut EditorApp, assets_root: &Path) {
     let Some(source_path) = FileDialog::new()
         .add_filter("Imagens", &["png", "jpg", "jpeg", "webp"])
@@ -661,7 +686,7 @@ fn asset_matches_filter(path: &Path, asset_filter: AssetBrowserFilter) -> bool {
     match asset_filter {
         AssetBrowserFilter::All => true,
         AssetBrowserFilter::Images => is_image_file(path),
-        AssetBrowserFilter::Scripts => is_rs2_file(path),
+        AssetBrowserFilter::Scripts => is_rs2_file(path) || is_lua_file(path),
         AssetBrowserFilter::Scenes => matches!(
             path.file_name().and_then(|n| n.to_str()),
             Some(name) if name.ends_with(".scene.json")

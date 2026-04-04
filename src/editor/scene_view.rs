@@ -668,6 +668,7 @@ fn component_badges(entity: &Entity) -> String {
             Component::Velocity(_) => badges.push("Velocity"),
             Component::BoxCollider(collider) => badges.push(if collider.is_trigger { "Trigger" } else { "Collider" }),
             Component::Script(_) => badges.push("Script"),
+            Component::LuaScript(_) => badges.push("LuaScript"),
             Component::Audio(_) => badges.push("Audio"),
             Component::Animator(_) => badges.push("Animator"),
             Component::TextLabel(_) => badges.push("TextLabel"),

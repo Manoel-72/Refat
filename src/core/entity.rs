@@ -138,9 +138,10 @@ fn component_kind(component: &Component) -> u8 {
         Component::Velocity(_) => 4,
         Component::BoxCollider(_) => 5,
         Component::Script(_) => 6,
-        Component::Audio(_) => 7,
-        Component::Animator(_) => 8,
-        Component::TextLabel(_) => 9,
-        Component::UIButton(_) => 10,
+        Component::LuaScript(_) => 7,
+        Component::Audio(_) => 8,
+        Component::Animator(_) => 9,
+        Component::TextLabel(_) => 10,
+        Component::UIButton(_) => 11,
     }
 }

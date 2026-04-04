@@ -11,6 +11,7 @@ pub enum AssetType {
     Audio,
     Font,
     ScriptRs2,
+    ScriptLua,
     Json,
     Unknown,
 }
@@ -80,6 +81,7 @@ pub fn detect_asset_type(path: &Path) -> AssetType {
 
     match path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase()).as_deref() {
         Some("rs2") => AssetType::ScriptRs2,
+        Some("lua") => AssetType::ScriptLua,
         Some("png") | Some("jpg") | Some("jpeg") | Some("webp") => AssetType::Texture,
         Some("wav") | Some("ogg") | Some("mp3") => AssetType::Audio,
         Some("ttf") | Some("otf") => AssetType::Font,
@@ -123,7 +125,7 @@ pub fn validate_asset_path(path: &Path, asset_type: AssetType) -> AssetValidatio
                 AssetValidation::ok()
             }
         }
-        AssetType::Texture | AssetType::Audio | AssetType::Font | AssetType::ScriptRs2 | AssetType::Json => {
+        AssetType::Texture | AssetType::Audio | AssetType::Font | AssetType::ScriptRs2 | AssetType::ScriptLua | AssetType::Json => {
             if path.is_file() { AssetValidation::ok() } else { AssetValidation::issue("O asset esperado não é um arquivo válido.") }
         }
         AssetType::Unknown => AssetValidation::issue("Tipo de asset desconhecido ou não suportado."),
@@ -154,6 +156,7 @@ mod tests {
         assert_eq!(detect_asset_type(Path::new("som.ogg")), AssetType::Audio);
         assert_eq!(detect_asset_type(Path::new("fonte.ttf")), AssetType::Font);
         assert_eq!(detect_asset_type(Path::new("ai.rs2")), AssetType::ScriptRs2);
+        assert_eq!(detect_asset_type(Path::new("ai.lua")), AssetType::ScriptLua);
     }
 
     #[test]

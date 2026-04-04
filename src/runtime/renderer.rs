@@ -214,7 +214,7 @@ pub fn count_scripts(entities: &[Entity]) -> usize {
     let mut count = 0;
     for entity in entities {
         for component in &entity.components {
-            if matches!(component, Component::Script(_)) {
+            if matches!(component, Component::Script(_) | Component::LuaScript(_)) {
                 count += 1;
             }
         }

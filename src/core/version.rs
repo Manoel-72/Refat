@@ -1,4 +1,4 @@
-pub const ENGINE_VERSION: &str = "V0.8";
+pub const ENGINE_VERSION: &str = "V0.8.5";
 pub const ENGINE_STATUS: &str = "EM TESTE";
 pub const ENGINE_TITLE: &str = "RS2BR-Engine";
 

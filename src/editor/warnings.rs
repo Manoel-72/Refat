@@ -145,6 +145,44 @@ fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut 
                     });
                 }
             }
+            Component::LuaScript(script_component) => {
+                let script_path = script_component.file_path.trim();
+                if script_path.is_empty() {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Script,
+                        severity: EditorWarningSeverity::Info,
+                        label: format!("LuaScript vazio em '{}'", entity.name),
+                        details: "Associe um arquivo .lua para preparar a integração da V0.9.".to_string(),
+                    });
+                } else if let Some(script_full_path) = script::resolve_script_path(project_root, script_path) {
+                    match fs::read_to_string(&script_full_path) {
+                        Ok(source) => {
+                            let lua_warnings = script::validate_lua_source(&source);
+                            if !lua_warnings.is_empty() {
+                                warnings.push(EditorWarning {
+                                    kind: EditorWarningKind::Script,
+                                    severity: EditorWarningSeverity::Info,
+                                    label: format!("LuaScript em preparação em '{}'", entity.name),
+                                    details: lua_warnings.join(" | "),
+                                });
+                            }
+                        }
+                        Err(_) => warnings.push(EditorWarning {
+                            kind: EditorWarningKind::Script,
+                            severity: EditorWarningSeverity::Error,
+                            label: format!("LuaScript inválido em '{}'", entity.name),
+                            details: format!("Falha ao ler o script Lua: {}", script_full_path.display()),
+                        }),
+                    }
+                } else if let Err(error) = script::validate_lua_script_reference(project_root, script_path) {
+                    warnings.push(EditorWarning {
+                        kind: EditorWarningKind::Script,
+                        severity: EditorWarningSeverity::Error,
+                        label: format!("LuaScript inválido em '{}'", entity.name),
+                        details: error,
+                    });
+                }
+            }
             Component::Animator(animator) => {
                 let current = animator.current.trim();
                 if current.is_empty() {
