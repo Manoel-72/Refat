@@ -13,6 +13,7 @@
 //    input.key_held(name), input.key_pressed(name), input.mouse_pos()
 //    game.delta_time, game.elapsed_time, game.log(msg)
 //    game.change_scene(path)
+//    game.get_collisions() → lista de nomes das entidades em contato
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
 // ============================================================
 
@@ -56,6 +57,7 @@ pub enum SaveOp {
 /// Retorna as mutações que o script quer aplicar.
 ///
 /// `started` controla se `on_start()` já foi chamado para este script.
+/// `collision_names` lista as entidades atualmente colidindo com esta.
 pub fn run_lua_script(
     lua_source: &str,
     entity: &Entity,
@@ -64,8 +66,24 @@ pub fn run_lua_script(
     delta_time: f32,
     elapsed_time: f32,
     started: bool,
+    collision_names: &[String],
 ) -> Result<LuaScriptResult, String> {
     let lua = Lua::new();
+    run_lua_script_with_vm(&lua, lua_source, entity, input, save_data, delta_time, elapsed_time, started, collision_names)
+}
+
+/// Versão interna que recebe uma VM Lua já existente (reutilizada do cache).
+pub fn run_lua_script_with_vm(
+    lua: &Lua,
+    lua_source: &str,
+    entity: &Entity,
+    input: &RuntimeInput,
+    save_data: &SaveData,
+    delta_time: f32,
+    elapsed_time: f32,
+    started: bool,
+    collision_names: &[String],
+) -> Result<LuaScriptResult, String> {
     let mut result = LuaScriptResult::default();
 
     // ── tabela `entity` ──────────────────────────────────────
@@ -206,6 +224,17 @@ pub fn run_lua_script(
         game_tbl.set("change_scene", change_scene).ok();
         game_tbl.set("_cmds", game_cmds).ok();
 
+        // game.get_collisions() → lista de nomes das entidades em contato
+        let col_names: Vec<String> = collision_names.to_vec();
+        let get_collisions = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, name) in col_names.iter().enumerate() {
+                t.set(i + 1, name.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_collisions", get_collisions).ok();
+
         lua.globals().set("game", game_tbl).map_err(|e| e.to_string())?;
     }
 
@@ -219,7 +248,7 @@ pub fn run_lua_script(
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        let get_fn = lua.create_function(move |_, key: String| {
+        let get_fn = lua.create_function(move |lua_ctx, key: String| {
             let val = snap.iter().find(|(k, _)| k == &key).map(|(_, v)| v.clone());
             match val {
                 None => Ok(LuaValue::Nil),
@@ -227,7 +256,7 @@ pub fn run_lua_script(
                 Some(crate::runtime::save::SaveValue::Int(i))   => Ok(LuaValue::Integer(i)),
                 Some(crate::runtime::save::SaveValue::Float(f)) => Ok(LuaValue::Number(f)),
                 Some(crate::runtime::save::SaveValue::Text(s))  => {
-                    Err(mlua::Error::RuntimeError(format!("text:{}", s)))
+                    Ok(LuaValue::String(lua_ctx.create_string(&s)?))
                 }
             }
         }).map_err(|e| e.to_string())?;
@@ -445,7 +474,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true, &[]).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -456,11 +485,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, false).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, false, &[]).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, 0.016, 0.016, true).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, 0.016, 0.016, true, &[]).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -470,7 +499,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true, &[]).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
     }

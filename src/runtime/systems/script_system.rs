@@ -1,5 +1,7 @@
 use std::{collections::HashSet, path::Path};
 
+use mlua;
+
 use crate::{
     core::{component::{Component, Animator}, entity::Entity},
     runtime::script::{
@@ -80,6 +82,7 @@ pub fn scan_script_behavior(
 
 /// Executa todos os LuaScripts de uma entidade para um frame.
 /// Aplica as mutações diretamente na entidade e retorna uma troca de cena se pedida.
+/// Usa `lua_vms` como cache — uma VM por (entity_id + script_path), recriada só quando o arquivo muda.
 pub fn run_lua_scripts_for_entity(
     entity: &mut Entity,
     project_root: &Path,
@@ -88,6 +91,8 @@ pub fn run_lua_scripts_for_entity(
     save_data: &mut crate::runtime::save::SaveData,
     delta_time: f32,
     elapsed_time: f32,
+    lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
+    collision_names: &[String],
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -104,10 +109,46 @@ pub fn run_lua_scripts_for_entity(
             }
         };
 
-        let source = match std::fs::read_to_string(&full_path) {
+        // Lê mtime para detectar se o arquivo mudou
+        let current_mtime = std::fs::metadata(&full_path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        let vm_key = format!("vm::{}::{}", entity.id, file_path);
+
+        // Verifica se precisa recriar a VM (arquivo mudou ou primeira vez)
+        let needs_reload = lua_vms.get(&vm_key)
+            .map(|(_, mtime)| *mtime != current_mtime)
+            .unwrap_or(true);
+
+        if needs_reload {
+            let source = match std::fs::read_to_string(&full_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[LuaScript] Falha ao ler '{}': {}", file_path, e);
+                    continue;
+                }
+            };
+            // Cria nova VM e pré-carrega o chunk para validar sintaxe
+            let lua = mlua::Lua::new();
+            if let Err(e) = lua.load(&source).into_function() {
+                eprintln!("[LuaScript] Erro de sintaxe em '{}': {}", file_path, e);
+            }
+            // Armazena a fonte como global _src para reutilizar sem ler disco todo frame
+            lua.globals().set("_src", source).ok();
+            lua_vms.insert(vm_key.clone(), (lua, current_mtime));
+        }
+
+        // Recupera a VM do cache e a fonte armazenada nela
+        let (lua, _) = match lua_vms.get(&vm_key) {
+            Some(entry) => entry,
+            None => continue,
+        };
+
+        let source: String = match lua.globals().get("_src") {
             Ok(s) => s,
-            Err(e) => {
-                eprintln!("[LuaScript] Falha ao ler '{}': {}", file_path, e);
+            Err(_) => {
+                eprintln!("[LuaScript] Fonte não encontrada no cache para '{}'", file_path);
                 continue;
             }
         };
@@ -115,7 +156,8 @@ pub fn run_lua_scripts_for_entity(
         let script_key = format!("lua::{}::{}", entity.id, file_path);
         let already_started = !started_scripts.insert(script_key);
 
-        match lua_runtime::run_lua_script(
+        match lua_runtime::run_lua_script_with_vm(
+            lua,
             &source,
             entity,
             input,
@@ -123,6 +165,7 @@ pub fn run_lua_scripts_for_entity(
             delta_time,
             elapsed_time,
             already_started,
+            &collision_names,
         ) {
             Ok(result) => {
                 let change_scene = result.change_scene.clone();
@@ -196,6 +239,13 @@ fn compute_next_animation_frame(animator: &mut Animator, delta_time: f32) -> Opt
     }
 
     let current_clip_name = if animator.current.trim().is_empty() { "idle" } else { animator.current.trim() };
+
+    // Reseta o timer quando o clip muda (fix do bug V0.8)
+    if animator.prev_clip != current_clip_name {
+        animator.timer = 0.0;
+        animator.prev_clip = current_clip_name.to_string();
+    }
+
     let clip = animator.clips.get(current_clip_name)?;
 
     if clip.frames.is_empty() || clip.fps <= f32::EPSILON {

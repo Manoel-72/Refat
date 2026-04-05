@@ -1,5 +1,5 @@
-pub const ENGINE_VERSION: &str = "V0.8.6";
-pub const ENGINE_STATUS: &str = "V0.8.6 - UX polish";
+pub const ENGINE_VERSION: &str = concat!("V", env!("CARGO_PKG_VERSION"));
+pub const ENGINE_STATUS: &str = concat!("V", env!("CARGO_PKG_VERSION"), " - template + runtime clean");
 pub const ENGINE_TITLE: &str = "RS2BR-Engine";
 
 pub fn startup_message() -> String {

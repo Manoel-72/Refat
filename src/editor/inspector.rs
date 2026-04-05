@@ -841,7 +841,7 @@ fn draw_lua_script_component_ui(
     }
 
     if path.trim().is_empty() {
-        ui.label(egui::RichText::new("Preparação V0.8.6: componente pronto para validação local de Lua.").small().weak());
+        ui.label(egui::RichText::new("Preparação V0.8.7: componente pronto para validação local de Lua e template base.").small().weak());
     } else if !crate::runtime::script::is_valid_lua_script(&path) {
         ui.colored_label(egui::Color32::YELLOW, "Use um arquivo com extensão .lua.");
     } else if let Err(error) = crate::runtime::script::validate_lua_script_reference(&app.project_root, &path) {
@@ -909,50 +909,83 @@ fn draw_animator_component_ui(
             ui.end_row();
         });
 
-    ui.label("Frames (1 por linha):");
-    changed |= ui.add(egui::TextEdit::multiline(&mut frames_text).desired_rows(4)).changed();
-
-    let preview_frames = frames_text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
+    let preview_frames = normalize_animator_frames(&frames_text);
     ui.group(|ui| {
-        ui.label(egui::RichText::new("Preview do Animator").strong());
+        ui.label(egui::RichText::new("Preview simples").strong());
         ui.label(format!("Clip: {}", if current.trim().is_empty() { "<vazio>" } else { &current }));
-        ui.label(format!("Frames: {}", preview_frames.len()));
+        ui.label(format!("Frames detectados: {}", preview_frames.len()));
         if let Some(first) = preview_frames.first() {
             ui.label(format!("Primeiro frame: {}", first));
         } else {
-            ui.label(egui::RichText::new("Nenhum frame configurado.").small().weak());
+            ui.label("Primeiro frame: —");
         }
-        if fps > 0.0 && !preview_frames.is_empty() {
-            ui.label(egui::RichText::new(format!("Duração aprox.: {:.2}s", preview_frames.len() as f32 / fps)).small().weak());
+        let duration = if fps > 0.0 { preview_frames.len() as f32 / fps } else { 0.0 };
+        ui.label(format!("Duração estimada: {:.2}s", duration));
+    });
+
+    ui.label(egui::RichText::new("Frames (um por linha):").strong());
+    ui.label(egui::RichText::new("Aceita colar com vírgula, ponto e vírgula, espaço ou quebra de linha.").small().weak());
+
+    let response = ui.add(
+        egui::TextEdit::multiline(&mut frames_text)
+            .desired_rows(6)
+            .hint_text("assets/sprites/run_01.png\nassets/sprites/run_02.png"),
+    );
+    if response.changed() {
+        if !frames_text.contains('\n') && (frames_text.contains(',') || frames_text.contains(';')) {
+            frames_text = normalize_animator_frames(&frames_text).join("\n");
+        }
+        changed = true;
+    }
+
+    ui.horizontal(|ui| {
+        ui.label("Frames:");
+        if ui.button("Organizar lista").clicked() {
+            changed = true;
         }
     });
 
+    // Aplica a normalização fora do closure para evitar conflito de borrow com frames_text
     if changed {
-        let frames = frames_text
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
+        frames_text = normalize_animator_frames(&frames_text).join("\n");
+
+        let frames = normalize_animator_frames(&frames_text);
 
         let mut clips = std::collections::HashMap::new();
         clips.insert(current.clone(), AnimationClip { frames, fps });
+
+        // Preserva o timer atual para não resetar a animação ao editar no inspector
+        let preserved_timer = animator.timer;
+        let preserved_prev_clip = animator.prev_clip.clone();
 
         updated_components.push((
             index,
             Component::Animator(Animator {
                 clips,
                 current,
-                timer: 0.0,
+                timer: preserved_timer,
                 playing,
                 looped,
+                prev_clip: preserved_prev_clip,
             }),
         ));
     }
+}
+
+fn normalize_animator_frames(raw: &str) -> Vec<String> {
+    raw.replace(['\r', ';', ','], "\n")
+        .lines()
+        .flat_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.contains("assets/") {
+                trimmed.split_whitespace().map(str::to_string).collect::<Vec<_>>()
+            } else {
+                vec![trimmed.to_string()]
+            }
+        })
+        .map(|line| line.trim().trim_matches('"').trim_matches('\'').to_string())
+        .filter(|line| !line.is_empty())
+        .collect()
 }
 
 fn draw_text_label_component_ui(

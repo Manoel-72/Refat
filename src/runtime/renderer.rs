@@ -127,11 +127,6 @@ pub fn draw_runtime_entity(
             (sprite_comp.color_a.clamp(0.0, 1.0) * 255.0) as u8,
         );
 
-        let default_size = egui::vec2(
-            (64.0 * scale_x.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0),
-            (64.0 * scale_y.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0),
-        );
-
         if !sprite_comp.texture_path.trim().is_empty() {
             if let Some(texture) = load_texture_from_relative_path(
                 ui.ctx(),
@@ -154,35 +149,12 @@ pub fn draw_runtime_entity(
                     scale_x < 0.0,
                     scale_y < 0.0,
                 );
-            } else {
-                paint_rotated_placeholder(
-                    painter,
-                    world_screen_pos,
-                    default_size,
-                    rotation,
-                    tint.linear_multiply(0.25),
-                    egui::Stroke::new(1.0, tint),
-                );
             }
-        } else {
-            paint_rotated_placeholder(
-                painter,
-                world_screen_pos,
-                default_size,
-                rotation,
-                tint.linear_multiply(0.25),
-                egui::Stroke::new(1.0, tint),
-            );
         }
     } else if has_camera {
-        let rect = egui::Rect::from_center_size(world_screen_pos, egui::vec2(80.0, 52.0));
-        painter.rect_stroke(
-            rect,
-            4.0,
-            egui::Stroke::new(1.5, egui::Color32::from_rgb(180, 120, 255)),
-        );
+        // Runtime final: não desenha contorno de câmera.
     } else {
-        painter.circle_filled(world_screen_pos, 5.0, egui::Color32::from_rgb(120, 190, 255));
+        // Runtime final: entidades sem visual próprio não desenham marcador auxiliar.
     }
 
     for child in &entity.children {
@@ -262,18 +234,6 @@ fn paint_rotated_image(
     mesh.vertices.push(egui::epaint::Vertex { pos: points[3], uv: egui::pos2(u0, v1), color: tint });
     mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     painter.add(egui::Shape::mesh(mesh));
-}
-
-fn paint_rotated_placeholder(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    size: egui::Vec2,
-    rotation_deg: f32,
-    fill: egui::Color32,
-    stroke: egui::Stroke,
-) {
-    let points = rotated_rect_points(center, size, rotation_deg);
-    painter.add(egui::Shape::convex_polygon(points.to_vec(), fill, stroke));
 }
 
 fn draw_text_label(

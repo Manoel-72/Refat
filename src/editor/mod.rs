@@ -14,6 +14,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -22,7 +23,7 @@ use crate::{
     core::{
         component::{Component, Sprite},
         entity::Entity,
-        project::ProjectConfig,
+        project::{ProjectConfig, create_basic_project_template_at},
         scene::Scene,
     },
     runtime::{self, RuntimeState, context::{RuntimeContext, RuntimePlayState}},
@@ -86,6 +87,19 @@ impl OpenSceneDocument {
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| self.scene.name.clone())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorScreen {
+    ProjectHub,
+    Editor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProjectHubSession {
+    pub last_project: Option<String>,
+    #[serde(default)]
+    pub recent_projects: Vec<String>,
 }
 
 /// Estado global do editor
@@ -165,32 +179,51 @@ pub struct EditorApp {
     pub active_scene_index: usize,
     /// Diálogo de novo script (caminho da pasta, nome do arquivo)
     pub new_script_dialog: Option<(PathBuf, String)>,
+    /// Diálogo de novo script Lua (caminho da pasta, nome do arquivo)
+    pub new_lua_dialog: Option<(PathBuf, String)>,
     /// Diálogo de nova pasta (caminho pai, nome)
     pub new_folder_dialog: Option<(PathBuf, String)>,
     /// Diálogo de nova entidade (nome)
     pub new_entity_dialog: Option<String>,
+    /// Popup para escolher nome ao criar Template Básico
+    pub new_template_dialog: Option<String>,
     /// Pop-up inicial com a versão atual da engine
     pub show_version_popup: bool,
+    /// Tela atual do aplicativo
+    pub app_screen: EditorScreen,
+    /// Sessão do hub de projetos
+    pub project_hub_session: ProjectHubSession,
+    /// Diálogo: novo projeto (nome, pasta base)
+    pub new_project_dialog: Option<(String, String)>,
+    /// Diálogo: abrir projeto (caminho)
+    pub open_project_dialog: Option<String>,
 }
 
 
 impl EditorApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let engine_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let project_hub_session = load_project_hub_session(&engine_root).unwrap_or_default();
+        let initial_project_root = project_hub_session
+            .last_project
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.join("project.json").exists())
+            .unwrap_or_else(|| engine_root.clone());
 
-        let _ = std::fs::create_dir_all(project_root.join("assets/sprites"));
-        let _ = std::fs::create_dir_all(project_root.join("assets/scripts"));
-        let _ = std::fs::create_dir_all(project_root.join("assets/sounds"));
-        let _ = std::fs::create_dir_all(project_root.join("assets/matrs"));
-        let _ = std::fs::create_dir_all(project_root.join("assets/prefabs"));
-        let _ = std::fs::create_dir_all(project_root.join("assets/scenes"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/sprites"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/scripts"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/sounds"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/matrs"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/prefabs"));
+        let _ = std::fs::create_dir_all(initial_project_root.join("assets/scenes"));
 
-        let assets = AssetManager::new(project_root.clone());
-        let layout = load_editor_layout(&project_root).unwrap_or_default();
-        let project_config = ProjectConfig::load_or_create(&project_root);
+        let assets = AssetManager::new(initial_project_root.clone());
+        let layout = load_editor_layout(&initial_project_root).unwrap_or_default();
+        let project_config = ProjectConfig::load_or_create(&initial_project_root);
 
         let initial_scene = crate::serialization::scene_serializer::try_load_scene_from_path(
-            &project_root.join(&project_config.initial_scene),
+            &initial_project_root.join(&project_config.initial_scene),
         )
         .unwrap_or_else(|_| Scene::new("Cena Principal"));
 
@@ -200,8 +233,8 @@ impl EditorApp {
             selected_entity_ids: Vec::new(),
             selected_asset: None,
             assets,
-            project_root,
-            status_msg: format!("Bem-vindo ao RS2BR-Engine! Projeto: {}", project_config.name),
+            project_root: initial_project_root,
+            status_msg: "Selecione um projeto para começar.".to_string(),
             scene_zoom: 1.0,
             scene_pan: egui::Vec2::ZERO,
             show_entity_names: true,
@@ -228,9 +261,248 @@ impl EditorApp {
             }],
             active_scene_index: 0,
             new_script_dialog: None,
+            new_lua_dialog: None,
             new_folder_dialog: None,
             new_entity_dialog: None,
-            show_version_popup: true,
+            new_template_dialog: None,
+            show_version_popup: false,
+            app_screen: EditorScreen::ProjectHub,
+            project_hub_session,
+            new_project_dialog: None,
+            open_project_dialog: None,
+        }
+    }
+
+
+    fn current_project_name(&self) -> String {
+        ProjectConfig::load_or_create(&self.project_root).name
+    }
+
+    fn update_window_title(&self, ctx: &egui::Context) {
+        let title = format!("{} {} - {}", version::ENGINE_TITLE, version::ENGINE_VERSION, self.current_project_name());
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+    }
+
+    fn enter_editor_for_current_project(&mut self, ctx: &egui::Context) {
+        self.app_screen = EditorScreen::Editor;
+        self.show_version_popup = true;
+        self.update_window_title(ctx);
+    }
+
+    fn register_recent_project(&mut self, root: &Path) {
+        let root_str = root.to_string_lossy().to_string();
+        self.project_hub_session.recent_projects.retain(|p| p != &root_str);
+        self.project_hub_session.recent_projects.insert(0, root_str.clone());
+        self.project_hub_session.recent_projects.truncate(8);
+        self.project_hub_session.last_project = Some(root_str);
+        let _ = save_project_hub_session(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")), &self.project_hub_session);
+    }
+
+    fn load_project_root(&mut self, ctx: &egui::Context, root: PathBuf) -> Result<(), String> {
+        if !root.join("project.json").exists() {
+            return Err(format!("project.json não encontrado em {}", root.display()));
+        }
+
+        let project_config = ProjectConfig::load_or_create(&root);
+        let initial_scene = crate::serialization::scene_serializer::try_load_scene_from_path(
+            &root.join(&project_config.initial_scene),
+        )
+        .unwrap_or_else(|_| Scene::new("Cena Principal"));
+
+        self.project_root = root.clone();
+        self.assets = AssetManager::new(root.clone());
+        self.assets.refresh();
+        self.scene = initial_scene.clone();
+        self.open_scenes = vec![OpenSceneDocument { scene: initial_scene, file_path: Some(root.join(&project_config.initial_scene)) }];
+        self.active_scene_index = 0;
+        self.selected_entity_id = None;
+        self.selected_entity_ids.clear();
+        self.selected_asset = None;
+        self.sprite_textures.clear();
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+        self.play_state = EditorPlayState::Edit;
+        self.runtime.stop();
+        self.runtime.window_open = false;
+        self.asset_search.clear();
+        self.status_msg = format!("✅ Projeto '{}' carregado.", project_config.name);
+        self.register_recent_project(&root);
+        self.enter_editor_for_current_project(ctx);
+        Ok(())
+    }
+
+    fn create_new_project_at(&mut self, ctx: &egui::Context, project_name: &str, base_dir: &str) -> Result<(), String> {
+        let base = PathBuf::from(base_dir.trim());
+        if base_dir.trim().is_empty() {
+            return Err("Escolha uma pasta base para o projeto.".to_string());
+        }
+        let folder_name = sanitize_filename(project_name.trim());
+        let project_root = base.join(if folder_name.is_empty() { "MeuProjeto" } else { &folder_name });
+        fs::create_dir_all(&project_root).map_err(|e| format!("Falha ao criar pasta do projeto: {}", e))?;
+        create_basic_project_template_at(&project_root, project_name)
+            .map_err(|e| format!("Falha ao criar template do projeto: {}", e))?;
+        self.load_project_root(ctx, project_root)
+    }
+
+    fn close_current_project_to_hub(&mut self, ctx: &egui::Context) {
+        self.runtime.stop();
+        self.runtime.window_open = false;
+        self.play_state = EditorPlayState::Edit;
+        self.app_screen = EditorScreen::ProjectHub;
+        self.show_version_popup = false;
+        self.status_msg = "Projeto fechado. Escolha outro projeto ou crie um novo.".to_string();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION)));
+    }
+
+    fn show_project_hub(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(20.0);
+                ui.heading(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION));
+                ui.label("Hub de Projetos");
+                ui.add_space(12.0);
+            });
+
+            ui.columns(2, |cols| {
+                cols[0].group(|ui| {
+                    ui.heading("Último projeto");
+                    match self.project_hub_session.last_project.clone() {
+                        Some(path) => {
+                            ui.label(path.clone());
+                            if ui.button("Continuar último projeto").clicked() {
+                                let root = PathBuf::from(path);
+                                if let Err(e) = self.load_project_root(ctx, root) {
+                                    self.status_msg = format!("❌ {}", e);
+                                }
+                            }
+                        }
+                        None => { ui.label("Nenhum projeto recente salvo."); }
+                    }
+                });
+
+                cols[1].group(|ui| {
+                    ui.heading("Ações");
+                    if ui.button("Novo Projeto...").clicked() {
+                        let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).to_string_lossy().to_string();
+                        self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
+                    }
+                    if ui.button("Abrir Projeto...").clicked() {
+                        self.open_project_dialog = Some(String::new());
+                    }
+                    if ui.button("Entrar no editor atual").clicked() {
+                        self.enter_editor_for_current_project(ctx);
+                    }
+                    if ui.button("Sair").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            });
+
+            ui.add_space(12.0);
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.heading("Projetos recentes");
+                if self.project_hub_session.recent_projects.is_empty() {
+                    ui.label("Nenhum projeto recente.");
+                } else {
+                    let recent = self.project_hub_session.recent_projects.clone();
+                    for path in recent {
+                        ui.horizontal(|ui| {
+                            ui.label(path.clone());
+                            if ui.button("Abrir").clicked() {
+                                if let Err(e) = self.load_project_root(ctx, PathBuf::from(&path)) {
+                                    self.status_msg = format!("❌ {}", e);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+
+            if !self.status_msg.is_empty() {
+                ui.add_space(8.0);
+                ui.label(self.status_msg.clone());
+            }
+        });
+
+        self.show_new_project_dialog(ctx);
+        self.show_open_project_dialog(ctx);
+    }
+
+    fn show_new_project_dialog(&mut self, ctx: &egui::Context) {
+        if let Some((name, base_dir)) = self.new_project_dialog.clone() {
+            let mut open = true;
+            egui::Window::new("Novo Projeto")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    let mut name_buf = name.clone();
+                    let mut dir_buf = base_dir.clone();
+                    ui.label("Nome do projeto:");
+                    ui.text_edit_singleline(&mut name_buf);
+                    ui.label("Pasta base:");
+                    ui.text_edit_singleline(&mut dir_buf);
+                    if ui.button("Escolher pasta...").clicked() {
+                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                            dir_buf = folder.to_string_lossy().to_string();
+                        }
+                    }
+                    if let Some((n, d)) = self.new_project_dialog.as_mut() {
+                        *n = name_buf.clone();
+                        *d = dir_buf.clone();
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("Criar").clicked() {
+                            if let Err(e) = self.create_new_project_at(ctx, &name_buf, &dir_buf) {
+                                self.status_msg = format!("❌ {}", e);
+                            }
+                            self.new_project_dialog = None;
+                        }
+                        if ui.button("Cancelar").clicked() {
+                            self.new_project_dialog = None;
+                        }
+                    });
+                });
+            if !open { self.new_project_dialog = None; }
+        }
+    }
+
+    fn show_open_project_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(path) = self.open_project_dialog.clone() {
+            let mut open = true;
+            egui::Window::new("Abrir Projeto")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    let mut buf = path.clone();
+                    ui.label("Pasta do projeto ou arquivo project.json:");
+                    ui.text_edit_singleline(&mut buf);
+                    if ui.button("Escolher...").clicked() {
+                        if let Some(file) = rfd::FileDialog::new().add_filter("Projeto RS2BR", &["json"]).pick_file() {
+                            buf = file.to_string_lossy().to_string();
+                        } else if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                            buf = folder.to_string_lossy().to_string();
+                        }
+                    }
+                    if let Some(v) = self.open_project_dialog.as_mut() { *v = buf.clone(); }
+                    ui.horizontal(|ui| {
+                        if ui.button("Abrir").clicked() {
+                            let mut root = PathBuf::from(buf.trim());
+                            if root.is_file() { root = root.parent().unwrap_or(Path::new(".")).to_path_buf(); }
+                            if let Err(e) = self.load_project_root(ctx, root) {
+                                self.status_msg = format!("❌ {}", e);
+                            }
+                            self.open_project_dialog = None;
+                        }
+                        if ui.button("Cancelar").clicked() {
+                            self.open_project_dialog = None;
+                        }
+                    });
+                });
+            if !open { self.open_project_dialog = None; }
         }
     }
 
@@ -726,6 +998,57 @@ impl EditorApp {
         }
     }
 
+    fn show_new_lua_dialog(&mut self, ctx: &egui::Context) {
+        if let Some((folder, name)) = self.new_lua_dialog.clone() {
+            let mut open = true;
+            egui::Window::new("Novo Script Lua")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label("Nome do script (.lua):");
+                    let mut buf = name.clone();
+                    ui.text_edit_singleline(&mut buf);
+
+                    if let Some((_, ref mut n)) = self.new_lua_dialog {
+                        *n = buf.clone();
+                    }
+
+                    ui.horizontal(|ui| {
+                        if ui.button("✅ Criar").clicked() {
+                            match self.assets.create_lua_script_file(&folder, &buf) {
+                                Ok(p) => {
+                                    self.assets.refresh();
+                                    self.selected_asset = Some(p.clone());
+                                    self.status_msg = format!(
+                                        "🌙 Script Lua criado: {}",
+                                        p.file_name().and_then(|n| n.to_str()).unwrap_or("script.lua")
+                                    );
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        let _ = std::process::Command::new("cmd")
+                                            .args(["/C", "code", &p.to_string_lossy()])
+                                            .spawn();
+                                    }
+                                }
+                                Err(e) => self.status_msg = format!("Erro: {}", e),
+                            }
+                            self.new_lua_dialog = None;
+                        }
+
+                        if ui.button("❌ Cancelar").clicked() {
+                            self.new_lua_dialog = None;
+                        }
+                    });
+                });
+
+            if !open {
+                self.new_lua_dialog = None;
+            }
+        }
+    }
+
     fn show_new_folder_dialog(&mut self, ctx: &egui::Context) {
         if let Some((parent, name)) = self.new_folder_dialog.clone() {
             let mut open = true;
@@ -803,6 +1126,44 @@ impl EditorApp {
 
             if !open {
                 self.new_entity_dialog = None;
+            }
+        }
+    }
+
+    fn show_new_template_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(name) = self.new_template_dialog.clone() {
+            let mut open = true;
+            egui::Window::new("Criar Template Básico")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label("Nome do projeto / template:");
+                    let mut buf = name.clone();
+                    ui.text_edit_singleline(&mut buf);
+                    if let Some(ref mut n) = self.new_template_dialog {
+                        *n = buf.clone();
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("✅ Criar").clicked() {
+                            match self.assets.create_basic_project_template(&buf) {
+                                Ok(path) => {
+                                    self.assets.refresh();
+                                    self.selected_asset = Some(path.clone());
+                                    self.status_msg = format!("📦 Template '{}' criado.", buf.trim());
+                                }
+                                Err(e) => self.status_msg = format!("❌ {}", e),
+                            }
+                            self.new_template_dialog = None;
+                        }
+                        if ui.button("❌ Cancelar").clicked() {
+                            self.new_template_dialog = None;
+                        }
+                    });
+                });
+            if !open {
+                self.new_template_dialog = None;
             }
         }
     }
@@ -1025,7 +1386,14 @@ impl eframe::App for EditorApp {
         visuals.widgets.active.rounding = 4.0.into();
         visuals.widgets.open.rounding = 4.0.into();
         ctx.set_visuals(visuals);
+
+        if self.app_screen == EditorScreen::ProjectHub {
+            self.show_project_hub(ctx);
+            return;
+        }
+
         self.sync_active_scene_document();
+        self.update_window_title(ctx);
 
         if self.delete_confirmation.is_none()
             && !ctx.wants_keyboard_input()
@@ -1152,8 +1520,10 @@ impl eframe::App for EditorApp {
         });
 
         self.show_new_script_dialog(ctx);
+        self.show_new_lua_dialog(ctx);
         self.show_new_folder_dialog(ctx);
         self.show_new_entity_dialog(ctx);
+        self.show_new_template_dialog(ctx);
         self.show_rename_asset_dialog(ctx);
         self.show_rename_entity_dialog(ctx);
         self.show_delete_confirmation_dialog(ctx);
@@ -1172,6 +1542,23 @@ impl eframe::App for EditorApp {
             self.active_drag_entity_id = None;
         }
     }
+}
+
+fn project_hub_session_path(engine_root: &Path) -> PathBuf {
+    engine_root.join("editor_project_hub.json")
+}
+
+fn load_project_hub_session(engine_root: &Path) -> Option<ProjectHubSession> {
+    let path = project_hub_session_path(engine_root);
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn save_project_hub_session(engine_root: &Path, session: &ProjectHubSession) -> std::io::Result<()> {
+    let path = project_hub_session_path(engine_root);
+    let json = serde_json::to_string_pretty(session)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    fs::write(path, json)
 }
 
 // ── RuntimeContext impl ──────────────────────────────────────

@@ -6,7 +6,7 @@
 use crate::core::{component::Component, entity::Entity};
 
 /// Collider coletado das entidades para o frame atual.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RuntimeCollider {
     pub center_x: f32,
     pub center_y: f32,
@@ -17,6 +17,8 @@ pub struct RuntimeCollider {
     pub layer: u8,
     pub mask: u8,
     pub entity_ptr: *const Entity,
+    pub entity_id: String,
+    pub entity_name: String,
 }
 
 /// Vetor de separação mínima retornado pela resolução MTV.
@@ -110,6 +112,8 @@ pub fn collect_colliders(entities: &[Entity], out: &mut Vec<RuntimeCollider>) {
                 layer: c.layer,
                 mask: c.mask,
                 entity_ptr: entity as *const Entity,
+                entity_id: entity.id.clone(),
+                entity_name: entity.name.clone(),
             });
         }
 
@@ -162,6 +166,11 @@ pub fn raycast(
         * 0.5;
     let step = step.max(2.0).min(16.0);
 
+    // Coleta TODOS os hits e retorna o de menor distância.
+    // Isso corrige o bug onde dois colliders sobrepostos na mesma amostra
+    // retornavam o da posição 0 da lista em vez do geometricamente mais próximo.
+    let mut best: Option<RaycastHit> = None;
+
     let mut dist = 0.0_f32;
     while dist <= max_dist {
         let px = ox + dx * dist;
@@ -174,19 +183,31 @@ pub fn raycast(
             let half_w = col.width * 0.5;
             let half_h = col.height * 0.5;
             if (px - col.center_x).abs() <= half_w && (py - col.center_y).abs() <= half_h {
-                return Some(RaycastHit {
+                let hit = RaycastHit {
                     hit_x: px,
                     hit_y: py,
                     distance: dist,
                     entity_ptr: col.entity_ptr,
-                });
+                };
+                // Guarda apenas o hit de menor distância
+                match &best {
+                    None => best = Some(hit),
+                    Some(prev) if dist < prev.distance => best = Some(hit),
+                    _ => {}
+                }
             }
+        }
+
+        // Se já encontrou um hit neste passo e o próximo passo estaria além,
+        // podemos retornar imediatamente — não haverá hit mais próximo adiante.
+        if best.is_some() {
+            return best;
         }
 
         dist += step;
     }
 
-    None
+    best
 }
 
 // ── testes ───────────────────────────────────────────────────
@@ -230,6 +251,7 @@ mod tests {
             width: 32.0, height: 32.0,
             is_trigger: false, layer, mask,
             entity_ptr: std::ptr::null(),
+            entity_id: String::new(), entity_name: String::new(),
         };
         assert!(layers_interact(&make(0, 0), &make(0, 0)));
     }
@@ -237,9 +259,9 @@ mod tests {
     #[test]
     fn layers_sem_intersecao_nao_interagem() {
         let a = RuntimeCollider { center_x:0.0, center_y:0.0, width:32.0, height:32.0,
-            is_trigger:false, layer:0b0001, mask:0b0001, entity_ptr:std::ptr::null() };
+            is_trigger:false, layer:0b0001, mask:0b0001, entity_ptr:std::ptr::null(), entity_id:String::new(), entity_name:String::new() };
         let b = RuntimeCollider { center_x:0.0, center_y:0.0, width:32.0, height:32.0,
-            is_trigger:false, layer:0b0010, mask:0b0010, entity_ptr:std::ptr::null() };
+            is_trigger:false, layer:0b0010, mask:0b0010, entity_ptr:std::ptr::null(), entity_id:String::new(), entity_name:String::new() };
         assert!(!layers_interact(&a, &b));
     }
 }

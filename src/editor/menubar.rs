@@ -13,7 +13,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
     egui::TopBottomPanel::top("menubar").show(ctx, |ui| {
         ui.vertical(|ui| {
             egui::menu::bar(ui, |ui| {
-                ui.menu_button("📁 Arquivo", |ui| {
+                ui.menu_button("📁 Arquivos", |ui| {
                     if ui.button("🔄 Restaurar Layout").clicked() {
                         app.layout = crate::editor::EditorLayout::default();
                         app.save_layout_to_disk();
@@ -24,6 +24,27 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         app.push_undo_state();
                         let next_name = format!("Cena {}", app.open_scenes.len() + 1);
                         app.create_new_scene_tab(next_name);
+                        ui.close_menu();
+                    }
+
+                    if ui.button("🆕 Novo Projeto...").clicked() {
+                        let base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).to_string_lossy().to_string();
+                        app.new_project_dialog = Some(("MeuProjeto".to_string(), base));
+                        ui.close_menu();
+                    }
+
+                    if ui.button("📂 Abrir Projeto...").clicked() {
+                        app.open_project_dialog = Some(String::new());
+                        ui.close_menu();
+                    }
+
+                    if ui.button("📦 Criar template básico do projeto").clicked() {
+                        app.new_template_dialog = Some("MeuProjeto".to_string());
+                        ui.close_menu();
+                    }
+
+                    if ui.button("📪 Fechar Projeto").clicked() {
+                        app.close_current_project_to_hub(ctx);
                         ui.close_menu();
                     }
 

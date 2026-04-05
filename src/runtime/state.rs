@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -105,6 +105,11 @@ pub struct RuntimeState {
     pub last_spawned_entity_id: Option<String>,
     /// Estado persistente do jogo (save/load em save/save.json).
     pub save_data: SaveData,
+    /// Cache de VMs Lua: chave = "entity_id::script_path", valor = (VM, mtime do arquivo).
+    /// Evita criar uma Lua::new() por frame — criada uma vez, reutilizada.
+    pub lua_vms: HashMap<String, (mlua::Lua, std::time::SystemTime)>,
+    /// Contatos de colisão do frame atual: entity_id -> nomes das entidades em contato.
+    pub collision_contacts: HashMap<String, Vec<String>>,
 }
 
 impl RuntimeState {
@@ -127,6 +132,8 @@ impl RuntimeState {
             pending_destroys: Vec::new(),
             last_spawned_entity_id: None,
             save_data: SaveData::new(),
+            lua_vms: HashMap::new(),
+            collision_contacts: HashMap::new(),
         }
     }
 
@@ -199,6 +206,8 @@ impl RuntimeState {
         self.pending_destroys.clear();
         self.last_spawned_entity_id = None;
         self.game_state = RuntimeGameState::default();
+        self.lua_vms.clear();
+        self.collision_contacts.clear();
     }
 
     pub fn stop_audio_by_name(&mut self, name: &str) -> usize {
@@ -324,6 +333,8 @@ impl RuntimeState {
         self.pending_spawns.clear();
         self.pending_destroys.clear();
         self.last_spawned_entity_id = None;
+        self.lua_vms.clear();
+        self.collision_contacts.clear();
     }
 
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
@@ -377,6 +388,8 @@ impl RuntimeState {
                 ground_y,
                 &mut self.save_data,
                 &input_snap,
+                &mut self.lua_vms,
+                &mut self.collision_contacts,
             );
 
             self.last_stage = RuntimeFrameStage::UpdateCamera;

@@ -1,0 +1,5 @@
+{
+  "name": "Plataforme",
+  "initial_scene": "assets/scenes/Plataforme.scene.json",
+  "engine_version": "V0.9.0"
+}

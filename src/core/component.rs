@@ -216,6 +216,9 @@ pub struct Animator {
     pub playing: bool,
     #[serde(default)]
     pub looped: bool,
+    /// Clip anterior — usado pelo runtime para detectar troca e resetar o timer.
+    #[serde(default)]
+    pub prev_clip: String,
 }
 
 impl Default for Animator {
@@ -228,6 +231,7 @@ impl Default for Animator {
             timer: 0.0,
             playing: true,
             looped: true,
+            prev_clip: String::new(),
         }
     }
 }

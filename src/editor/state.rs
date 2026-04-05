@@ -70,6 +70,7 @@ pub struct EditorApp {
     pub play_state: EditorPlayState,
     pub runtime: RuntimeState,
     pub new_script_dialog: Option<(PathBuf, String)>,
+    pub new_lua_dialog: Option<(PathBuf, String)>,
     pub new_folder_dialog: Option<(PathBuf, String)>,
     pub new_entity_dialog: Option<String>,
 }
@@ -116,6 +117,7 @@ impl EditorApp {
             play_state: EditorPlayState::Edit,
             runtime: RuntimeState::new(),
             new_script_dialog: None,
+            new_lua_dialog: None,
             new_folder_dialog: None,
             new_entity_dialog: None,
         }

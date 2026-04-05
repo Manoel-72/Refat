@@ -36,6 +36,8 @@ pub fn update_entities_runtime(
     ground_y: f32,
     save_data: &mut crate::runtime::save::SaveData,
     input: &crate::runtime::state::RuntimeInput,
+    lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
+    collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -51,6 +53,8 @@ pub fn update_entities_runtime(
         &colliders,
         save_data,
         input,
+        lua_vms,
+        collision_contacts,
     )
 }
 
@@ -65,6 +69,8 @@ fn update_entities_runtime_recursive(
     colliders: &[collision_system::RuntimeCollider],
     save_data: &mut crate::runtime::save::SaveData,
     input: &crate::runtime::state::RuntimeInput,
+    lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
+    collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -91,6 +97,9 @@ fn update_entities_runtime_recursive(
 
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
+        let collision_names = collect_collision_names(entity_ptr, &my_collider_data, colliders);
+        collision_contacts.insert(entity.id.clone(), collision_names.clone());
+
         if let Some(scene_path) = script_system::run_lua_scripts_for_entity(
             entity,
             project_root,
@@ -99,6 +108,8 @@ fn update_entities_runtime_recursive(
             save_data,
             delta_time,
             elapsed_time,
+            lua_vms,
+            &collision_names,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -137,6 +148,8 @@ fn update_entities_runtime_recursive(
             colliders,
             save_data,
             input,
+            lua_vms,
+            collision_contacts,
         ) {
             return Some(command);
         }
@@ -176,11 +189,14 @@ fn handle_entity_collisions(
     let my_col = collision_system::RuntimeCollider {
         center_x: pos.0 + off_x,
         center_y: pos.1 + off_y,
-        width, height,
+        width,
+        height,
         is_trigger: is_my_trigger,
         layer: my_layer,
         mask: my_mask,
         entity_ptr,
+        entity_id: entity.id.clone(),
+        entity_name: entity.name.clone(),
     };
 
     let mut state = CollisionState::default();
@@ -265,6 +281,63 @@ fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, u8
         _ => None,
     })
 }
+
+fn collect_collision_names(
+    entity_ptr: *const Entity,
+    my_collider_data: &Option<(f32, f32, f32, f32, bool, u8, u8)>,
+    colliders: &[collision_system::RuntimeCollider],
+) -> Vec<String> {
+    let Some((_, _, width, height, is_my_trigger, my_layer, my_mask)) = *my_collider_data else {
+        return Vec::new();
+    };
+
+    let Some(me) = colliders.iter().find(|c| std::ptr::eq(entity_ptr, c.entity_ptr)) else {
+        return Vec::new();
+    };
+
+    let my_rect = (
+        me.center_x - width * 0.5,
+        me.center_y - height * 0.5,
+        width,
+        height,
+    );
+
+    let my_col = collision_system::RuntimeCollider {
+        center_x: me.center_x,
+        center_y: me.center_y,
+        width,
+        height,
+        is_trigger: is_my_trigger,
+        layer: my_layer,
+        mask: my_mask,
+        entity_ptr,
+        entity_id: me.entity_id.clone(),
+        entity_name: me.entity_name.clone(),
+    };
+
+    let mut names = Vec::new();
+    for other in colliders {
+        if std::ptr::eq(entity_ptr, other.entity_ptr) {
+            continue;
+        }
+        if !collision_system::layers_interact(&my_col, other) {
+            continue;
+        }
+        let other_rect = (
+            other.center_x - other.width * 0.5,
+            other.center_y - other.height * 0.5,
+            other.width,
+            other.height,
+        );
+        if !collision_system::aabb_mtv(my_rect, other_rect).is_zero() {
+            names.push(if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() });
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
 
 pub fn apply_player_controller_input(
     entities: &mut [Entity],

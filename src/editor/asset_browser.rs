@@ -52,14 +52,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             app.new_folder_dialog = Some((assets_root.clone(), "nova_pasta".to_string()));
         }
         if ui.button("📦 Template").clicked() {
-            match app.assets.create_basic_project_template() {
-                Ok(path) => {
-                    app.assets.refresh();
-                    app.selected_asset = Some(path.clone());
-                    app.status_msg = format!("📦 Template básico criado: {}", path.display());
-                }
-                Err(error) => app.status_msg = format!("❌ {}", error),
-            }
+            app.new_template_dialog = Some("MeuProjeto".to_string());
         }
         if ui.button("🔷 Entidade").clicked() {
             app.new_entity_dialog = Some("Entidade".to_string());
@@ -141,10 +134,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                             ui.close_menu();
                         }
                         if ui.button("🌙 Criar Script Lua (.lua)").clicked() {
-                            match app.assets.create_lua_script_file(&assets_root.join("scripts"), "novo_script_lua") {
-                                Ok(path) => app.status_msg = format!("🌙 Script Lua criado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua")),
-                                Err(err) => app.status_msg = format!("❌ Falha ao criar script Lua: {}", err),
-                            }
+                            app.new_lua_dialog = Some((assets_root.join("scripts"), "novo_script".to_string()));
                             ui.close_menu();
                         }
                         if ui.button("📁 Criar Pasta").clicked() {
@@ -207,11 +197,11 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 enum AssetAction {
     Select(PathBuf),
     NewScript(PathBuf),
+    NewLuaScript(PathBuf),
     NewFolder(PathBuf),
     NewScene(PathBuf),
     CreateEntity,
     CreateCamera,
-    ExportSelectedPrefab,
     CreateSpriteFromAsset(PathBuf),
     InstantiateMatr(PathBuf),
     Rename(PathBuf),
@@ -234,6 +224,9 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
         Some(AssetAction::NewScript(folder)) => {
             app.new_script_dialog = Some((folder, "meu_script".to_string()));
         }
+        Some(AssetAction::NewLuaScript(folder)) => {
+            app.new_lua_dialog = Some((folder, "novo_script".to_string()));
+        }
         Some(AssetAction::NewFolder(parent)) => {
             app.new_folder_dialog = Some((parent, "nova_pasta".to_string()));
         }
@@ -251,14 +244,7 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
             app.new_entity_dialog = Some("Entidade".to_string());
         }
         Some(AssetAction::CreateBasicTemplate) => {
-            match app.assets.create_basic_project_template() {
-                Ok(path) => {
-                    app.assets.refresh();
-                    app.selected_asset = Some(path.clone());
-                    app.status_msg = format!("📦 Template básico criado: {}", path.display());
-                }
-                Err(error) => app.status_msg = format!("❌ {}", error),
-            }
+            app.new_template_dialog = Some("MeuProjeto".to_string());
         }
         Some(AssetAction::CreateCamera) => {
             app.push_undo_state();
@@ -279,20 +265,6 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
             match app.instantiate_matr_from_path(&path, Some((0.0, 0.0))) {
                 Ok(name) => app.status_msg = format!("🧱 MATR '{}' instanciado.", name),
                 Err(e) => app.status_msg = format!("❌ {}", e),
-            }
-        }
-        Some(AssetAction::ExportSelectedPrefab) => {
-            if let Some(selected_id) = app.selected_entity_id.clone() {
-                if let Some(entity) = app.scene.find_entity(&selected_id).cloned() {
-                    match app.export_entity_as_matr(&entity) {
-                        Ok(path) => app.status_msg = format!("🧱 Prefab exportado: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("prefab.prefab.json")),
-                        Err(error) => app.status_msg = format!("❌ {}", error),
-                    }
-                } else {
-                    app.status_msg = "❌ Entidade selecionada não encontrada.".to_string();
-                }
-            } else {
-                app.status_msg = "❌ Selecione uma entidade para exportar como prefab.".to_string();
             }
         }
         Some(AssetAction::Rename(path)) => {
@@ -369,6 +341,10 @@ fn show_node(
             }
             if ui.button("📜 Criar Script RS2 (.rs2)").clicked() {
                 *action = Some(AssetAction::NewScript(node_path.clone()));
+                ui.close_menu();
+            }
+            if ui.button("🌙 Criar Script Lua (.lua)").clicked() {
+                *action = Some(AssetAction::NewLuaScript(node_path.clone()));
                 ui.close_menu();
             }
             if ui.button("📁 Criar Pasta").clicked() {
@@ -542,14 +518,7 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                     app.new_script_dialog = Some((path.clone(), "meu_script".to_string()));
                 }
                 if ui.button("🌙 Criar Script Lua").clicked() {
-                    match app.assets.create_lua_script_file(&path, "novo_script_lua") {
-                        Ok(new_path) => {
-                            app.assets.refresh();
-                            app.selected_asset = Some(new_path.clone());
-                            app.status_msg = format!("🌙 Script Lua criado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua"));
-                        }
-                        Err(error) => app.status_msg = format!("❌ {}", error),
-                    }
+                    app.new_lua_dialog = Some((path.clone(), "novo_script".to_string()));
                 }
                 if ui.button("📁 Criar Pasta").clicked() {
                     app.new_folder_dialog = Some((path.clone(), "nova_pasta".to_string()));

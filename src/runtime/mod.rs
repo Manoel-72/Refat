@@ -223,21 +223,6 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     let center = available.center();
     let camera = camera::find_main_camera(&runtime_scene.entities);
 
-    renderer::draw_runtime_grid(&painter, available, center, camera);
-
-    let ground_screen_y = center.y - ((GROUND_Y - camera.y) * camera.zoom);
-    painter.line_segment(
-        [egui::pos2(available.left(), ground_screen_y), egui::pos2(available.right(), ground_screen_y)],
-        egui::Stroke::new(2.0, egui::Color32::from_rgb(150, 110, 70)),
-    );
-    painter.text(
-        egui::pos2(available.left() + 10.0, ground_screen_y - 6.0),
-        egui::Align2::LEFT_BOTTOM,
-        "Chão",
-        egui::FontId::proportional(11.0),
-        egui::Color32::from_rgb(200, 180, 140),
-    );
-
     let current_scene_path = runtime.scene_manager.current_path.clone();
     let mut pending_ui_action = None;
 
