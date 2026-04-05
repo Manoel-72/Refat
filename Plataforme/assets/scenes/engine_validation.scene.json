@@ -1,0 +1,39 @@
+{
+  "name": "engine_validation",
+  "entities": [
+    {
+      "name": "Player",
+      "transform": {
+        "x": 0,
+        "y": 5
+      },
+      "components": {
+        "Sprite": {
+          "texture": "player.png"
+        },
+        "BoxCollider": {
+          "w": 1,
+          "h": 1,
+          "layer": "player",
+          "mask": [
+            "world"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Ground",
+      "transform": {
+        "x": 0,
+        "y": 0
+      },
+      "components": {
+        "BoxCollider": {
+          "w": 20,
+          "h": 1,
+          "layer": "world"
+        }
+      }
+    }
+  ]
+}

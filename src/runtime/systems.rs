@@ -171,6 +171,8 @@ fn handle_entity_collisions(
     _old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
+    const GROUND_EPSILON: f32 = 0.001;
+
     let Some((off_x, off_y, width, height, is_my_trigger, my_layer, my_mask)) = my_collider_data else {
         return CollisionState::default();
     };
@@ -178,6 +180,11 @@ fn handle_entity_collisions(
     let Some(pos) = entity.transform().map(|t| (t.x, t.y)) else {
         return CollisionState::default();
     };
+
+    let falling_or_idle = entity
+        .velocity()
+        .map(|v| v.y <= 0.0)
+        .unwrap_or(true);
 
     let my_rect = (
         pos.0 + off_x - width * 0.5,
@@ -202,6 +209,8 @@ fn handle_entity_collisions(
     let mut state = CollisionState::default();
     let mut total_mtv_x = 0.0_f32;
     let mut total_mtv_y = 0.0_f32;
+    let mut touched_ground = false;
+    let mut hit_ceiling = false;
 
     for other in colliders {
         if std::ptr::eq(entity_ptr, other.entity_ptr) {
@@ -229,6 +238,12 @@ fn handle_entity_collisions(
             continue;
         }
 
+        if mtv.y > GROUND_EPSILON && falling_or_idle {
+            touched_ground = true;
+        } else if mtv.y < -GROUND_EPSILON {
+            hit_ceiling = true;
+        }
+
         total_mtv_x += mtv.x;
         total_mtv_y += mtv.y;
         state.collided = true;
@@ -240,18 +255,22 @@ fn handle_entity_collisions(
             transform.y += total_mtv_y;
         }
 
-        if total_mtv_y > 0.0 {
+        if touched_ground {
             if let Some(vel) = entity.velocity_mut() {
                 if vel.y < 0.0 { vel.y = 0.0; }
             }
             physics_system::set_grounded(entity, true);
-        } else if total_mtv_y < 0.0 {
-            if let Some(vel) = entity.velocity_mut() {
-                if vel.y > 0.0 { vel.y = 0.0; }
+        } else {
+            physics_system::set_grounded(entity, false);
+
+            if hit_ceiling {
+                if let Some(vel) = entity.velocity_mut() {
+                    if vel.y > 0.0 { vel.y = 0.0; }
+                }
             }
         }
 
-        if total_mtv_x != 0.0 {
+        if total_mtv_x.abs() > GROUND_EPSILON {
             if let Some(vel) = entity.velocity_mut() {
                 vel.x = 0.0;
             }
