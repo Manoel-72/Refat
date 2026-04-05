@@ -1,0 +1,34 @@
+{
+  "name": "Cena 2",
+  "entities": [
+    {
+      "id": "211862d4-a38d-464b-9e3f-6004f4a84713",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "matr_source": null
+    }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
+  ]
+}
