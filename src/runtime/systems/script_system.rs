@@ -19,6 +19,8 @@ pub struct ScriptScanResult {
     pub is_static: bool,
     pub collider_half_height: f32,
     pub extra_velocity: Option<(f32, f32)>,
+    /// Troca de cena pedida por LuaScript (preenchido por run_lua_scripts_for_entity).
+    pub lua_change_scene: Option<String>,
 }
 
 pub fn scan_script_behavior(
@@ -66,15 +68,77 @@ pub fn scan_script_behavior(
                     result.trigger_actions.extend(behavior.on_trigger.into_iter());
                 }
             }
-            Component::LuaScript(_script) => {
-                // Preparação V0.8.5: a execução Lua real entra na V0.9.
-                result.extra_velocity.get_or_insert((0.0, 0.0));
-            }
+            // LuaScript é tratado separadamente em run_lua_scripts_for_entity,
+            // que recebe input + save e é chamado depois de scan_script_behavior.
+            Component::LuaScript(_) => {}
             _ => {}
         }
     }
 
     result
+}
+
+/// Executa todos os LuaScripts de uma entidade para um frame.
+/// Aplica as mutações diretamente na entidade e retorna uma troca de cena se pedida.
+pub fn run_lua_scripts_for_entity(
+    entity: &mut Entity,
+    project_root: &Path,
+    started_scripts: &mut HashSet<String>,
+    input: &crate::runtime::state::RuntimeInput,
+    save_data: &mut crate::runtime::save::SaveData,
+    delta_time: f32,
+    elapsed_time: f32,
+) -> Option<String> {
+    use crate::runtime::lua_runtime;
+
+    let lua_scripts: Vec<String> = entity.components.iter()
+        .filter_map(|c| if let Component::LuaScript(s) = c { Some(s.file_path.clone()) } else { None })
+        .collect();
+
+    for file_path in lua_scripts {
+        let full_path = match crate::runtime::script::resolve_script_path(project_root, &file_path) {
+            Some(p) => p,
+            None => {
+                eprintln!("[LuaScript] Arquivo não encontrado: {}", file_path);
+                continue;
+            }
+        };
+
+        let source = match std::fs::read_to_string(&full_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[LuaScript] Falha ao ler '{}': {}", file_path, e);
+                continue;
+            }
+        };
+
+        let script_key = format!("lua::{}::{}", entity.id, file_path);
+        let already_started = !started_scripts.insert(script_key);
+
+        match lua_runtime::run_lua_script(
+            &source,
+            entity,
+            input,
+            save_data,
+            delta_time,
+            elapsed_time,
+            already_started,
+        ) {
+            Ok(result) => {
+                let change_scene = result.change_scene.clone();
+                lua_runtime::apply_lua_result(entity, &result);
+                lua_runtime::apply_save_ops(save_data, &result.save_ops);
+                if change_scene.is_some() {
+                    return change_scene;
+                }
+            }
+            Err(e) => {
+                eprintln!("[LuaScript] Erro em '{}' ({}): {}", file_path, entity.name, e);
+            }
+        }
+    }
+
+    None
 }
 
 fn execute_event_instruction(

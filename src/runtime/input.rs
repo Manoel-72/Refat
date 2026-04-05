@@ -3,31 +3,31 @@ pub mod key_code;
 
 use eframe::egui;
 
-use crate::{
-    editor::{EditorApp, EditorPlayState},
-    runtime::{camera, systems},
-};
+use crate::runtime::{camera, context::{RuntimeContext, RuntimePlayState}, systems, state::RuntimeState};
 
-pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
-    let step = if app.play_state == EditorPlayState::Paused {
+/// Captura e aplica inputs de câmera/zoom/reload no runtime.
+/// Desacoplado do EditorApp — usa RuntimeContext.
+pub fn apply_runtime_inputs<H: RuntimeContext>(host: &H, runtime: &mut RuntimeState, ctx: &egui::Context) {
+    let step = if host.play_state() == RuntimePlayState::Paused {
         1.0 / 60.0
     } else {
-        app.runtime.delta_time.max(1.0 / 120.0)
+        runtime.delta_time.max(1.0 / 120.0)
     };
 
-    let previous_input = app.runtime.input.clone();
-    app.runtime.input = systems::input_system::capture_runtime_input(ctx, &previous_input);
+    let previous_input = runtime.input.clone();
+    runtime.input = systems::input_system::capture_runtime_input(ctx, &previous_input);
 
-    let camera_input = systems::input_system::camera_axis(&app.runtime.input);
-    let zoom_input = systems::input_system::zoom_delta(ctx);
+    let camera_input = systems::input_system::camera_axis(&runtime.input);
+    let zoom_input   = systems::input_system::zoom_delta(ctx);
     let reload_scene = ctx.input(|i| i.key_pressed(egui::Key::R));
 
     if reload_scene {
-        app.runtime.reload_current_scene(&app.scene);
+        let fallback = host.active_scene_snapshot().clone();
+        runtime.reload_current_scene(&fallback);
         return;
     }
 
-    let Some(scene) = app.runtime.active_scene.as_mut() else {
+    let Some(scene) = runtime.active_scene.as_mut() else {
         return;
     };
 
@@ -41,5 +41,5 @@ pub fn apply_runtime_inputs(app: &mut EditorApp, ctx: &egui::Context) {
         );
     }
 
-    app.runtime.scene_manager.current_scene = Some(scene.clone());
+    runtime.scene_manager.current_scene = Some(scene.clone());
 }

@@ -29,10 +29,13 @@ pub enum RuntimeCommand {
 pub fn update_entities_runtime(
     entities: &mut [Entity],
     delta_time: f32,
+    elapsed_time: f32,
     project_root: &Path,
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
+    save_data: &mut crate::runtime::save::SaveData,
+    input: &crate::runtime::state::RuntimeInput,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -40,22 +43,28 @@ pub fn update_entities_runtime(
     update_entities_runtime_recursive(
         entities,
         delta_time,
+        elapsed_time,
         project_root,
         started_scripts,
         camera_follow_target,
         ground_y,
         &colliders,
+        save_data,
+        input,
     )
 }
 
 fn update_entities_runtime_recursive(
     entities: &mut [Entity],
     delta_time: f32,
+    elapsed_time: f32,
     project_root: &Path,
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
     colliders: &[collision_system::RuntimeCollider],
+    save_data: &mut crate::runtime::save::SaveData,
+    input: &crate::runtime::state::RuntimeInput,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -63,12 +72,6 @@ fn update_entities_runtime_recursive(
         let my_collider_data = find_entity_collider(entity);
         let old_position = entity.transform().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0));
 
-        // Ordem incremental segura da V0.7-A:
-        // 1) aplicar comandos do script ao estado da entidade
-        // 2) atualizar física simples/gravidade
-        // 3) mover usando Velocity quando existir
-        // 4) resolver colisões simples e chão
-        // 5) atualizar câmera
         script_system::advance_animator(entity, delta_time);
 
         let (extra_x, extra_y) = script_data.extra_velocity.unwrap_or((0.0, 0.0));
@@ -85,6 +88,20 @@ fn update_entities_runtime_recursive(
         }
 
         movement_system::apply_velocity(entity, delta_time);
+
+        // Lua scripts — executam após movimento, antes de colisão
+        // (podem ajustar velocidade/posição reativamente)
+        if let Some(scene_path) = script_system::run_lua_scripts_for_entity(
+            entity,
+            project_root,
+            started_scripts,
+            input,
+            save_data,
+            delta_time,
+            elapsed_time,
+        ) {
+            return Some(RuntimeCommand::ChangeScene(scene_path));
+        }
 
         let collision_state =
             handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
@@ -112,11 +129,14 @@ fn update_entities_runtime_recursive(
         if let Some(command) = update_entities_runtime_recursive(
             &mut entity.children,
             delta_time,
+            elapsed_time,
             project_root,
             started_scripts,
             camera_follow_target,
             ground_y,
             colliders,
+            save_data,
+            input,
         ) {
             return Some(command);
         }
@@ -134,29 +154,45 @@ struct CollisionState {
 fn handle_entity_collisions(
     entity: &mut Entity,
     entity_ptr: *const Entity,
-    my_collider_data: Option<(f32, f32, f32, f32, bool)>,
-    old_position: (f32, f32),
+    my_collider_data: Option<(f32, f32, f32, f32, bool, u8, u8)>,
+    _old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
-    let Some((off_x, off_y, width, height, is_my_trigger)) = my_collider_data else {
+    let Some((off_x, off_y, width, height, is_my_trigger, my_layer, my_mask)) = my_collider_data else {
         return CollisionState::default();
     };
 
-    let Some(transform) = entity.transform_mut() else {
+    let Some(pos) = entity.transform().map(|t| (t.x, t.y)) else {
         return CollisionState::default();
     };
 
     let my_rect = (
-        transform.x + off_x - width * 0.5,
-        transform.y + off_y - height * 0.5,
+        pos.0 + off_x - width * 0.5,
+        pos.1 + off_y - height * 0.5,
         width,
         height,
     );
 
+    let my_col = collision_system::RuntimeCollider {
+        center_x: pos.0 + off_x,
+        center_y: pos.1 + off_y,
+        width, height,
+        is_trigger: is_my_trigger,
+        layer: my_layer,
+        mask: my_mask,
+        entity_ptr,
+    };
+
     let mut state = CollisionState::default();
+    let mut total_mtv_x = 0.0_f32;
+    let mut total_mtv_y = 0.0_f32;
 
     for other in colliders {
         if std::ptr::eq(entity_ptr, other.entity_ptr) {
+            continue;
+        }
+
+        if !collision_system::layers_interact(&my_col, other) {
             continue;
         }
 
@@ -166,18 +202,43 @@ fn handle_entity_collisions(
             other.width,
             other.height,
         );
-        if collision_system::aabb_collision(my_rect, other_rect) {
-            if is_my_trigger || other.is_trigger {
-                state.triggered = true;
-                continue;
-            }
 
-            transform.x = old_position.0;
-            transform.y = old_position.1;
-            physics_system::zero_velocity(entity);
+        let mtv = collision_system::aabb_mtv(my_rect, other_rect);
+        if mtv.is_zero() {
+            continue;
+        }
+
+        if is_my_trigger || other.is_trigger {
+            state.triggered = true;
+            continue;
+        }
+
+        total_mtv_x += mtv.x;
+        total_mtv_y += mtv.y;
+        state.collided = true;
+    }
+
+    if state.collided {
+        if let Some(transform) = entity.transform_mut() {
+            transform.x += total_mtv_x;
+            transform.y += total_mtv_y;
+        }
+
+        if total_mtv_y > 0.0 {
+            if let Some(vel) = entity.velocity_mut() {
+                if vel.y < 0.0 { vel.y = 0.0; }
+            }
             physics_system::set_grounded(entity, true);
-            state.collided = true;
-            return state;
+        } else if total_mtv_y < 0.0 {
+            if let Some(vel) = entity.velocity_mut() {
+                if vel.y > 0.0 { vel.y = 0.0; }
+            }
+        }
+
+        if total_mtv_x != 0.0 {
+            if let Some(vel) = entity.velocity_mut() {
+                vel.x = 0.0;
+            }
         }
     }
 
@@ -198,15 +259,9 @@ fn apply_camera_follow(
     }
 }
 
-fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool)> {
+fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, u8, u8)> {
     entity.components.iter().find_map(|component| match component {
-        Component::BoxCollider(collider) => Some((
-            collider.offset_x,
-            collider.offset_y,
-            collider.width,
-            collider.height,
-            collider.is_trigger,
-        )),
+        Component::BoxCollider(c) => Some((c.offset_x, c.offset_y, c.width, c.height, c.is_trigger, c.layer, c.mask)),
         _ => None,
     })
 }

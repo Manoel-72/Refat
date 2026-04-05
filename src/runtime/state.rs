@@ -10,10 +10,11 @@ use crate::{
         entity::Entity,
         component::{Component, Sprite, BoxCollider, RigidBody2D, Velocity},
     },
-    editor::EditorPlayState,
+    runtime::context::RuntimePlayState,
     runtime::{
         camera,
         input::{input_state::InputState, key_code::KeyCode},
+        save::SaveData,
         scene_manager::SceneManager,
         systems::{self, audio_system::AudioRuntime, RuntimeCommand},
     },
@@ -102,6 +103,8 @@ pub struct RuntimeState {
     pub pending_spawns: Vec<PendingSpawnRequest>,
     pub pending_destroys: Vec<PendingDestroyRequest>,
     pub last_spawned_entity_id: Option<String>,
+    /// Estado persistente do jogo (save/load em save/save.json).
+    pub save_data: SaveData,
 }
 
 impl RuntimeState {
@@ -123,6 +126,7 @@ impl RuntimeState {
             pending_spawns: Vec::new(),
             pending_destroys: Vec::new(),
             last_spawned_entity_id: None,
+            save_data: SaveData::new(),
         }
     }
 
@@ -199,7 +203,7 @@ impl RuntimeState {
 
     pub fn sync_with_mode(
         &mut self,
-        mode: EditorPlayState,
+        mode: RuntimePlayState,
         source_scene: &Scene,
         project_root: &Path,
         ground_y: f32,
@@ -212,14 +216,14 @@ impl RuntimeState {
         }
 
         match mode {
-            EditorPlayState::Edit => {
+            RuntimePlayState::Edit => {
                 if self.active_scene.is_some() {
                     self.stop();
                 }
                 self.window_open = false;
                 self.game_state.flow = RuntimeGameFlow::Editing;
             }
-            EditorPlayState::Playing => {
+            RuntimePlayState::Playing => {
                 if self.active_scene.is_none() {
                     self.start_from_scene(source_scene);
                 }
@@ -227,7 +231,7 @@ impl RuntimeState {
                 self.game_state.flow = RuntimeGameFlow::Playing;
                 self.update_frame(project_root, ground_y);
             }
-            EditorPlayState::Paused => {
+            RuntimePlayState::Paused => {
                 if self.active_scene.is_none() {
                     self.start_from_scene(source_scene);
                 }
@@ -268,6 +272,34 @@ impl RuntimeState {
         } else {
             1.0 / self.delta_time
         }
+    }
+
+    // ── save / load ──────────────────────────────────────────
+
+    /// Salva `save_data` em `<project_root>/save/save.json`.
+    /// Grava também a cena atual se disponível.
+    pub fn save_game(&mut self, project_root: &Path) -> Result<(), String> {
+        if let Some(scene) = &self.active_scene {
+            self.save_data.current_scene = Some(scene.name.clone());
+        }
+        self.save_data.save_to_project(project_root)
+    }
+
+    /// Carrega `<project_root>/save/save.json` para `save_data`.
+    /// Retorna `false` se não existir arquivo (primeira sessão).
+    pub fn load_game(&mut self, project_root: &Path) -> bool {
+        if let Some(data) = SaveData::load_from_project(project_root) {
+            self.save_data = data;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Apaga o save e reinicia `save_data`.
+    pub fn delete_save(&mut self, project_root: &Path) -> bool {
+        self.save_data = SaveData::new();
+        SaveData::delete_save(project_root)
     }
 
     fn reset_timing_state(&mut self) {
@@ -324,13 +356,18 @@ impl RuntimeState {
             self.audio_runtime.maintain();
             self.last_stage = RuntimeFrameStage::ApplyPhysics;
             self.last_stage = RuntimeFrameStage::ResolveCollisions;
+            let elapsed = self.elapsed_time;
+            let input_snap = self.input.clone();
             let runtime_command = systems::update_entities_runtime(
                 &mut scene.entities,
                 dt,
+                elapsed,
                 project_root,
                 &mut self.started_scripts,
                 &mut camera_follow_target,
                 ground_y,
+                &mut self.save_data,
+                &input_snap,
             );
 
             self.last_stage = RuntimeFrameStage::UpdateCamera;
@@ -414,6 +451,8 @@ impl RuntimeState {
             offset_x: 0.0,
             offset_y: 0.0,
             is_trigger: false,
+            layer: 0,
+            mask: 0,
         }));
         entity.add_component(Component::Sprite(Sprite {
             texture_path: String::new(),

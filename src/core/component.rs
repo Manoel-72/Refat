@@ -131,11 +131,23 @@ pub struct BoxCollider {
     pub offset_y: f32,
     #[serde(default)]
     pub is_trigger: bool,
+    /// Layer desta entidade (bits 0–7). 0 = padrão (interage com tudo).
+    #[serde(default)]
+    pub layer: u8,
+    /// Máscara de layers com quem esta entidade pode colidir. 0 = todos.
+    #[serde(default)]
+    pub mask: u8,
 }
 
 impl Default for BoxCollider {
     fn default() -> Self {
-        Self { width: 32.0, height: 32.0, offset_x: 0.0, offset_y: 0.0, is_trigger: false }
+        Self {
+            width: 32.0, height: 32.0,
+            offset_x: 0.0, offset_y: 0.0,
+            is_trigger: false,
+            layer: 0,
+            mask: 0,
+        }
     }
 }
 

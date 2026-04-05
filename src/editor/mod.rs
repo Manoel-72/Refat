@@ -25,7 +25,7 @@ use crate::{
         project::ProjectConfig,
         scene::Scene,
     },
-    runtime::{self, RuntimeState},
+    runtime::{self, RuntimeState, context::{RuntimeContext, RuntimePlayState}},
     core::version,
 };
 
@@ -1159,7 +1159,13 @@ impl eframe::App for EditorApp {
         self.show_delete_confirmation_dialog(ctx);
         self.show_version_popup(ctx);
 
-        runtime::show_viewport(self, ctx);
+        {
+            // Desacopla runtime do editor via RuntimeContext — V0.9
+            // Swap runtime out para evitar double-borrow de self
+            let mut rt = std::mem::replace(&mut self.runtime, RuntimeState::new());
+            runtime::show_viewport(self, &mut rt, ctx);
+            self.runtime = rt;
+        }
 
         if ctx.input(|i| i.pointer.any_released()) {
             self.dragging_asset_path = None;
@@ -1167,6 +1173,58 @@ impl eframe::App for EditorApp {
         }
     }
 }
+
+// ── RuntimeContext impl ──────────────────────────────────────
+
+impl RuntimeContext for EditorApp {
+    fn play_state(&self) -> RuntimePlayState {
+        match self.play_state {
+            EditorPlayState::Edit    => RuntimePlayState::Edit,
+            EditorPlayState::Playing => RuntimePlayState::Playing,
+            EditorPlayState::Paused  => RuntimePlayState::Paused,
+        }
+    }
+
+    fn set_play_state(&mut self, state: RuntimePlayState) {
+        self.play_state = match state {
+            RuntimePlayState::Edit    => EditorPlayState::Edit,
+            RuntimePlayState::Playing => EditorPlayState::Playing,
+            RuntimePlayState::Paused  => EditorPlayState::Paused,
+        };
+    }
+
+    fn project_root(&self) -> &std::path::Path {
+        &self.project_root
+    }
+
+    fn active_scene_snapshot(&self) -> &crate::core::scene::Scene {
+        &self.scene
+    }
+
+    fn scene_file_candidates(&self) -> Vec<std::path::PathBuf> {
+        // delegates to the existing pub method
+        EditorApp::scene_file_candidates(self)
+    }
+
+    fn scene_snapshot_by_path(&self, path: &std::path::Path) -> Option<(crate::core::scene::Scene, Option<std::path::PathBuf>)> {
+        let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+        self.open_scenes.iter().find(|doc| {
+            doc.file_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().replace('\\', "/").to_ascii_lowercase() == normalized)
+                .unwrap_or(false)
+        }).map(|doc| (doc.scene.clone(), doc.file_path.clone()))
+    }
+
+    fn set_status(&mut self, msg: String) {
+        self.status_msg = msg;
+    }
+
+    fn sprite_textures(&mut self) -> &mut std::collections::HashMap<String, eframe::egui::TextureHandle> {
+        &mut self.sprite_textures
+    }
+}
+
 
 fn find_entity_recursive_mut<'a>(
     entities: &'a mut Vec<Entity>,

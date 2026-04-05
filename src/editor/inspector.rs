@@ -348,6 +348,8 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     offset_x: ox,
                                     offset_y: oy,
                                     is_trigger,
+                                    layer: 0,
+                                    mask: 0,
                                 }),
                             ));
                         }
