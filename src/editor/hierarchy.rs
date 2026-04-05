@@ -34,6 +34,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     });
 
     ui.separator();
+    ui.label(egui::RichText::new("Dica: clique direito em um item ou na área vazia para criar rapidamente.").small().weak());
 
     // Um contexto de clique direito disponível na área vazia da hierarquia
     // (para criar entidades na raiz sem clicar em um item existente)

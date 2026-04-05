@@ -8,6 +8,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::core::{
+    component::{BoxCollider, Camera2D, Component, RigidBody2D, Sprite, Velocity},
+    entity::Entity,
+    project::{save_project_config, ProjectConfig},
+    scene::Scene,
+};
+
 use super::types::{detect_asset_type, AssetRecord};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,8 +296,8 @@ impl AssetManager {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um script Lua com esse nome."));
         }
 
-        let template = "-- Script Lua (preparação V0.8.5)
--- A execução Lua entra na V0.9.
+        let template = "-- Script Lua (preparação V0.8.6)
+-- Validação local de sintaxe via mlua no editor.
 
 function on_start()
 end
@@ -306,10 +313,92 @@ end
         self.create_rs2_script_file(parent, name)
     }
 
+    pub fn create_basic_project_template(&self) -> io::Result<PathBuf> {
+        let assets_root = self.root.join("assets");
+        fs::create_dir_all(assets_root.join("scenes"))?;
+        fs::create_dir_all(assets_root.join("scripts"))?;
+        fs::create_dir_all(assets_root.join("sprites"))?;
+        fs::create_dir_all(assets_root.join("sounds"))?;
+        fs::create_dir_all(assets_root.join("fonts"))?;
+        fs::create_dir_all(assets_root.join("prefabs"))?;
+
+        let scene_path = assets_root.join("scenes/main.scene.json");
+        if !scene_path.exists() {
+            let scene = build_basic_template_scene();
+            crate::serialization::scene_serializer::save_scene_to_path(&scene, &scene_path)?;
+        }
+
+        let project_path = self.root.join("project.json");
+        let mut config = if project_path.exists() {
+            ProjectConfig::load_or_create(&self.root)
+        } else {
+            ProjectConfig::default()
+        };
+        if config.name.trim().is_empty() {
+            config.name = "RS2BR Project".to_string();
+        }
+        config.initial_scene = "assets/scenes/main.scene.json".to_string();
+        config.engine_version = crate::core::version::ENGINE_VERSION.to_string();
+        save_project_config(&self.root, &config)?;
+
+        Ok(scene_path)
+    }
+
     pub fn relative_path<'a>(&self, path: &'a Path) -> Option<&'a Path> {
         let assets = self.root.join("assets");
         path.strip_prefix(&assets).ok()
     }
+}
+
+fn build_basic_template_scene() -> Scene {
+    let mut scene = Scene::new("main");
+
+    let mut player = Entity::new("Player");
+    player.add_component(Component::Sprite(Sprite::default()));
+    player.add_component(Component::RigidBody2D(RigidBody2D::default()));
+    player.add_component(Component::Velocity(Velocity::default()));
+    player.add_component(Component::BoxCollider(BoxCollider {
+        width: 32.0,
+        height: 48.0,
+        ..Default::default()
+    }));
+    if let Some(transform) = player.transform_mut() {
+        transform.x = 0.0;
+        transform.y = 24.0;
+    }
+
+    let mut ground = Entity::new("Ground");
+    ground.add_component(Component::BoxCollider(BoxCollider {
+        width: 320.0,
+        height: 32.0,
+        ..Default::default()
+    }));
+    if let Some(transform) = ground.transform_mut() {
+        transform.x = 0.0;
+        transform.y = -80.0;
+        transform.scale_x = 1.0;
+        transform.scale_y = 1.0;
+    }
+
+    let mut label = Entity::new("TemplateLabel");
+    label.add_component(Component::TextLabel(Default::default()));
+    if let Some(transform) = label.transform_mut() {
+        transform.x = -180.0;
+        transform.y = 120.0;
+    }
+
+    scene.add_entity(player);
+    scene.add_entity(ground);
+    scene.add_entity(label);
+
+    if let Some(camera) = scene.entities.iter_mut().find(|entity| entity.name == "Camera") {
+        if let Some(transform) = camera.transform_mut() {
+            transform.y = 24.0;
+        }
+        camera.add_component(Component::Camera2D(Camera2D { zoom: 1.0, is_main: true }));
+    }
+
+    scene
 }
 
 fn collect_records(path: &Path, output: &mut Vec<AssetRecord>) {

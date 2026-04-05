@@ -201,6 +201,15 @@ impl RuntimeState {
         self.game_state = RuntimeGameState::default();
     }
 
+    pub fn stop_audio_by_name(&mut self, name: &str) -> usize {
+        let stopped = self.audio_runtime.stop_by_name(name);
+        if stopped > 0 {
+            let lowered = name.trim().to_ascii_lowercase();
+            self.started_audio.retain(|key| !key.to_ascii_lowercase().contains(&lowered));
+        }
+        stopped
+    }
+
     pub fn sync_with_mode(
         &mut self,
         mode: RuntimePlayState,

@@ -85,6 +85,26 @@ impl AudioRuntime {
         self.active.clear();
     }
 
+    pub fn stop_by_name(&mut self, name: &str) -> usize {
+        let query = name.trim().to_ascii_lowercase();
+        if query.is_empty() {
+            return 0;
+        }
+
+        let mut stopped = 0usize;
+        self.active.retain(|audio| {
+            let matches = audio.key.to_ascii_lowercase().contains(&query);
+            if matches {
+                audio.sink.stop();
+                stopped += 1;
+                false
+            } else {
+                true
+            }
+        });
+        stopped
+    }
+
     fn ensure_output(&mut self) -> Result<(), String> {
         if self.stream.is_some() && self.handle.is_some() {
             return Ok(());

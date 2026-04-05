@@ -51,6 +51,16 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         if ui.button("📁 Pasta").clicked() {
             app.new_folder_dialog = Some((assets_root.clone(), "nova_pasta".to_string()));
         }
+        if ui.button("📦 Template").clicked() {
+            match app.assets.create_basic_project_template() {
+                Ok(path) => {
+                    app.assets.refresh();
+                    app.selected_asset = Some(path.clone());
+                    app.status_msg = format!("📦 Template básico criado: {}", path.display());
+                }
+                Err(error) => app.status_msg = format!("❌ {}", error),
+            }
+        }
         if ui.button("🔷 Entidade").clicked() {
             app.new_entity_dialog = Some("Entidade".to_string());
         }
@@ -141,6 +151,10 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                             action = Some(AssetAction::NewFolder(assets_root.clone()));
                             ui.close_menu();
                         }
+                        if ui.button("📦 Criar Template Básico").clicked() {
+                            action = Some(AssetAction::CreateBasicTemplate);
+                            ui.close_menu();
+                        }
                         if ui.button("🔷 Criar Entidade").clicked() {
                             action = Some(AssetAction::CreateEntity);
                             ui.close_menu();
@@ -204,6 +218,7 @@ enum AssetAction {
     Duplicate(PathBuf),
     Delete(PathBuf),
     ImportSprite,
+    CreateBasicTemplate,
     Refresh,
 }
 
@@ -234,6 +249,16 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
         }
         Some(AssetAction::CreateEntity) => {
             app.new_entity_dialog = Some("Entidade".to_string());
+        }
+        Some(AssetAction::CreateBasicTemplate) => {
+            match app.assets.create_basic_project_template() {
+                Ok(path) => {
+                    app.assets.refresh();
+                    app.selected_asset = Some(path.clone());
+                    app.status_msg = format!("📦 Template básico criado: {}", path.display());
+                }
+                Err(error) => app.status_msg = format!("❌ {}", error),
+            }
         }
         Some(AssetAction::CreateCamera) => {
             app.push_undo_state();

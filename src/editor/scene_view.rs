@@ -532,14 +532,35 @@ fn draw_entity(
                 (collider_comp.width * scale_x.abs().max(0.25) * zoom).clamp(8.0, 512.0),
                 (collider_comp.height * scale_y.abs().max(0.25) * zoom).clamp(8.0, 512.0),
             );
+            let collider_color = if collider_comp.is_trigger {
+                egui::Color32::from_rgba_unmultiplied(255, 210, 120, 190)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(120, 255, 180, 180)
+            };
             let collider_rect = paint_rotated_outline(
                 painter,
                 collider_center,
                 collider_size,
                 rotation,
-                egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(120, 255, 180, 180)),
+                egui::Stroke::new(1.0, collider_color),
             );
-            interactive_rect = interactive_rect.union(collider_rect);
+            let cross = (6.0 * zoom).clamp(4.0, 12.0);
+            painter.line_segment(
+                [egui::pos2(collider_center.x - cross, collider_center.y), egui::pos2(collider_center.x + cross, collider_center.y)],
+                egui::Stroke::new(1.0, collider_color),
+            );
+            painter.line_segment(
+                [egui::pos2(collider_center.x, collider_center.y - cross), egui::pos2(collider_center.x, collider_center.y + cross)],
+                egui::Stroke::new(1.0, collider_color),
+            );
+            painter.text(
+                egui::pos2(collider_rect.center().x, collider_rect.top() - 3.0),
+                egui::Align2::CENTER_BOTTOM,
+                if collider_comp.is_trigger { "Trigger" } else { "BoxCollider" },
+                egui::FontId::proportional(10.0),
+                collider_color,
+            );
+            interactive_rect = interactive_rect.union(collider_rect.expand(6.0));
         }
     }
 

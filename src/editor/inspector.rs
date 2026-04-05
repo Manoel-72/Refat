@@ -548,6 +548,23 @@ fn draw_audio_component_ui(
         ui.colored_label(egui::Color32::GREEN, "Áudio válido para o runtime.");
     }
 
+    ui.horizontal_wrapped(|ui| {
+        let runtime_ativo = app.runtime.window_open;
+        let stop_btn = ui.add_enabled(runtime_ativo && !path.trim().is_empty(), egui::Button::new("⏹ Stop por nome"));
+        if stop_btn.clicked() {
+            let stopped = app.runtime.stop_audio_by_name(&path);
+            if stopped > 0 {
+                app.status_msg = format!("⏹ {} áudio(s) parados para '{}'.", stopped, path);
+            } else {
+                app.status_msg = format!("ℹ Nenhum áudio ativo encontrado para '{}'.", path);
+            }
+        }
+
+        if !runtime_ativo {
+            ui.label(egui::RichText::new("Disponível durante o Play do runtime.").small().weak());
+        }
+    });
+
     if changed {
         updated_components.push((
             index,
@@ -824,13 +841,32 @@ fn draw_lua_script_component_ui(
     }
 
     if path.trim().is_empty() {
-        ui.label(egui::RichText::new("Preparação V0.8.5: componente pronto para a integração Lua da V0.9.").small().weak());
+        ui.label(egui::RichText::new("Preparação V0.8.6: componente pronto para validação local de Lua.").small().weak());
     } else if !crate::runtime::script::is_valid_lua_script(&path) {
         ui.colored_label(egui::Color32::YELLOW, "Use um arquivo com extensão .lua.");
     } else if let Err(error) = crate::runtime::script::validate_lua_script_reference(&app.project_root, &path) {
         ui.colored_label(egui::Color32::RED, error);
     } else {
-        ui.colored_label(egui::Color32::GREEN, "LuaScript localizado. Execução Lua entra na V0.9.");
+        ui.colored_label(egui::Color32::GREEN, "LuaScript localizado.");
+        let full_path = app.project_root.join(&path);
+        match std::fs::read_to_string(&full_path) {
+            Ok(source) => {
+                let lua_errors = crate::runtime::script::validate_lua_source(&source);
+                if lua_errors.is_empty() {
+                    ui.label(egui::RichText::new("Sintaxe Lua OK via mlua.").small().weak());
+                } else {
+                    for error in lua_errors.iter().take(3) {
+                        ui.colored_label(egui::Color32::RED, error);
+                    }
+                    if lua_errors.len() > 3 {
+                        ui.label(egui::RichText::new(format!("+ {} erro(s) adicional(is)", lua_errors.len() - 3)).small().weak());
+                    }
+                }
+            }
+            Err(error) => {
+                ui.colored_label(egui::Color32::RED, format!("Falha ao ler LuaScript: {}", error));
+            }
+        }
     }
 }
 
@@ -849,8 +885,7 @@ fn draw_animator_component_ui(
     let mut frames_text = animator
         .clips
         .get(animator.current.as_str())
-        .map(|clip| clip.frames.join("
-"))
+        .map(|clip| clip.frames.join("\n"))
         .unwrap_or_default();
     let mut playing = animator.playing;
     let mut looped = animator.looped;
@@ -876,6 +911,25 @@ fn draw_animator_component_ui(
 
     ui.label("Frames (1 por linha):");
     changed |= ui.add(egui::TextEdit::multiline(&mut frames_text).desired_rows(4)).changed();
+
+    let preview_frames = frames_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    ui.group(|ui| {
+        ui.label(egui::RichText::new("Preview do Animator").strong());
+        ui.label(format!("Clip: {}", if current.trim().is_empty() { "<vazio>" } else { &current }));
+        ui.label(format!("Frames: {}", preview_frames.len()));
+        if let Some(first) = preview_frames.first() {
+            ui.label(format!("Primeiro frame: {}", first));
+        } else {
+            ui.label(egui::RichText::new("Nenhum frame configurado.").small().weak());
+        }
+        if fps > 0.0 && !preview_frames.is_empty() {
+            ui.label(egui::RichText::new(format!("Duração aprox.: {:.2}s", preview_frames.len() as f32 / fps)).small().weak());
+        }
+    });
 
     if changed {
         let frames = frames_text

@@ -221,7 +221,14 @@ pub fn validate_lua_source(source: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     if source.trim().is_empty() {
         warnings.push("Script Lua vazio.".to_string());
+        return warnings;
     }
+
+    let lua = mlua::Lua::new();
+    if let Err(error) = lua.load(source).into_function() {
+        warnings.push(format!("Erro de sintaxe Lua: {}", error));
+    }
+
     warnings
 }
 
