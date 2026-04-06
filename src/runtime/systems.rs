@@ -31,13 +31,18 @@ pub fn update_entities_runtime(
     delta_time: f32,
     elapsed_time: f32,
     project_root: &Path,
+    scene_label: Option<&str>,
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
     save_data: &mut crate::runtime::save::SaveData,
+    session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
+    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, crate::runtime::save::SaveValue>>,
     input: &crate::runtime::state::RuntimeInput,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
+    pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -47,14 +52,19 @@ pub fn update_entities_runtime(
         delta_time,
         elapsed_time,
         project_root,
+        scene_label,
         started_scripts,
         camera_follow_target,
         ground_y,
         &colliders,
         save_data,
+        session_state,
+        script_state,
         input,
         lua_vms,
         collision_contacts,
+        previous_collision_contacts,
+        pending_destroys,
     )
 }
 
@@ -63,14 +73,19 @@ fn update_entities_runtime_recursive(
     delta_time: f32,
     elapsed_time: f32,
     project_root: &Path,
+    scene_label: Option<&str>,
     started_scripts: &mut HashSet<String>,
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
     colliders: &[collision_system::RuntimeCollider],
     save_data: &mut crate::runtime::save::SaveData,
+    session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
+    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, crate::runtime::save::SaveValue>>,
     input: &crate::runtime::state::RuntimeInput,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
+    pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -104,7 +119,22 @@ fn update_entities_runtime_recursive(
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
         let collision_names = collect_collision_names(entity_ptr, &my_collider_data, colliders);
+        let previous_collision_names = previous_collision_contacts.get(&entity.id).cloned().unwrap_or_default();
         collision_contacts.insert(entity.id.clone(), collision_names.clone());
+
+        let current_collision_set: std::collections::HashSet<String> = collision_names.iter().cloned().collect();
+        let previous_collision_set: std::collections::HashSet<String> = previous_collision_names.iter().cloned().collect();
+
+        let mut collision_enter_names: Vec<String> =
+            current_collision_set.difference(&previous_collision_set).cloned().collect();
+        let mut collision_stay_names: Vec<String> =
+            current_collision_set.intersection(&previous_collision_set).cloned().collect();
+        let mut collision_exit_names: Vec<String> =
+            previous_collision_set.difference(&current_collision_set).cloned().collect();
+
+        collision_enter_names.sort();
+        collision_stay_names.sort();
+        collision_exit_names.sort();
 
         // Restaura grounded para o valor correto antes de rodar o Lua.
         // apply_gravity() zera grounded como efeito colateral — mas o Lua
@@ -115,14 +145,22 @@ fn update_entities_runtime_recursive(
         if let Some(scene_path) = script_system::run_lua_scripts_for_entity(
             entity,
             project_root,
+            scene_label,
             started_scripts,
             input,
             save_data,
+            session_state,
+            script_state,
             delta_time,
             elapsed_time,
             lua_vms,
             &collision_names,
+            &previous_collision_names,
+            &collision_enter_names,
+            &collision_stay_names,
+            &collision_exit_names,
             colliders,
+            pending_destroys,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -155,14 +193,19 @@ fn update_entities_runtime_recursive(
             delta_time,
             elapsed_time,
             project_root,
+            scene_label,
             started_scripts,
             camera_follow_target,
             ground_y,
             colliders,
             save_data,
+            session_state,
+            script_state,
             input,
             lua_vms,
             collision_contacts,
+            previous_collision_contacts,
+            pending_destroys,
         ) {
             return Some(command);
         }
@@ -180,15 +223,18 @@ struct CollisionState {
 fn handle_entity_collisions(
     entity: &mut Entity,
     entity_ptr: *const Entity,
-    my_collider_data: Option<(f32, f32, f32, f32, bool, u8, u8)>,
+    my_collider_data: Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
     _old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
     const GROUND_EPSILON: f32 = 0.001;
 
-    let Some((off_x, off_y, width, height, is_my_trigger, my_layer, my_mask)) = my_collider_data else {
+    let Some((off_x, off_y, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = my_collider_data else {
         return CollisionState::default();
     };
+    if !my_collision_enabled {
+        return CollisionState::default();
+    }
 
     let Some(pos) = entity.transform().map(|t| (t.x, t.y)) else {
         return CollisionState::default();
@@ -212,6 +258,7 @@ fn handle_entity_collisions(
         width,
         height,
         is_trigger: is_my_trigger,
+        collision_enabled: my_collision_enabled,
         layer: my_layer,
         mask: my_mask,
         entity_ptr,
@@ -307,19 +354,19 @@ fn apply_camera_follow(
     }
 }
 
-fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, u8, u8)> {
+fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, bool, u8, u8)> {
     entity.components.iter().find_map(|component| match component {
-        Component::BoxCollider(c) => Some((c.offset_x, c.offset_y, c.width, c.height, c.is_trigger, c.layer, c.mask)),
+        Component::BoxCollider(c) if c.collision_enabled => Some((c.offset_x, c.offset_y, c.width, c.height, c.is_trigger, c.collision_enabled, c.layer, c.mask)),
         _ => None,
     })
 }
 
 fn collect_collision_names(
     entity_ptr: *const Entity,
-    my_collider_data: &Option<(f32, f32, f32, f32, bool, u8, u8)>,
+    my_collider_data: &Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
     colliders: &[collision_system::RuntimeCollider],
 ) -> Vec<String> {
-    let Some((_, _, width, height, is_my_trigger, my_layer, my_mask)) = *my_collider_data else {
+    let Some((_, _, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = *my_collider_data else {
         return Vec::new();
     };
 
@@ -340,6 +387,7 @@ fn collect_collision_names(
         width,
         height,
         is_trigger: is_my_trigger,
+        collision_enabled: my_collision_enabled,
         layer: my_layer,
         mask: my_mask,
         entity_ptr,

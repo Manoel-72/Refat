@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::component::{Component, Transform, Velocity};
+use super::component::{BoxCollider, Component, Transform, Velocity};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
@@ -74,6 +74,31 @@ impl Entity {
             _ => None,
         })
     }
+
+    pub fn collision_enabled(&self) -> bool {
+        self.components.iter().find_map(|component| match component {
+            Component::BoxCollider(collider) => Some(collider.collision_enabled),
+            _ => None,
+        }).unwrap_or(false)
+    }
+
+    pub fn set_collision_enabled(&mut self, enabled: bool) -> bool {
+        for component in &mut self.components {
+            if let Component::BoxCollider(collider) = component {
+                collider.collision_enabled = enabled;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn box_collider_mut(&mut self) -> Option<&mut BoxCollider> {
+        self.components.iter_mut().find_map(|component| match component {
+            Component::BoxCollider(collider) => Some(collider),
+            _ => None,
+        })
+    }
+
 
     pub fn find(&self, id: &str) -> Option<&Entity> {
         if self.id == id {

@@ -4,31 +4,34 @@
 //
 //  API exposta ao Lua:
 //    entity.x, entity.y, entity.rotation, entity.scale_x, entity.scale_y
-//    entity.vx, entity.vy, entity.grounded, entity.visible, entity.name
+//    entity.vx, entity.vy, entity.grounded, entity.visible, entity.name, entity.id
 //    entity.set_position(x, y)
 //    entity.set_velocity(vx, vy)
 //    entity.set_rotation(r)
-//    entity.set_visible(bool)
+//    entity.set_visible(bool), entity.is_visible()
+//    entity.collision_enabled, entity.set_collision_enabled(bool), entity.is_collision_enabled()
 //    entity.play_anim(clip_name)
 //    input.key_held(name), input.key_pressed(name), input.mouse_pos()
-//    game.delta_time, game.elapsed_time, game.log(msg)
+//    game.delta_time(), game.elapsed_time(), game.log(msg)
 //    game.change_scene(path)
 //    game.get_collisions() → lista de nomes das entidades em contato
 //    game.collision_enter(name) → bool, true apenas no frame de entrada
+//    game.collision_stay(name)  → bool, true enquanto continuar em contato
+//    game.collision_exit(name)  → bool, true apenas no frame de saída
 //    game.raycast(ox,oy,dx,dy,dist) → {hit, x, y, dist, name} ou nil
-//    entity.id, entity.apply_impulse(ix, iy)
+//    entity.id, entity.apply_impulse(ix, iy), entity.destroy()
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
 // ============================================================
 
 use std::collections::HashSet;
 
-use mlua::{Lua, Table, Value as LuaValue};
+use mlua::{Lua, Table, Value as LuaValue, Variadic};
 
 use crate::{
     core::{component::Component, entity::Entity},
     runtime::{
         input::key_code::KeyCode,
-        save::SaveData,
+        save::{SaveData, SaveValue},
         state::RuntimeInput,
     },
 };
@@ -43,17 +46,35 @@ pub struct LuaScriptResult {
     pub set_velocity: Option<(f32, f32)>,
     pub set_rotation: Option<f32>,
     pub set_visible: Option<bool>,
+    pub set_collision_enabled: Option<bool>,
     pub play_anim: Option<String>,
     pub set_text: Option<String>,
     pub change_scene: Option<String>,
     pub apply_impulse: Option<(f32, f32)>,
+    pub destroy_entity: bool,
     pub save_ops: Vec<SaveOp>,
+    pub session_ops: Vec<SessionOp>,
+    pub state_ops: Vec<StateOp>,
 }
 
 #[derive(Debug)]
 pub enum SaveOp {
     Set(String, crate::runtime::save::SaveValue),
     Remove(String),
+}
+
+#[derive(Debug)]
+pub enum SessionOp {
+    Set(String, crate::runtime::save::SaveValue),
+    Remove(String),
+    Clear,
+}
+
+#[derive(Debug)]
+pub enum StateOp {
+    Set(String, crate::runtime::save::SaveValue),
+    Remove(String),
+    Clear,
 }
 
 // ── execução ─────────────────────────────────────────────────
@@ -68,13 +89,40 @@ pub fn run_lua_script(
     entity: &Entity,
     input: &RuntimeInput,
     save_data: &SaveData,
+    session_data: &std::collections::HashMap<String, SaveValue>,
+    script_data: Option<&std::collections::HashMap<String, SaveValue>>,
     delta_time: f32,
     elapsed_time: f32,
     started: bool,
     collision_names: &[String],
+    previous_collision_names: &[String],
+    collision_enter_names: &[String],
+    collision_stay_names: &[String],
+    collision_exit_names: &[String],
+    scene_label: Option<&str>,
+    script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
     let lua = Lua::new();
-    run_lua_script_with_vm(&lua, lua_source, entity, input, save_data, delta_time, elapsed_time, started, collision_names, &[])
+    run_lua_script_with_vm(
+        &lua,
+        lua_source,
+        entity,
+        input,
+        save_data,
+        session_data,
+        script_data,
+        delta_time,
+        elapsed_time,
+        started,
+        collision_names,
+        previous_collision_names,
+        collision_enter_names,
+        collision_stay_names,
+        collision_exit_names,
+        &[],
+        scene_label,
+        script_path,
+    )
 }
 
 /// Versão interna que recebe uma VM Lua já existente (reutilizada do cache).
@@ -84,13 +132,132 @@ pub fn run_lua_script_with_vm(
     entity: &Entity,
     input: &RuntimeInput,
     save_data: &SaveData,
+    session_data: &std::collections::HashMap<String, SaveValue>,
+    script_data: Option<&std::collections::HashMap<String, SaveValue>>,
     delta_time: f32,
     elapsed_time: f32,
     started: bool,
     collision_names: &[String],
+    previous_collision_names: &[String],
+    collision_enter_names: &[String],
+    collision_stay_names: &[String],
+    collision_exit_names: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
+    scene_label: Option<&str>,
+    script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
     let mut result = LuaScriptResult::default();
+
+    fn format_lua_context(entity: &Entity, scene_label: Option<&str>, script_path: Option<&str>) -> String {
+        let scene = scene_label.unwrap_or("<sem_cena>");
+        let script = script_path.unwrap_or("<script_lua>");
+        format!("[Lua][scene={}][entity={}#{}][script={}]", scene, entity.name, entity.id, script)
+    }
+
+    fn stage_error(stage: &str, err: impl std::fmt::Display, entity: &Entity, scene_label: Option<&str>, script_path: Option<&str>) -> String {
+        format!("{}[stage={}][kind=runtime_error] {}", format_lua_context(entity, scene_label, script_path), stage, err)
+    }
+
+    fn lua_value_to_log_string(value: &LuaValue) -> String {
+        match value {
+            LuaValue::Nil => "nil".to_string(),
+            LuaValue::Boolean(v) => v.to_string(),
+            LuaValue::Integer(v) => v.to_string(),
+            LuaValue::Number(v) => v.to_string(),
+            LuaValue::String(v) => v.to_string_lossy().to_string(),
+            LuaValue::Table(_) => "<table>".to_string(),
+            LuaValue::Function(_) => "<function>".to_string(),
+            LuaValue::Thread(_) => "<thread>".to_string(),
+            LuaValue::UserData(_) => "<userdata>".to_string(),
+            LuaValue::LightUserData(_) => "<light_userdata>".to_string(),
+            LuaValue::Error(err) => format!("<error:{}>", err),
+            LuaValue::Other(_) => "<other>".to_string(),
+        }
+    }
+
+    fn save_value_to_lua(lua: &Lua, value: &SaveValue) -> Result<LuaValue, String> {
+        match value {
+            SaveValue::Bool(b) => Ok(LuaValue::Boolean(*b)),
+            SaveValue::Int(i) => Ok(LuaValue::Integer(*i)),
+            SaveValue::Float(f) => Ok(LuaValue::Number(*f)),
+            SaveValue::Text(s) => lua.create_string(s).map(LuaValue::String).map_err(|e| e.to_string()),
+        }
+    }
+
+fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
+    let wrapper = lua.create_table().map_err(|e| e.to_string())?;
+    wrapper.set("value", value).map_err(|e| e.to_string())?;
+
+    let mt = lua.create_table().map_err(|e| e.to_string())?;
+
+    let call_value = value;
+    let call_fn = lua.create_function(move |_, ()| Ok(call_value))
+        .map_err(|e| e.to_string())?;
+    mt.set("__call", call_fn).map_err(|e| e.to_string())?;
+
+    let add_value = value;
+    let add_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
+        let rhs = match other {
+            LuaValue::Integer(i) => i as f32,
+            LuaValue::Number(n) => n as f32,
+            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
+            _ => 0.0,
+        };
+        Ok(add_value + rhs)
+    }).map_err(|e| e.to_string())?;
+    mt.set("__add", add_fn).map_err(|e| e.to_string())?;
+
+    let sub_value = value;
+    let sub_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
+        let rhs = match other {
+            LuaValue::Integer(i) => i as f32,
+            LuaValue::Number(n) => n as f32,
+            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
+            _ => 0.0,
+        };
+        Ok(sub_value - rhs)
+    }).map_err(|e| e.to_string())?;
+    mt.set("__sub", sub_fn).map_err(|e| e.to_string())?;
+
+    let mul_value = value;
+    let mul_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
+        let rhs = match other {
+            LuaValue::Integer(i) => i as f32,
+            LuaValue::Number(n) => n as f32,
+            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
+            _ => 0.0,
+        };
+        Ok(mul_value * rhs)
+    }).map_err(|e| e.to_string())?;
+    mt.set("__mul", mul_fn).map_err(|e| e.to_string())?;
+
+    let div_value = value;
+    let div_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
+        let rhs = match other {
+            LuaValue::Integer(i) => i as f32,
+            LuaValue::Number(n) => n as f32,
+            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
+            _ => 1.0,
+        };
+        Ok(div_value / rhs)
+    }).map_err(|e| e.to_string())?;
+    mt.set("__div", div_fn).map_err(|e| e.to_string())?;
+
+    let unm_value = value;
+    let unm_fn = lua.create_function(move |_, _: LuaValue| Ok(-unm_value))
+        .map_err(|e| e.to_string())?;
+    mt.set("__unm", unm_fn).map_err(|e| e.to_string())?;
+
+    let tostring_value = value;
+    let tostring_fn = lua.create_function(move |lua_ctx, _: LuaValue| {
+        Ok(LuaValue::String(lua_ctx.create_string(&tostring_value.to_string())?))
+    }).map_err(|e| e.to_string())?;
+    mt.set("__tostring", tostring_fn).map_err(|e| e.to_string())?;
+
+    wrapper.set_metatable(Some(mt));
+    Ok(wrapper)
+}
+
 
     // ── tabela `entity` ──────────────────────────────────────
     let entity_tbl = lua.create_table().map_err(|e| e.to_string())?;
@@ -117,8 +284,39 @@ pub fn run_lua_script_with_vm(
         .unwrap_or(false);
     entity_tbl.set("grounded", grounded).ok();
     entity_tbl.set("visible", entity.visible).ok();
+    let collision_enabled = entity.components.iter()
+        .find_map(|c| if let Component::BoxCollider(col) = c { Some(col.collision_enabled) } else { None })
+        .unwrap_or(false);
+    entity_tbl.set("collision_enabled", collision_enabled).ok();
     entity_tbl.set("name", entity.name.clone()).ok();
     entity_tbl.set("id", entity.id.clone()).ok();
+
+    {
+        let entity_name = entity.name.clone();
+        let name_fn = lua.create_function(move |lua_ctx, ()| {
+            Ok(LuaValue::String(lua_ctx.create_string(&entity_name)?))
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("get_name", name_fn).ok();
+    }
+    {
+        let entity_id = entity.id.clone();
+        let id_fn = lua.create_function(move |lua_ctx, ()| {
+            Ok(LuaValue::String(lua_ctx.create_string(&entity_id)?))
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("get_id", id_fn).ok();
+    }
+    {
+        let visible_now = entity.visible;
+        let is_visible_fn = lua.create_function(move |_, ()| Ok(visible_now))
+            .map_err(|e| e.to_string())?;
+        entity_tbl.set("is_visible", is_visible_fn).ok();
+    }
+    {
+        let collision_enabled_now = collision_enabled;
+        let is_collision_enabled_fn = lua.create_function(move |_, ()| Ok(collision_enabled_now))
+            .map_err(|e| e.to_string())?;
+        entity_tbl.set("is_collision_enabled", is_collision_enabled_fn).ok();
+    }
 
     // comandos de escrita — armazenados numa tabela interna _cmds
     let cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
@@ -165,6 +363,15 @@ pub fn run_lua_script_with_vm(
     }
     {
         let tbl = entity_tbl.clone();
+        let set_col = lua.create_function(move |_, enabled: bool| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("collision_enabled", enabled)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_collision_enabled", set_col).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
         let play_anim = lua.create_function(move |_, clip: String| {
             let cmds: Table = tbl.get("_cmds")?;
             cmds.set("anim", clip)?;
@@ -193,6 +400,15 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("apply_impulse", apply_impulse).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let destroy_fn = lua.create_function(move |_, ()| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("destroy", true)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("destroy", destroy_fn).ok();
     }
 
     lua.globals().set("entity", entity_tbl.clone()).map_err(|e| e.to_string())?;
@@ -233,15 +449,34 @@ pub fn run_lua_script_with_vm(
     // ── tabela `game` ────────────────────────────────────────
     {
         let game_tbl = lua.create_table().map_err(|e| e.to_string())?;
-        game_tbl.set("delta_time", delta_time).ok();
-        game_tbl.set("elapsed_time", elapsed_time).ok();
+        let delta_time_value = make_numeric_callable(&lua, delta_time)?;
+        game_tbl.set("delta_time", delta_time_value).ok();
 
-        // game.log(msg)
-        let log_fn = lua.create_function(|_, msg: String| {
-            println!("[LuaScript] {}", msg);
+        let elapsed_time_value = make_numeric_callable(&lua, elapsed_time)?;
+        game_tbl.set("elapsed_time", elapsed_time_value).ok();
+
+        // game.log/msg + aliases de severidade
+        let log_prefix = format_lua_context(entity, scene_label, script_path);
+        let info_prefix = format!("{}[stage=log]", log_prefix);
+        let log_fn = lua.create_function(move |_, msg: String| {
+            println!("{} {}", info_prefix, msg);
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("log", log_fn).ok();
+
+        let warn_prefix = format!("{}[stage=log][level=warn]", log_prefix);
+        let warn_fn = lua.create_function(move |_, msg: String| {
+            eprintln!("{} {}", warn_prefix, msg);
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("warn", warn_fn).ok();
+
+        let error_prefix = format!("{}[stage=log][level=error]", log_prefix);
+        let error_fn = lua.create_function(move |_, msg: String| {
+            eprintln!("{} {}", error_prefix, msg);
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("error", error_fn).ok();
 
         // game.change_scene(path) → gravado em _cmds do game
         let game_cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
@@ -264,15 +499,47 @@ pub fn run_lua_script_with_vm(
         }).map_err(|e| e.to_string())?;
         game_tbl.set("get_collisions", get_collisions).ok();
 
-        // game.collision_enter(name) — true apenas no primeiro frame em que o nome aparece
-        // Nota: usa um set armazenado em _cmds["_prev_cols"] como memória entre frames.
-        // Por simplicidade de MVP, é implementado como contains (sem estado entre frames),
-        // pois a VM é recriada por frame. Para lógica de "enter" real use grounded + flag no Lua.
-        let col_enter: Vec<String> = collision_names.to_vec();
+        let current_cols: Vec<String> = collision_names.to_vec();
+        let previous_cols: Vec<String> = previous_collision_names.to_vec();
+        let enter_cols: Vec<String> = collision_enter_names.to_vec();
+        let stay_cols: Vec<String> = collision_stay_names.to_vec();
+        let exit_cols: Vec<String> = collision_exit_names.to_vec();
+
         let collision_enter = lua.create_function(move |_, name: String| {
-            Ok(col_enter.iter().any(|n| n.eq_ignore_ascii_case(&name)))
+            Ok(enter_cols.iter().any(|n| n.eq_ignore_ascii_case(&name)))
         }).map_err(|e| e.to_string())?;
         game_tbl.set("collision_enter", collision_enter).ok();
+
+        let collision_stay = lua.create_function(move |_, name: String| {
+            Ok(stay_cols.iter().any(|n| n.eq_ignore_ascii_case(&name)))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_stay", collision_stay).ok();
+
+        let collision_exit = lua.create_function(move |_, name: String| {
+            Ok(exit_cols.iter().any(|n| n.eq_ignore_ascii_case(&name)))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_exit", collision_exit).ok();
+
+        // Mantém snapshots brutos disponíveis para compatibilidade e debug.
+        let current_cols_snapshot = current_cols.clone();
+        let previous_cols_snapshot = previous_cols.clone();
+        let get_collisions_previous = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, name) in previous_cols_snapshot.iter().enumerate() {
+                t.set(i + 1, name.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_previous_collisions", get_collisions_previous).ok();
+
+        let get_collisions_current = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, name) in current_cols_snapshot.iter().enumerate() {
+                t.set(i + 1, name.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_current_collisions", get_collisions_current).ok();
 
         // game.raycast(ox, oy, dx, dy, max_dist) → {hit=true, x, y, dist, name} | {hit=false}
         // Snapshot sem raw ptr — apenas dados geométricos + nome, seguro para closure.
@@ -378,19 +645,145 @@ pub fn run_lua_script_with_vm(
         lua.globals().set("save", save_tbl).map_err(|e| e.to_string())?;
     }
 
+    // ── tabela `session` ─────────────────────────────────────
+    {
+        let session_tbl = lua.create_table().map_err(|e| e.to_string())?;
+        let session_cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
+
+        let snap: Vec<(String, SaveValue)> = session_data
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let get_fn = lua.create_function(move |lua_ctx, (key, default): (String, LuaValue)| {
+            let val = snap.iter().find(|(k, _)| k == &key).map(|(_, v)| v.clone());
+            match val {
+                None => Ok(default),
+                Some(v) => save_value_to_lua(lua_ctx, &v).map_err(mlua::Error::runtime),
+            }
+        }).map_err(|e| e.to_string())?;
+        session_tbl.set("get", get_fn).ok();
+
+        let keys: HashSet<String> = session_data.keys().cloned().collect();
+        let has_fn = lua.create_function(move |_, key: String| Ok(keys.contains(&key)))
+            .map_err(|e| e.to_string())?;
+        session_tbl.set("has", has_fn).ok();
+
+        let sc = session_cmds.clone();
+        let set_fn = lua.create_function(move |_, (key, val): (String, LuaValue)| {
+            match val {
+                LuaValue::Boolean(b) => sc.set(format!("b:{}", key), b)?,
+                LuaValue::Integer(i) => sc.set(format!("i:{}", key), i)?,
+                LuaValue::Number(f)  => sc.set(format!("f:{}", key), f)?,
+                LuaValue::String(s)  => sc.set(format!("s:{}", key), s.to_string_lossy().to_string())?,
+                LuaValue::Nil => {},
+                _ => return Err(mlua::Error::runtime("session.set suporta apenas bool, integer, number e string")),
+            }
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        session_tbl.set("set", set_fn).ok();
+
+        let sc = session_cmds.clone();
+        let rm_fn = lua.create_function(move |_, key: String| {
+            sc.set(format!("rm:{}", key), true)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        session_tbl.set("remove", rm_fn).ok();
+
+        let sc = session_cmds.clone();
+        let clear_fn = lua.create_function(move |_, ()| {
+            sc.set("clear", true)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        session_tbl.set("clear", clear_fn).ok();
+
+        session_tbl.set("_cmds", session_cmds).ok();
+        lua.globals().set("session", session_tbl).map_err(|e| e.to_string())?;
+    }
+
+    // ── tabela `state` ───────────────────────────────────────
+    {
+        let state_tbl = lua.create_table().map_err(|e| e.to_string())?;
+        let state_cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
+
+        let snap: Vec<(String, SaveValue)> = script_data
+            .into_iter()
+            .flat_map(|data| data.iter().map(|(k, v)| (k.clone(), v.clone())))
+            .collect();
+        let get_fn = lua.create_function(move |lua_ctx, (key, default): (String, LuaValue)| {
+            let val = snap.iter().find(|(k, _)| k == &key).map(|(_, v)| v.clone());
+            match val {
+                None => Ok(default),
+                Some(v) => save_value_to_lua(lua_ctx, &v).map_err(mlua::Error::runtime),
+            }
+        }).map_err(|e| e.to_string())?;
+        state_tbl.set("get", get_fn).ok();
+
+        let keys: HashSet<String> = script_data
+            .map(|data| data.keys().cloned().collect())
+            .unwrap_or_default();
+        let has_fn = lua.create_function(move |_, key: String| Ok(keys.contains(&key)))
+            .map_err(|e| e.to_string())?;
+        state_tbl.set("has", has_fn).ok();
+
+        let sc = state_cmds.clone();
+        let set_fn = lua.create_function(move |_, (key, val): (String, LuaValue)| {
+            match val {
+                LuaValue::Boolean(b) => sc.set(format!("b:{}", key), b)?,
+                LuaValue::Integer(i) => sc.set(format!("i:{}", key), i)?,
+                LuaValue::Number(f)  => sc.set(format!("f:{}", key), f)?,
+                LuaValue::String(s)  => sc.set(format!("s:{}", key), s.to_string_lossy().to_string())?,
+                LuaValue::Nil => {},
+                _ => return Err(mlua::Error::runtime("state.set suporta apenas bool, integer, number e string")),
+            }
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        state_tbl.set("set", set_fn).ok();
+
+        let sc = state_cmds.clone();
+        let rm_fn = lua.create_function(move |_, key: String| {
+            sc.set(format!("rm:{}", key), true)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        state_tbl.set("remove", rm_fn).ok();
+
+        let sc = state_cmds.clone();
+        let clear_fn = lua.create_function(move |_, ()| {
+            sc.set("clear", true)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        state_tbl.set("clear", clear_fn).ok();
+
+        state_tbl.set("_cmds", state_cmds).ok();
+        lua.globals().set("state", state_tbl).map_err(|e| e.to_string())?;
+    }
+
+    // print(...) global com prefixo contextual para logs Lua
+    {
+        let print_prefix = format!("{}[stage=print]", format_lua_context(entity, scene_label, script_path));
+        let print_fn = lua.create_function(move |_, values: Variadic<LuaValue>| {
+            let joined = values.iter()
+                .map(lua_value_to_log_string)
+                .collect::<Vec<_>>()
+                .join("	");
+            println!("{} {}", print_prefix, joined);
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        lua.globals().set("print", print_fn).map_err(|e| e.to_string())?;
+    }
+
     // ── carrega e executa o script ───────────────────────────
-    lua.load(lua_source).exec().map_err(|e| format!("Erro ao carregar script: {e}"))?;
+    lua.load(lua_source).exec().map_err(|e| stage_error("load", format!("Erro ao carregar script: {e}"), entity, scene_label, script_path))?;
 
     // on_start (apenas na primeira vez)
     if !started {
         if let Ok(f) = lua.globals().get::<mlua::Function>("on_start") {
-            f.call::<()>(()).map_err(|e| format!("on_start: {e}"))?;
+            f.call::<()>(()).map_err(|e| stage_error("on_start", e, entity, scene_label, script_path))?;
         }
     }
 
     // on_update(delta_time)
     if let Ok(f) = lua.globals().get::<mlua::Function>("on_update") {
-        f.call::<()>(delta_time).map_err(|e| format!("on_update: {e}"))?;
+        f.call::<()>(delta_time).map_err(|e| stage_error("on_update", e, entity, scene_label, script_path))?;
     }
 
     // ── coleta resultados de entity._cmds ────────────────────
@@ -410,6 +803,12 @@ pub fn run_lua_script_with_vm(
             // ficarem invisíveis mesmo sem o script chamar set_visible.
             if let Ok(LuaValue::Boolean(v)) = cmds.get::<LuaValue>("visible") {
                 result.set_visible = Some(v);
+            }
+            if let Ok(LuaValue::Boolean(v)) = cmds.get::<LuaValue>("collision_enabled") {
+                result.set_collision_enabled = Some(v);
+            }
+            if let Ok(LuaValue::Boolean(true)) = cmds.get::<LuaValue>("destroy") {
+                result.destroy_entity = true;
             }
             if let Ok(clip) = cmds.get::<String>("anim") {
                 result.play_anim = Some(clip);
@@ -463,6 +862,76 @@ pub fn run_lua_script_with_vm(
         }
     }
 
+    // ── coleta resultados de session._cmds ───────────────────
+    if let Ok(session_tbl) = lua.globals().get::<Table>("session") {
+        if let Ok(cmds) = session_tbl.get::<Table>("_cmds") {
+            for pair in cmds.pairs::<String, LuaValue>() {
+                let Ok((key, val)) = pair else { continue };
+                if key == "clear" {
+                    if let LuaValue::Boolean(true) = val {
+                        result.session_ops.push(SessionOp::Clear);
+                    }
+                } else if let Some(real_key) = key.strip_prefix("rm:") {
+                    result.session_ops.push(SessionOp::Remove(real_key.to_string()));
+                } else if let Some(real_key) = key.strip_prefix("b:") {
+                    if let LuaValue::Boolean(b) = val {
+                        result.session_ops.push(SessionOp::Set(real_key.to_string(), b.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("i:") {
+                    if let LuaValue::Integer(i) = val {
+                        result.session_ops.push(SessionOp::Set(real_key.to_string(), i.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("f:") {
+                    if let LuaValue::Number(f) = val {
+                        result.session_ops.push(SessionOp::Set(real_key.to_string(), f.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("s:") {
+                    if let LuaValue::String(s) = val {
+                        result.session_ops.push(SessionOp::Set(
+                            real_key.to_string(),
+                            s.to_string_lossy().to_string().into(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // ── coleta resultados de state._cmds ─────────────────────
+    if let Ok(state_tbl) = lua.globals().get::<Table>("state") {
+        if let Ok(cmds) = state_tbl.get::<Table>("_cmds") {
+            for pair in cmds.pairs::<String, LuaValue>() {
+                let Ok((key, val)) = pair else { continue };
+                if key == "clear" {
+                    if let LuaValue::Boolean(true) = val {
+                        result.state_ops.push(StateOp::Clear);
+                    }
+                } else if let Some(real_key) = key.strip_prefix("rm:") {
+                    result.state_ops.push(StateOp::Remove(real_key.to_string()));
+                } else if let Some(real_key) = key.strip_prefix("b:") {
+                    if let LuaValue::Boolean(b) = val {
+                        result.state_ops.push(StateOp::Set(real_key.to_string(), b.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("i:") {
+                    if let LuaValue::Integer(i) = val {
+                        result.state_ops.push(StateOp::Set(real_key.to_string(), i.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("f:") {
+                    if let LuaValue::Number(f) = val {
+                        result.state_ops.push(StateOp::Set(real_key.to_string(), f.into()));
+                    }
+                } else if let Some(real_key) = key.strip_prefix("s:") {
+                    if let LuaValue::String(s) = val {
+                        result.state_ops.push(StateOp::Set(
+                            real_key.to_string(),
+                            s.to_string_lossy().to_string().into(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     Ok(result)
 }
 
@@ -490,6 +959,9 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
     }
     if let Some(vis) = r.set_visible {
         entity.visible = vis;
+    }
+    if let Some(enabled) = r.set_collision_enabled {
+        entity.set_collision_enabled(enabled);
     }
     if let Some(clip) = &r.play_anim {
         for c in &mut entity.components {
@@ -584,7 +1056,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true, &[]).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -595,11 +1067,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, false, &[]).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, 0.016, 0.016, true, &[]).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -609,8 +1081,51 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, 0.016, 0.0, true, &[]).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], None, None).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
+    }
+}
+pub fn apply_session_ops(session_data: &mut std::collections::HashMap<String, SaveValue>, ops: &[SessionOp]) {
+    for op in ops {
+        match op {
+            SessionOp::Set(key, value) => { session_data.insert(key.clone(), value.clone()); }
+            SessionOp::Remove(key) => { session_data.remove(key); }
+            SessionOp::Clear => session_data.clear(),
+        }
+    }
+}
+
+
+
+
+pub fn apply_state_ops(
+    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, SaveValue>>,
+    entity_id: &str,
+    ops: &[StateOp],
+) {
+    for op in ops {
+        match op {
+            StateOp::Set(key, value) => {
+                script_state
+                    .entry(entity_id.to_string())
+                    .or_default()
+                    .insert(key.clone(), value.clone());
+            }
+            StateOp::Remove(key) => {
+                let should_remove_entity = if let Some(entity_state) = script_state.get_mut(entity_id) {
+                    entity_state.remove(key);
+                    entity_state.is_empty()
+                } else {
+                    false
+                };
+                if should_remove_entity {
+                    script_state.remove(entity_id);
+                }
+            }
+            StateOp::Clear => {
+                script_state.remove(entity_id);
+            }
+        }
     }
 }

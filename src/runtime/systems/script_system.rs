@@ -9,6 +9,27 @@ use crate::{
     },
 };
 
+fn lua_stage_log(
+    scene_label: Option<&str>,
+    entity: &Entity,
+    script_path: &str,
+    stage: &str,
+    kind: &str,
+    message: impl std::fmt::Display,
+) {
+    let scene = scene_label.unwrap_or("<sem_cena>");
+    eprintln!(
+        "[Lua][scene={}][entity={}#{}][script={}][stage={}][kind={}] {}",
+        scene,
+        entity.name,
+        entity.id,
+        script_path,
+        stage,
+        kind,
+        message,
+    );
+}
+
 #[derive(Debug, Default)]
 pub struct ScriptScanResult {
     pub move_x: f32,
@@ -48,9 +69,9 @@ pub fn scan_script_behavior(
 
                     if is_first_start {
                         if let Some(message) = &behavior.start_message {
-                            println!("▶ Script '{}' em '{}': {}", script.file_path, entity.name, message);
+                            println!("[RS2][scene=<sem_cena>][entity={}#{}][script={}] {}", entity.name, entity.id, script.file_path, message);
                         } else {
-                            println!("▶ Script '{}' iniciado em '{}'", script.file_path, entity.name);
+                            println!("[RS2][scene=<sem_cena>][entity={}#{}][script={}] iniciado", entity.name, entity.id, script.file_path);
                         }
 
                         for event in &behavior.on_start {
@@ -86,14 +107,22 @@ pub fn scan_script_behavior(
 pub fn run_lua_scripts_for_entity(
     entity: &mut Entity,
     project_root: &Path,
+    scene_label: Option<&str>,
     started_scripts: &mut HashSet<String>,
     input: &crate::runtime::state::RuntimeInput,
     save_data: &mut crate::runtime::save::SaveData,
+    session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
+    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, crate::runtime::save::SaveValue>>,
     delta_time: f32,
     elapsed_time: f32,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_names: &[String],
+    previous_collision_names: &[String],
+    collision_enter_names: &[String],
+    collision_stay_names: &[String],
+    collision_exit_names: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
+    pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -105,7 +134,7 @@ pub fn run_lua_scripts_for_entity(
         let full_path = match crate::runtime::script::resolve_script_path(project_root, &file_path) {
             Some(p) => p,
             None => {
-                eprintln!("[LuaScript] Arquivo não encontrado: {}", file_path);
+                lua_stage_log(scene_label, entity, &file_path, "resolve", "file_not_found", "Arquivo não encontrado");
                 continue;
             }
         };
@@ -126,14 +155,14 @@ pub fn run_lua_scripts_for_entity(
             let source = match std::fs::read_to_string(&full_path) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("[LuaScript] Falha ao ler '{}': {}", file_path, e);
+                    lua_stage_log(scene_label, entity, &file_path, "read", "io_error", e);
                     continue;
                 }
             };
             // Cria nova VM e pré-carrega o chunk para validar sintaxe
             let lua = mlua::Lua::new();
             if let Err(e) = lua.load(&source).into_function() {
-                eprintln!("[LuaScript] Erro de sintaxe em '{}': {}", file_path, e);
+                lua_stage_log(scene_label, entity, &file_path, "syntax", "syntax_error", e);
             }
             // Armazena a fonte como global _src para reutilizar sem ler disco todo frame
             lua.globals().set("_src", source).ok();
@@ -149,7 +178,7 @@ pub fn run_lua_scripts_for_entity(
         let source: String = match lua.globals().get("_src") {
             Ok(s) => s,
             Err(_) => {
-                eprintln!("[LuaScript] Fonte não encontrada no cache para '{}'", file_path);
+                lua_stage_log(scene_label, entity, &file_path, "cache", "source_missing", "Fonte não encontrada no cache");
                 continue;
             }
         };
@@ -163,22 +192,37 @@ pub fn run_lua_scripts_for_entity(
             entity,
             input,
             save_data,
+            session_state,
+            script_state.get(&entity.id),
             delta_time,
             elapsed_time,
             already_started,
             collision_names,
+            previous_collision_names,
+            collision_enter_names,
+            collision_stay_names,
+            collision_exit_names,
             colliders,
+            scene_label,
+            Some(&file_path),
         ) {
             Ok(result) => {
                 let change_scene = result.change_scene.clone();
                 lua_runtime::apply_lua_result(entity, &result);
                 lua_runtime::apply_save_ops(save_data, &result.save_ops);
+                lua_runtime::apply_session_ops(session_state, &result.session_ops);
+                lua_runtime::apply_state_ops(script_state, &entity.id, &result.state_ops);
+                if result.destroy_entity {
+                    pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
+                        entity_id: entity.id.clone(),
+                    });
+                }
                 if change_scene.is_some() {
                     return change_scene;
                 }
             }
             Err(e) => {
-                eprintln!("[LuaScript] Erro em '{}' ({}): {}", file_path, entity.name, e);
+                eprintln!("{}", e);
             }
         }
     }
@@ -200,7 +244,7 @@ fn execute_event_instruction(
     match instruction {
         ScriptEventInstruction::Print(text) => {
             let stage = if is_start { "on_start" } else { "on_update" };
-            println!("▶ {} '{}' em '{}': {}", stage, script_path, entity_name, text);
+            println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
         }
         ScriptEventInstruction::MoveX(value) => {
             result.move_x += value;

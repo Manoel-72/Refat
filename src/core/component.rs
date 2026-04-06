@@ -131,6 +131,9 @@ pub struct BoxCollider {
     pub offset_y: f32,
     #[serde(default)]
     pub is_trigger: bool,
+    /// Se false, o collider existe na entidade mas é ignorado pelo runtime.
+    #[serde(default = "default_collision_enabled")]
+    pub collision_enabled: bool,
     /// Layer desta entidade (bits 0–7). 0 = padrão (interage com tudo).
     #[serde(default)]
     pub layer: u8,
@@ -145,6 +148,7 @@ impl Default for BoxCollider {
             width: 32.0, height: 32.0,
             offset_x: 0.0, offset_y: 0.0,
             is_trigger: false,
+            collision_enabled: true,
             layer: 0,
             mask: 0,
         }
@@ -189,6 +193,7 @@ fn default_ui_alpha() -> f32 { 1.0 }
 fn default_text_size() -> f32 { 24.0 }
 fn default_button_width() -> f32 { 220.0 }
 fn default_button_height() -> f32 { 48.0 }
+fn default_collision_enabled() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationClip {

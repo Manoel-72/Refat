@@ -3,37 +3,39 @@
 --  Moeda coletável: pulsa visualmente e some ao ser tocada.
 --
 --  Demo V0.9.1:
---  - score vale só para a partida atual
---  - moeda não persiste entre entradas no Game
+--  - score vale só para a partida atual via session.*
+--  - estado local da moeda vive em state.*
 -- =============================================================
 
-local collected = false
-local bob_speed = 2.5
-local base_y    = 0
+local BOB_SPEED = 2.5
 
 function on_start()
-    collected = false
-    base_y = entity.y
+    state.set("collected", false)
+    state.set("base_y", entity.y)
     entity.set_visible(true)
-    game.log("Moeda '" .. entity.name .. "' pronta em y=" .. base_y)
+    game.log("Moeda '" .. entity.name .. "' pronta em y=" .. entity.y)
 end
 
 function on_update(dt)
-    if collected then return end
+    if state.get("collected", false) then
+        return
+    end
 
-    local t = game.elapsed_time
-    entity.set_position(entity.x, base_y + math.sin(t * bob_speed) * 6)
+    local base_y = state.get("base_y", entity.y)
+    local t = type(game.elapsed_time) == "function" and game.elapsed_time() or game.elapsed_time
+    entity.set_position(entity.x, base_y + math.sin(t * BOB_SPEED) * 6)
 
     local cols = game.get_collisions()
     for _, name in ipairs(cols) do
         if name == "Player" then
-            collected = true
+            state.set("collected", true)
             entity.set_visible(false)
 
-            local current = save.get("score") or 0
-            save.set("score", current + 1)
+            local current = session.get("score", 0)
+            local next_score = current + 1
+            session.set("score", next_score)
 
-            game.log("Moeda coletada! score agora = " .. (current + 1))
+            game.log("Moeda coletada! score agora = " .. next_score)
             return
         end
     end

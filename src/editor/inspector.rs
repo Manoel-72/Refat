@@ -417,6 +417,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                         let mut ox = bc.offset_x;
                         let mut oy = bc.offset_y;
                         let mut is_trigger = bc.is_trigger;
+                        let mut collision_enabled = bc.collision_enabled;
+                        let layer = bc.layer;
+                        let mask = bc.mask;
                         let mut changed = false;
 
                         egui::Grid::new(format!("bc_{}", i))
@@ -438,6 +441,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 ui.label("Trigger:");
                                 changed |= ui.checkbox(&mut is_trigger, "").changed();
                                 ui.end_row();
+                                ui.label("Colisão habilitada:");
+                                changed |= ui.checkbox(&mut collision_enabled, "").changed();
+                                ui.end_row();
                             });
                         if changed {
                             updated_components.push((
@@ -448,8 +454,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     offset_x: ox,
                                     offset_y: oy,
                                     is_trigger,
-                                    layer: 0,
-                                    mask: 0,
+                                    collision_enabled,
+                                    layer,
+                                    mask,
                                 }),
                             ));
                         }

@@ -13,6 +13,7 @@ pub struct RuntimeCollider {
     pub width: f32,
     pub height: f32,
     pub is_trigger: bool,
+    pub collision_enabled: bool,
     /// Máscara de layer (bits 0–7). Colisão só ocorre se (a.layer & b.mask) != 0.
     pub layer: u8,
     pub mask: u8,
@@ -91,9 +92,6 @@ pub fn aabb_mtv(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> Mtv {
 
 pub fn collect_colliders(entities: &[Entity], out: &mut Vec<RuntimeCollider>) {
     for entity in entities {
-        if !entity.visible {
-            continue;
-        }
         let mut transform = None;
         let mut collider_data = None;
 
@@ -106,12 +104,17 @@ pub fn collect_colliders(entities: &[Entity], out: &mut Vec<RuntimeCollider>) {
         }
 
         if let (Some(t), Some(c)) = (transform, collider_data) {
+            if !c.collision_enabled {
+                collect_colliders(&entity.children, out);
+                continue;
+            }
             out.push(RuntimeCollider {
                 center_x: t.x + c.offset_x,
                 center_y: t.y + c.offset_y,
                 width: c.width,
                 height: c.height,
                 is_trigger: c.is_trigger,
+                collision_enabled: c.collision_enabled,
                 layer: c.layer,
                 mask: c.mask,
                 entity_ptr: entity as *const Entity,

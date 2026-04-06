@@ -1,0 +1,590 @@
+{
+  "name": "Validation Scene — RS2BR V0.9.1",
+  "_comment": "Cena oficial de regressão. Exercita: session.*, state.*, collision_enter/stay/exit, collision_enabled, entity.destroy(). Abra no editor e pressione Play para validar.",
+  "background_color": [
+    0.05,
+    0.08,
+    0.15
+  ],
+  "entities": [
+    {
+      "id": "ent-cam-val",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-player-val",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -250.0,
+            "y": -200.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.2,
+            "color_g": 0.6,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 48.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 1,
+            "mask": 2,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/player_platformer.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-ground-val",
+      "name": "Chao",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -310.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.3,
+            "color_g": 0.5,
+            "color_b": 0.28,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 900.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 2,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-plat-val-a",
+      "name": "Plataforma A",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -100.0,
+            "y": -180.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.5,
+            "color_g": 0.38,
+            "color_b": 0.22,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 200.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 2,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-plat-val-b",
+      "name": "Plataforma B",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 160.0,
+            "y": -100.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.5,
+            "color_g": 0.38,
+            "color_b": 0.22,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 180.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 2,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-enemy-val",
+      "name": "Inimigo",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 160.0,
+            "y": -160.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.9,
+            "color_g": 0.22,
+            "color_b": 0.22,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 40.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 2,
+            "mask": 2,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy_patrol.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-coin-val-1",
+      "name": "Moeda",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -100.0,
+            "y": -140.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 1.0,
+            "color_g": 0.85,
+            "color_b": 0.1,
+            "color_a": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 24.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 4,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/coin_collector.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-coin-val-2",
+      "name": "Moeda",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 50.0,
+            "y": -140.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 1.0,
+            "color_g": 0.85,
+            "color_b": 0.1,
+            "color_a": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 24.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 4,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/coin_collector.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-coin-val-3",
+      "name": "Moeda",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 160.0,
+            "y": -60.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 1.0,
+            "color_g": 0.85,
+            "color_b": 0.1,
+            "color_a": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 24.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 4,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/coin_collector.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-pickup-val",
+      "name": "Pickup",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 260.0,
+            "y": -60.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.4,
+            "color_g": 1.0,
+            "color_b": 0.55,
+            "color_a": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 28.0,
+            "height": 28.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 4,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/pickup_test.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-probe-val",
+      "name": "CollisionProbe",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -100.0,
+            "y": -270.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.8,
+            "color_g": 0.4,
+            "color_b": 1.0,
+            "color_a": 0.7
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 60.0,
+            "height": 40.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 4,
+            "mask": 1,
+            "collision_enabled": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/collision_probe.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-hud-score-val",
+      "name": "ScoreHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -330.0,
+            "y": 220.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Score: 0",
+            "font_size": 22.0,
+            "color_r": 1.0,
+            "color_g": 0.9,
+            "color_b": 0.3,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/score_hud.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-hud-legend-val",
+      "name": "LegendaHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Validação oficial: session=rodada | state=local por entidade | save=melhor score persistível. Colete moedas/pickup, encoste na Probe roxa e no inimigo. Salve e use Continuar para conferir best_score.",
+            "font_size": 12.0,
+            "color_r": 0.75,
+            "color_g": 0.85,
+            "color_b": 1.0,
+            "color_a": 0.85,
+            "screen_space": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-hud-save-val",
+      "name": "SaveHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -330.0,
+            "y": 248.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Sessão(score=0, pickups=0) | Save(best=0)",
+            "font_size": 16.0,
+            "color_r": 0.65,
+            "color_g": 1.0,
+            "color_b": 0.75,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/save_validation_hud.lua"
+          }
+        }
+      ]
+    }
+  ]
+}

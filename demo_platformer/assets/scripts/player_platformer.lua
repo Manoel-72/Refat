@@ -3,23 +3,18 @@
 --  Controle de personagem plataformer completo.
 --
 --  Demo V0.9.1:
---  - ao iniciar a fase, este demo sempre começa jogo novo
---  - score reinicia para 0
---  - estado temporário do inimigo é reiniciado
+--  - ao iniciar a fase, o score da partida vive em session.*
+--  - novo jogo limpa a sessão no runtime
 -- =============================================================
 
 local SPEED       = 180     -- pixels/s horizontal
 local JUMP_FORCE  = 380     -- impulso de pulo (pixels/s)
 
 function on_start()
-    -- Demo oficial: sempre começar partida nova ao entrar em Game.
-    save.set("score", 0)
-
-    -- Reinicia estado temporário de patrulha do inimigo neste demo.
-    save.remove("enemy_patrol.origin_x.ent-enemy-001")
-    save.remove("enemy_patrol.dir.ent-enemy-001")
-
-    game.log("Player iniciado | demo reiniciada com score = 0")
+    if not session.has("score") then
+        session.set("score", 0)
+    end
+    game.log("Player iniciado | sessão atual com score = " .. session.get("score", 0))
 end
 
 function on_update(dt)

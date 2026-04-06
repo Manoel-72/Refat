@@ -24,7 +24,12 @@ Escreva funções `on_start()` e `on_update(dt)` — o engine chama automaticame
 | `entity.set_velocity(vx, vy)` | função | Define velocidade (px/s) |
 | `entity.apply_impulse(ix, iy)` | função | Soma impulso instantâneo à velocidade |
 | `entity.set_rotation(r)` | função | Define rotação em graus |
+| `entity.get_name()` | função → string | Retorna o nome da entidade |
+| `entity.get_id()` | função → string | Retorna o id único da entidade |
 | `entity.set_visible(bool)` | função | Mostra/oculta a entidade |
+| `entity.is_visible()` | função → bool | Consulta a visibilidade atual |
+| `entity.set_collision_enabled(bool)` | função | Liga/desliga a colisão da entidade |
+| `entity.is_collision_enabled()` | função → bool | Consulta se a colisão está ligada |
 | `entity.play_anim(clip)` | função | Troca clip do Animator (ex: `"run"`, `"idle"`) |
 
 ---
@@ -48,12 +53,16 @@ Escreva funções `on_start()` e `on_update(dt)` — o engine chama automaticame
 
 | Campo / Função | Tipo | Descrição |
 |---|---|---|
-| `game.delta_time` | number | Segundos desde o último frame |
-| `game.elapsed_time` | number | Segundos desde o início da cena |
+| `game.delta_time()` | função → number | Segundos desde o último frame |
+| `game.elapsed_time()` | função → number | Segundos desde o início da cena |
 | `game.log(msg)` | função | Imprime no terminal do engine |
 | `game.change_scene(path)` | função | Carrega outra cena (ex: `"assets/scenes/fase2.scene.json"`) |
 | `game.get_collisions()` | função → lista | Nomes das entidades colidindo com esta neste frame |
-| `game.collision_enter(name)` | função → bool | True se `name` está colidindo este frame |
+| `game.get_current_collisions()` | função → lista | Snapshot dos contatos atuais |
+| `game.get_previous_collisions()` | função → lista | Snapshot dos contatos do frame anterior |
+| `game.collision_enter(name)` | função → bool | True somente no frame em que o contato começou |
+| `game.collision_stay(name)` | função → bool | True enquanto o contato continua |
+| `game.collision_exit(name)` | função → bool | True somente no frame em que o contato terminou |
 | `game.raycast(ox,oy,dx,dy,dist)` | função → tabela | Lança raio; retorna `{hit, x, y, dist, name}` |
 
 **Raycast exemplo:**
@@ -70,10 +79,36 @@ end
 
 | Função | Retorno | Descrição |
 |---|---|---|
-| `save.set(key, value)` | — | Salva valor (number, bool, string) |
-| `save.get(key)` | value ou nil | Lê valor salvo |
+| `save.set(key, value)` | — | Salva valor persistente (number, bool, string) |
+| `save.get(key)` | value ou nil | Lê valor persistente |
 | `save.has(key)` | bool | Verifica se a chave existe |
 | `save.remove(key)` | — | Remove chave |
+
+Use `save.*` apenas para progresso real: checkpoint, inventário persistente, unlocks, config e score global.
+
+## `session` — estado temporário da partida atual
+
+| Função | Retorno | Descrição |
+|---|---|---|
+| `session.set(key, value)` | — | Salva valor temporário da rodada |
+| `session.get(key, default)` | value | Lê valor temporário da rodada |
+| `session.has(key)` | bool | Verifica se a chave existe |
+| `session.remove(key)` | — | Remove chave |
+| `session.clear()` | — | Limpa a sessão atual |
+
+Use `session.*` para score da rodada, moedas coletadas na execução atual, timer da fase e flags temporárias.
+
+## `state` — memória local por entidade/script
+
+| Função | Retorno | Descrição |
+|---|---|---|
+| `state.set(key, value)` | — | Salva valor local da entidade/script |
+| `state.get(key, default)` | value | Lê valor local |
+| `state.has(key)` | bool | Verifica se a chave existe |
+| `state.remove(key)` | — | Remove chave local |
+| `state.clear()` | — | Limpa a memória local |
+
+Use `state.*` para patrulha, cooldown, debounce, timers internos e memória entre frames.
 
 ---
 
@@ -85,7 +120,7 @@ function on_start()
 end
 
 function on_update(dt)
-    -- Executado todo frame. dt = game.delta_time em segundos.
+    -- Executado todo frame. dt = game.delta_time() em segundos.
 end
 ```
 
@@ -110,13 +145,23 @@ end
 ## Padrão de coleta (trigger)
 
 ```lua
+function on_start()
+    state.set("collected", false)
+end
+
 function on_update(dt)
+    if state.get("collected", false) then
+        return
+    end
+
     local cols = game.get_collisions()
     for _, name in ipairs(cols) do
         if name == "Player" then
+            state.set("collected", true)
             entity.set_visible(false)
-            local sc = save.get("score") or 0
-            save.set("score", sc + 1)
+
+            local sc = session.get("score", 0)
+            session.set("score", sc + 1)
         end
     end
 end
@@ -125,3 +170,42 @@ end
 ---
 
 *Versão da API: RS2BR-Engine V0.9 — sujeita a extensão sem quebra de retrocompatibilidade.*
+
+
+### entity.collision_enabled / entity.set_collision_enabled(bool)
+Controla explicitamente se o `BoxCollider` participa da colisão de gameplay. Não depende de `visible`.
+
+
+### Eventos de colisão por frame
+
+- `game.collision_enter(name)` → verdadeiro só no frame de entrada
+- `game.collision_stay(name)` → verdadeiro enquanto o contato permanece
+- `game.collision_exit(name)` → verdadeiro só no frame de saída
+
+Helpers auxiliares de debug:
+- `game.get_collisions()` → contatos atuais
+- `game.get_current_collisions()` → contatos atuais
+- `game.get_previous_collisions()` → contatos do frame anterior
+
+
+## Logs Lua
+- Erros de script agora saem padronizados com cena, entidade, id, script, stage e kind.
+- `print(...)` em Lua recebe prefixo contextual automaticamente.
+- Helpers extras de log disponíveis: `game.log(msg)`, `game.warn(msg)`, `game.error(msg)`.
+
+
+## Bloco K — entity.destroy()
+
+- `entity.destroy()` agenda a remoção da entidade para o fim do frame.
+- O runtime evita remoção imediata no meio da iteração.
+- Pedidos duplicados de destroy para a mesma entidade são ignorados com segurança.
+- Quando a entidade é removida, o runtime limpa também estado temporário associado:
+  - `script_state` da entidade
+  - cache de VM Lua da entidade
+  - contatos de colisão rastreados para a entidade
+
+Use isso para pickups, projéteis e inimigos derrotados sem quebrar a atualização atual do frame.
+
+
+## Documento curto oficial
+Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e oficial da API e da regra de estado (`save.*`, `session.*`, `state.*`).

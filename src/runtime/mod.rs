@@ -67,12 +67,25 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
 
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("▶ Play").clicked() {
+                    if ui.button("▶ Novo jogo").clicked() {
                         host.set_play_state(RuntimePlayState::Playing);
                         runtime.window_open = true;
                         let scene = host.active_scene_snapshot().clone();
-                        runtime.start_from_scene(&scene);
-                        host.set_status("▶ Runtime iniciado".to_string());
+                        runtime.start_from_scene_as_new_game(&scene);
+                        host.set_status("▶ Novo jogo iniciado".to_string());
+                    }
+                    if ui.button("⤴ Continuar").clicked() {
+                        host.set_play_state(RuntimePlayState::Playing);
+                        runtime.window_open = true;
+                        let scene = host.active_scene_snapshot().clone();
+                        let project_root = host.project_root().to_path_buf();
+                        match runtime.continue_from_save(&project_root, &scene) {
+                            Ok(_) => host.set_status("⤴ Jogo continuado do save".to_string()),
+                            Err(err) => {
+                                runtime.start_from_scene(&scene);
+                                host.set_status(format!("ℹ {} Abrindo cena atual do editor.", err));
+                            }
+                        }
                     }
                     if ui.button("⏸ Pause").clicked() {
                         host.set_play_state(RuntimePlayState::Paused);
@@ -176,7 +189,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         ui.label(format!("Etapa: {:?}", runtime.last_stage));
     });
 
-    ui.label("WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause");
+    ui.label("WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state");
     ui.separator();
 
     ui.horizontal_wrapped(|ui| {
