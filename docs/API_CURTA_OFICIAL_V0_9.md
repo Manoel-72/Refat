@@ -130,3 +130,27 @@ Use `demo_platformer/assets/scenes/validation.scene.json` para validar:
 - `game.get_collision_ids()` / `game.get_collision_names()`
 - `game.get_current_collision_info()` retorna lista de `{ id, name }`
 - `game.raycast(...)` agora também retorna `id` quando houver hit
+
+
+## Continue / Save mínimo
+
+`Continuar` restaura o mínimo seguro desta fase:
+- cena salva
+- posição do player principal
+- velocidade do player principal
+
+Chaves persistidas pela engine para esse fluxo:
+- `continue.checkpoint.scene`
+- `continue.player.id`
+- `continue.player.name`
+- `continue.player.x`
+- `continue.player.y`
+- `continue.player.vx`
+- `continue.player.vy`
+
+Isso é deliberadamente pequeno: o objetivo é endurecer a engine sem prometer serialização completa do mundo.
+
+Checklist de regressão: `docs/CHECKLIST_REGRESSAO_V0_9_1.md`.
+
+
+- `player_probe_state.lua` pode ser usado na cena de validação para provar isolamento de `state.*` entre scripts da mesma entidade.

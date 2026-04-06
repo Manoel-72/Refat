@@ -1,6 +1,6 @@
 {
   "name": "Validation Scene — RS2BR V0.9.1",
-  "_comment": "Cena oficial de regressão. Exercita: session.*, state.*, collision_enter/stay/exit, collision_enabled, entity.destroy(). Abra no editor e pressione Play para validar.",
+  "_comment": "Cena oficial de regressão. Exercita: session.*, state.*, collision_enter/stay/exit, collision_enabled, entity.destroy(), continue/save mínimo e colisão por id. Abra no editor e pressione Play para validar.",
   "background_color": [
     0.05,
     0.08,
@@ -82,6 +82,11 @@
         {
           "LuaScript": {
             "file_path": "assets/scripts/player_platformer.lua"
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/player_probe_state.lua"
           }
         }
       ]

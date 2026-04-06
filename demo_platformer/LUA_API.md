@@ -217,3 +217,6 @@ Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e ofic
 - `game.get_collision_ids()` / `game.get_collision_names()`
 - `game.get_current_collision_info()` retorna lista de `{ id, name }`
 - `game.raycast(...)` agora também retorna `id` quando houver hit
+
+
+- `player_probe_state.lua` pode ser usado na cena de validação para provar isolamento de `state.*` entre scripts da mesma entidade.

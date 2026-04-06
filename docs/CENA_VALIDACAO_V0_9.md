@@ -58,3 +58,11 @@ Objetivo:
 - `session.*` muda durante a rodada e reinicia em novo jogo
 - `state.*` pertence a cada entidade/script e não vaza entre entidades
 - `save.*` representa progresso persistível e não substitui memória temporária
+
+
+## Regressão oficial
+
+Depois de alterar runtime, Lua ou colisão, rode também o checklist em `docs/CHECKLIST_REGRESSAO_V0_9_1.md`.
+
+
+- `player_probe_state.lua` pode ser usado na cena de validação para provar isolamento de `state.*` entre scripts da mesma entidade.

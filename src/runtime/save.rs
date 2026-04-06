@@ -92,6 +92,22 @@ impl SaveData {
         self.entries.insert(key.into(), value.into());
     }
 
+    pub fn set_text(&mut self, key: &str, value: impl Into<String>) {
+        self.entries.insert(key.to_string(), SaveValue::Text(value.into()));
+    }
+
+    pub fn set_float(&mut self, key: &str, value: f64) {
+        self.entries.insert(key.to_string(), SaveValue::Float(value));
+    }
+
+    pub fn set_int(&mut self, key: &str, value: i64) {
+        self.entries.insert(key.to_string(), SaveValue::Int(value));
+    }
+
+    pub fn set_bool(&mut self, key: &str, value: bool) {
+        self.entries.insert(key.to_string(), SaveValue::Bool(value));
+    }
+
     pub fn remove(&mut self, key: &str) -> bool {
         self.entries.remove(key).is_some()
     }

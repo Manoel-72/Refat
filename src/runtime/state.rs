@@ -31,7 +31,13 @@ pub fn script_scope_prefix(entity_id: &str) -> String {
     format!("{}::", entity_id)
 }
 
-
+const SAVE_KEY_PLAYER_ID: &str = "continue.player.id";
+const SAVE_KEY_PLAYER_NAME: &str = "continue.player.name";
+const SAVE_KEY_PLAYER_X: &str = "continue.player.x";
+const SAVE_KEY_PLAYER_Y: &str = "continue.player.y";
+const SAVE_KEY_PLAYER_VX: &str = "continue.player.vx";
+const SAVE_KEY_PLAYER_VY: &str = "continue.player.vy";
+const SAVE_KEY_CHECKPOINT_SCENE: &str = "continue.checkpoint.scene";
 
 #[derive(Debug, Clone)]
 pub struct PendingSpawnRequest {
@@ -226,14 +232,25 @@ impl RuntimeState {
         self.save_data = data;
         self.clear_session_state();
         self.clear_script_state();
+        self.game_state.score = 0;
+        self.game_state.loading_label = None;
 
-        if let Some(saved_scene) = self.save_data.current_scene.clone() {
+        let saved_scene = self
+            .save_data
+            .current_scene
+            .clone()
+            .or_else(|| self.save_data.get_text(SAVE_KEY_CHECKPOINT_SCENE).map(str::to_string));
+
+        if let Some(saved_scene) = saved_scene {
             if let Some(scene_path) = Self::resolve_saved_scene_path(project_root, &saved_scene) {
-                return self.start_from_path(scene_path);
+                self.start_from_path(scene_path)?;
+                self.restore_continue_runtime_state();
+                return Ok(());
             }
         }
 
         self.start_from_scene(fallback_scene);
+        self.restore_continue_runtime_state();
         Ok(())
     }
 
@@ -561,10 +578,24 @@ impl RuntimeState {
                 .unwrap_or(path.as_path())
                 .to_string_lossy()
                 .replace('\\', "/");
-            self.save_data.current_scene = Some(persisted_path);
+            self.save_data.current_scene = Some(persisted_path.clone());
+            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, persisted_path);
         } else if let Some(scene) = &self.active_scene {
             self.save_data.current_scene = Some(scene.name.clone());
+            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, scene.name.clone());
         }
+
+        if let Some(scene) = &self.active_scene {
+            if let Some((player_id, player_name, x, y, vx, vy)) = capture_continue_player_snapshot(scene) {
+                self.save_data.set_text(SAVE_KEY_PLAYER_ID, player_id);
+                self.save_data.set_text(SAVE_KEY_PLAYER_NAME, player_name);
+                self.save_data.set_float(SAVE_KEY_PLAYER_X, x as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_Y, y as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_VX, vx as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_VY, vy as f64);
+            }
+        }
+
         self.save_data.save_to_project(project_root)
     }
 
@@ -583,6 +614,33 @@ impl RuntimeState {
     pub fn delete_save(&mut self, project_root: &Path) -> bool {
         self.save_data = SaveData::new();
         SaveData::delete_save(project_root)
+    }
+
+    fn restore_continue_runtime_state(&mut self) {
+        let Some(scene) = self.active_scene.as_mut() else {
+            return;
+        };
+
+        let saved_player_id = self.save_data.get_text(SAVE_KEY_PLAYER_ID).map(str::to_string);
+        let saved_player_name = self.save_data.get_text(SAVE_KEY_PLAYER_NAME).map(str::to_string);
+        let saved_x = self.save_data.get_float(SAVE_KEY_PLAYER_X).map(|v| v as f32);
+        let saved_y = self.save_data.get_float(SAVE_KEY_PLAYER_Y).map(|v| v as f32);
+        let saved_vx = self.save_data.get_float(SAVE_KEY_PLAYER_VX).map(|v| v as f32);
+        let saved_vy = self.save_data.get_float(SAVE_KEY_PLAYER_VY).map(|v| v as f32);
+
+        let Some(player) = find_continue_player_mut(scene, saved_player_id.as_deref(), saved_player_name.as_deref()) else {
+            return;
+        };
+
+        if let Some(transform) = player.transform_mut() {
+            if let Some(x) = saved_x { transform.x = x; }
+            if let Some(y) = saved_y { transform.y = y; }
+        }
+
+        if let Some(velocity) = player.velocity_mut() {
+            if let Some(vx) = saved_vx { velocity.x = vx; }
+            if let Some(vy) = saved_vy { velocity.y = vy; }
+        }
     }
 
     fn reset_timing_state(&mut self) {
@@ -784,6 +842,7 @@ impl RuntimeState {
         })
     }
 
+
     fn build_spawn_entity(template: &str, x: f32, y: f32) -> Entity {
         let template_name = template.trim().to_ascii_lowercase();
         let mut entity = Entity::new(match template_name.as_str() {
@@ -825,3 +884,73 @@ impl RuntimeState {
         entity
     }
 }
+
+
+
+fn capture_continue_player_snapshot(scene: &Scene) -> Option<(String, String, f32, f32, f32, f32)> {
+    let player = find_continue_player(scene, None, None)?;
+    let transform = player.transform()?;
+    let velocity = player.velocity().cloned().unwrap_or_default();
+    Some((
+        player.id.clone(),
+        player.name.clone(),
+        transform.x,
+        transform.y,
+        velocity.x,
+        velocity.y,
+    ))
+}
+
+fn find_continue_player<'a>(scene: &'a Scene, preferred_id: Option<&str>, preferred_name: Option<&str>) -> Option<&'a Entity> {
+    if let Some(id) = preferred_id {
+        if let Some(entity) = scene.find_entity(id) {
+            return Some(entity);
+        }
+    }
+
+    let mut match_id: Option<String> = None;
+    if let Some(name) = preferred_name {
+        scene.visit_entities(|entity| {
+            if match_id.is_none() && entity.name == name {
+                match_id = Some(entity.id.clone());
+            }
+        });
+        if let Some(id) = match_id.as_deref() {
+            return scene.find_entity(id);
+        }
+    }
+
+    scene.visit_entities(|entity| {
+        if match_id.is_none() && entity.name.eq_ignore_ascii_case("Player") {
+            match_id = Some(entity.id.clone());
+        }
+    });
+
+    match_id.as_deref().and_then(|id| scene.find_entity(id))
+}
+
+fn find_continue_player_mut<'a>(scene: &'a mut Scene, preferred_id: Option<&str>, preferred_name: Option<&str>) -> Option<&'a mut Entity> {
+    if let Some(id) = preferred_id {
+        if scene.find_entity(id).is_some() {
+            return scene.find_entity_mut(id);
+        }
+    }
+
+    let mut match_id: Option<String> = None;
+    if let Some(name) = preferred_name {
+        scene.visit_entities(|entity| {
+            if match_id.is_none() && entity.name == name {
+                match_id = Some(entity.id.clone());
+            }
+        });
+    }
+    if match_id.is_none() {
+        scene.visit_entities(|entity| {
+            if match_id.is_none() && entity.name.eq_ignore_ascii_case("Player") {
+                match_id = Some(entity.id.clone());
+            }
+        });
+    }
+    match_id.and_then(|id| scene.find_entity_mut(&id))
+}
+

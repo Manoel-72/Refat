@@ -175,3 +175,23 @@ Use isso para pickups, projéteis e inimigos derrotados sem quebrar a atualizaç
 - `game.get_collision_ids()` / `game.get_collision_names()`
 - `game.get_current_collision_info()` retorna lista de `{ id, name }`
 - `game.raycast(...)` agora também retorna `id` quando houver hit
+
+
+## Continue / save mínimo oficial (V0.9.1)
+
+O fluxo de **Continuar** agora restaura a base mínima segura de gameplay:
+- cena salva (`save_data.current_scene`)
+- checkpoint/cena persistida em `continue.checkpoint.scene`
+- player principal por `continue.player.id` e fallback por nome
+- posição do player (`continue.player.x`, `continue.player.y`)
+- velocidade do player (`continue.player.vx`, `continue.player.vy`)
+
+Isso não tenta serializar o mundo inteiro. A intenção nesta fase é manter um **continue confiável e pequeno**, sem misturar persistência real com estado temporário de runtime.
+
+API oficial recomendada de tempo:
+- `game.delta_time()`
+- `game.elapsed_time()`
+
+Aliases como `game.get_delta_time()` e `game.get_elapsed_time()` ficam apenas como compatibilidade temporária.
+
+Para regressão manual, use `docs/CHECKLIST_REGRESSAO_V0_9_1.md`.
