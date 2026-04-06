@@ -41,19 +41,41 @@ Os dois podem coexistir na mesma engine, mas com papéis diferentes:
 
 A recomendação atual é evitar duplicar responsabilidade na mesma entidade. Para comportamento simples, prefira RS2. Para lógica mais rica, prefira Lua.
 
-## API Lua disponível hoje
-- `entity.x`, `entity.y`, `entity.vx`, `entity.vy`, `entity.name`
+## API Lua disponível (V0.9)
+- `entity.x`, `entity.y`, `entity.vx`, `entity.vy`, `entity.name`, `entity.id`
+- `entity.grounded`, `entity.visible`, `entity.rotation`, `entity.scale_x`, `entity.scale_y`
 - `entity.set_position(x, y)`
 - `entity.set_velocity(vx, vy)`
+- `entity.apply_impulse(ix, iy)` — soma impulso à velocidade instantaneamente
 - `entity.set_rotation(r)`
 - `entity.set_visible(bool)`
 - `entity.play_anim("clip")`
 - `input.key_held("A")`, `input.key_pressed("Space")`
+- `input.mouse_pos()`, `input.mouse_left`, `input.mouse_right`
 - `game.delta_time`, `game.elapsed_time`
 - `game.log("msg")`
 - `game.change_scene("path")`
-- `game.get_collisions()`
+- `game.get_collisions()` — lista de nomes das entidades em contato
+- `game.collision_enter(name)` — bool, true se name colide neste frame
+- `game.raycast(ox, oy, dx, dy, dist)` → `{hit, x, y, dist, name}`
 - `save.set`, `save.get`, `save.has`, `save.remove`
+
+## Física (V0.9)
+- Gravidade: 540 px/s² por padrão (gravity_scale=1)
+- Terminal velocity: 800 px/s máx de queda
+- Pulo: use `entity.apply_impulse(0, 380)` com `entity.grounded` como guarda
+- Colisão: AABB + MTV, resolução por eixo de menor sobreposição
+- Layers/masks: bit flags 0–7, 0 = interage com tudo
+
+## Demo Platformer
+O projeto `demo_platformer/` contém uma cena testável imediatamente:
+- Player azul controlável (WASD + Espaço)
+- Chão + 3 plataformas (retângulos coloridos, sem sprites externos)
+- 2 moedas coletáveis (trigger amarelo com efeito bob)
+- 1 inimigo patrulhando (vermelho com reversão por raycast)
+- Score persistido via `save`
+
+Abra `demo_platformer/project.json` como projeto no engine.
 
 ## Observações de performance
 A VM Lua agora é cacheada por `entity_id + script_path`, e só é recriada quando o arquivo muda. Isso evita criar uma VM nova a cada frame.

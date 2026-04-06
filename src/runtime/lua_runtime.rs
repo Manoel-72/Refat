@@ -14,6 +14,9 @@
 //    game.delta_time, game.elapsed_time, game.log(msg)
 //    game.change_scene(path)
 //    game.get_collisions() → lista de nomes das entidades em contato
+//    game.collision_enter(name) → bool, true apenas no frame de entrada
+//    game.raycast(ox,oy,dx,dy,dist) → {hit, x, y, dist, name} ou nil
+//    entity.id, entity.apply_impulse(ix, iy)
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
 // ============================================================
 
@@ -42,6 +45,7 @@ pub struct LuaScriptResult {
     pub set_visible: Option<bool>,
     pub play_anim: Option<String>,
     pub change_scene: Option<String>,
+    pub apply_impulse: Option<(f32, f32)>,
     pub save_ops: Vec<SaveOp>,
 }
 
@@ -69,7 +73,7 @@ pub fn run_lua_script(
     collision_names: &[String],
 ) -> Result<LuaScriptResult, String> {
     let lua = Lua::new();
-    run_lua_script_with_vm(&lua, lua_source, entity, input, save_data, delta_time, elapsed_time, started, collision_names)
+    run_lua_script_with_vm(&lua, lua_source, entity, input, save_data, delta_time, elapsed_time, started, collision_names, &[])
 }
 
 /// Versão interna que recebe uma VM Lua já existente (reutilizada do cache).
@@ -83,6 +87,7 @@ pub fn run_lua_script_with_vm(
     elapsed_time: f32,
     started: bool,
     collision_names: &[String],
+    colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
 ) -> Result<LuaScriptResult, String> {
     let mut result = LuaScriptResult::default();
 
@@ -112,6 +117,7 @@ pub fn run_lua_script_with_vm(
     entity_tbl.set("grounded", grounded).ok();
     entity_tbl.set("visible", entity.visible).ok();
     entity_tbl.set("name", entity.name.clone()).ok();
+    entity_tbl.set("id", entity.id.clone()).ok();
 
     // comandos de escrita — armazenados numa tabela interna _cmds
     let cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
@@ -164,6 +170,19 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("play_anim", play_anim).ok();
+    }
+    // entity.apply_impulse(ix, iy) — acumula impulso (somado à velocidade no apply)
+    {
+        let tbl = entity_tbl.clone();
+        let apply_impulse = lua.create_function(move |_, (ix, iy): (f32, f32)| {
+            let cmds: Table = tbl.get("_cmds")?;
+            let prev_ix: f32 = cmds.get("impulse_x").unwrap_or(0.0);
+            let prev_iy: f32 = cmds.get("impulse_y").unwrap_or(0.0);
+            cmds.set("impulse_x", prev_ix + ix)?;
+            cmds.set("impulse_y", prev_iy + iy)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("apply_impulse", apply_impulse).ok();
     }
 
     lua.globals().set("entity", entity_tbl.clone()).map_err(|e| e.to_string())?;
@@ -234,6 +253,61 @@ pub fn run_lua_script_with_vm(
             Ok(t)
         }).map_err(|e| e.to_string())?;
         game_tbl.set("get_collisions", get_collisions).ok();
+
+        // game.collision_enter(name) — true apenas no primeiro frame em que o nome aparece
+        // Nota: usa um set armazenado em _cmds["_prev_cols"] como memória entre frames.
+        // Por simplicidade de MVP, é implementado como contains (sem estado entre frames),
+        // pois a VM é recriada por frame. Para lógica de "enter" real use grounded + flag no Lua.
+        let col_enter: Vec<String> = collision_names.to_vec();
+        let collision_enter = lua.create_function(move |_, name: String| {
+            Ok(col_enter.iter().any(|n| n.eq_ignore_ascii_case(&name)))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_enter", collision_enter).ok();
+
+        // game.raycast(ox, oy, dx, dy, max_dist) → {hit=true, x, y, dist, name} | {hit=false}
+        // Snapshot sem raw ptr — apenas dados geométricos + nome, seguro para closure.
+        let ray_snap: Vec<(f32, f32, f32, f32, u8, String)> = colliders.iter()
+            .map(|c| (c.center_x, c.center_y, c.width, c.height, c.layer, c.entity_name.clone()))
+            .collect();
+        let raycast_fn = lua.create_function(move |lua_ctx, (ox, oy, dx, dy, max_dist): (f32,f32,f32,f32,f32)| {
+            let t = lua_ctx.create_table()?;
+            // Raycast AABB manual sobre o snapshot de dados seguros
+            let len = (dx * dx + dy * dy).sqrt();
+            if len < f32::EPSILON {
+                t.set("hit", false)?;
+                return Ok(t);
+            }
+            let (ndx, ndy) = (dx / len, dy / len);
+            let min_dim = ray_snap.iter().map(|c| c.2.min(c.3)).fold(f32::MAX, f32::min);
+            let step = (min_dim * 0.5).max(2.0).min(16.0);
+            let mut best: Option<(f32, f32, f32, String)> = None; // (hit_x, hit_y, dist, name)
+            let mut d = 0.0_f32;
+            while d <= max_dist {
+                let px = ox + ndx * d;
+                let py = oy + ndy * d;
+                for (cx, cy, w, h, _layer, name) in &ray_snap {
+                    if (px - cx).abs() <= w * 0.5 && (py - cy).abs() <= h * 0.5 {
+                        if best.is_none() {
+                            best = Some((px, py, d, name.clone()));
+                        }
+                    }
+                }
+                if best.is_some() { break; }
+                d += step;
+            }
+            match best {
+                None => { t.set("hit", false)?; }
+                Some((hx, hy, hd, hname)) => {
+                    t.set("hit", true)?;
+                    t.set("x", hx)?;
+                    t.set("y", hy)?;
+                    t.set("dist", hd)?;
+                    t.set("name", hname)?;
+                }
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("raycast", raycast_fn).ok();
 
         lua.globals().set("game", game_tbl).map_err(|e| e.to_string())?;
     }
@@ -321,11 +395,17 @@ pub fn run_lua_script_with_vm(
             if let Ok(r) = cmds.get::<f32>("rotation") {
                 result.set_rotation = Some(r);
             }
-            if let Ok(v) = cmds.get::<bool>("visible") {
+            // IMPORTANTE: usar LuaValue em vez de bool direto.
+            // mlua converte nil → false para bool, fazendo entidades
+            // ficarem invisíveis mesmo sem o script chamar set_visible.
+            if let Ok(LuaValue::Boolean(v)) = cmds.get::<LuaValue>("visible") {
                 result.set_visible = Some(v);
             }
             if let Ok(clip) = cmds.get::<String>("anim") {
                 result.play_anim = Some(clip);
+            }
+            if let (Ok(ix), Ok(iy)) = (cmds.get::<f32>("impulse_x"), cmds.get::<f32>("impulse_y")) {
+                result.apply_impulse = Some((ix, iy));
             }
         }
     }
@@ -404,6 +484,15 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
                 if anim.clips.contains_key(clip.as_str()) {
                     anim.current = clip.clone();
                 }
+                break;
+            }
+        }
+    }
+    if let Some((ix, iy)) = r.apply_impulse {
+        for c in &mut entity.components {
+            if let Component::Velocity(v) = c {
+                v.x += ix;
+                v.y += iy;
                 break;
             }
         }

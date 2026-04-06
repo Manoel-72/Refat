@@ -1,0 +1,127 @@
+{
+  "name": "Demo Platformer",
+  "background_color": [0.08, 0.10, 0.18],
+  "entities": [
+    {
+      "id": "ent-camera-001",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Camera2D": { "zoom": 1.0, "is_main": true } }
+      ]
+    },
+    {
+      "id": "ent-player-001",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": -200.0, "y": -100.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.20, "color_g": 0.60, "color_b": 1.00, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 1.0, "is_static": false, "grounded": false } },
+        { "Velocity": { "x": 0.0, "y": 0.0 } },
+        { "BoxCollider": { "width": 32.0, "height": 48.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 1, "mask": 2 } },
+        { "LuaScript": { "file_path": "assets/scripts/player_platformer.lua" } },
+        { "TextLabel": { "text": "WASD/Setas: mover | Espaço: pular", "font_size": 16.0, "color_r": 1.0, "color_g": 1.0, "color_b": 1.0, "color_a": 0.7, "screen_space": true } }
+      ]
+    },
+    {
+      "id": "ent-ground-001",
+      "name": "Chao",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 0.0, "y": -280.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.35, "color_g": 0.55, "color_b": 0.30, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
+        { "BoxCollider": { "width": 800.0, "height": 32.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+      ]
+    },
+    {
+      "id": "ent-plat-001",
+      "name": "Plataforma A",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": -120.0, "y": -160.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
+        { "BoxCollider": { "width": 160.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+      ]
+    },
+    {
+      "id": "ent-plat-002",
+      "name": "Plataforma B",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 140.0, "y": -80.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
+        { "BoxCollider": { "width": 160.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+      ]
+    },
+    {
+      "id": "ent-plat-003",
+      "name": "Plataforma C",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 320.0, "y": 40.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
+        { "BoxCollider": { "width": 120.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+      ]
+    },
+    {
+      "id": "ent-moeda-001",
+      "name": "Moeda",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 140.0, "y": -40.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.85, "color_b": 0.10, "color_a": 1.0 } },
+        { "BoxCollider": { "width": 24.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": true, "layer": 4, "mask": 1 } },
+        { "LuaScript": { "file_path": "assets/scripts/coin_collector.lua" } }
+      ]
+    },
+    {
+      "id": "ent-moeda-002",
+      "name": "Moeda",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 320.0, "y": 80.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.85, "color_b": 0.10, "color_a": 1.0 } },
+        { "BoxCollider": { "width": 24.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": true, "layer": 4, "mask": 1 } },
+        { "LuaScript": { "file_path": "assets/scripts/coin_collector.lua" } }
+      ]
+    },
+    {
+      "id": "ent-enemy-001",
+      "name": "Inimigo",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 80.0, "y": -240.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.25, "color_b": 0.25, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 1.0, "is_static": false, "grounded": false } },
+        { "Velocity": { "x": 0.0, "y": 0.0 } },
+        { "BoxCollider": { "width": 32.0, "height": 40.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 2 } },
+        { "LuaScript": { "file_path": "assets/scripts/enemy_patrol.lua" } }
+      ]
+    },
+    {
+      "id": "ent-score-001",
+      "name": "ScoreHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "TextLabel": { "text": "Score: 0", "font_size": 22.0, "color_r": 1.0, "color_g": 0.90, "color_b": 0.30, "color_a": 1.0, "screen_space": true } }
+      ]
+    }
+  ]
+}

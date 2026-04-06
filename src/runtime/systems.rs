@@ -110,6 +110,7 @@ fn update_entities_runtime_recursive(
             elapsed_time,
             lua_vms,
             &collision_names,
+            colliders,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }

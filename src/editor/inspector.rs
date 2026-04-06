@@ -904,12 +904,58 @@ fn draw_lua_script_component_ui(
     sc: &LuaScript,
     updated_components: &mut Vec<(usize, Component)>,
 ) {
+    use std::fs;
+
+    // Lista todos os .lua em assets/scripts (igual ao RS2 faz para .rs2)
+    let scripts_dir = app.project_root.join("assets/scripts");
+    let mut lua_files: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&scripts_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) == Some("lua") {
+                if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                    lua_files.push(name.to_string());
+                }
+            }
+        }
+    }
+    lua_files.sort();
+
     let mut path = sc.file_path.clone();
     let mut changed = false;
 
+    let popup_id = egui::Id::new(format!("select_lua_script_popup_{}_{}", index, scripts_dir.display()));
+
     ui.horizontal(|ui| {
+        // ── botão Selecionar (popup igual ao RS2) ──
+        let select_btn = ui.button("Selecionar LuaScript");
+        if select_btn.clicked() {
+            ui.memory_mut(|mem| mem.open_popup(popup_id));
+        }
+
+        egui::popup::popup_below_widget(
+            ui,
+            popup_id,
+            &select_btn,
+            egui::popup::PopupCloseBehavior::CloseOnClickOutside,
+            |ui: &mut egui::Ui| {
+                ui.set_min_width(220.0);
+                ui.label("Selecione um script Lua:");
+                if lua_files.is_empty() {
+                    ui.label(egui::RichText::new("Nenhum .lua encontrado em assets/scripts").small().weak());
+                }
+                for script_name in &lua_files {
+                    if ui.button(script_name).clicked() {
+                        path = format!("assets/scripts/{}", script_name);
+                        changed = true;
+                        ui.memory_mut(|mem| mem.close_popup());
+                    }
+                }
+            },
+        );
+
+        // ── botão Criar ──
         if ui.button("Criar LuaScript").clicked() {
-            let scripts_dir = app.project_root.join("assets/scripts");
             match app.assets.create_lua_script_file(&scripts_dir, "novo_script_lua") {
                 Ok(new_path) => {
                     path = format!(

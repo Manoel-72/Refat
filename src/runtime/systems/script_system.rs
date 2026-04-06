@@ -93,6 +93,7 @@ pub fn run_lua_scripts_for_entity(
     elapsed_time: f32,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_names: &[String],
+    colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -165,7 +166,8 @@ pub fn run_lua_scripts_for_entity(
             delta_time,
             elapsed_time,
             already_started,
-            &collision_names,
+            collision_names,
+            colliders,
         ) {
             Ok(result) => {
                 let change_scene = result.change_scene.clone();

@@ -9,25 +9,30 @@ pub fn capture_runtime_input(ctx: &egui::Context, previous: &RuntimeInput) -> Ru
     let mut keyboard = previous.keyboard.clone();
     keyboard.begin_frame();
 
+    // wants_keyboard_input é true quando há um TextEdit focado.
+    // Nesse caso ainda capturamos as teclas de jogo (WASD, setas, Space),
+    // mas ignoramos apenas se o contexto for de digitação explícita.
+    // A solução correta: sempre ler key_down — o egui não "consome" key_down,
+    // só key_pressed em alguns widgets. key_down reflete o estado físico da tecla.
     ctx.input(|i| {
-        keyboard.set_key_down(KeyCode::W, i.key_down(egui::Key::W));
-        keyboard.set_key_down(KeyCode::A, i.key_down(egui::Key::A));
-        keyboard.set_key_down(KeyCode::S, i.key_down(egui::Key::S));
-        keyboard.set_key_down(KeyCode::D, i.key_down(egui::Key::D));
-        keyboard.set_key_down(KeyCode::Up, i.key_down(egui::Key::ArrowUp));
-        keyboard.set_key_down(KeyCode::Down, i.key_down(egui::Key::ArrowDown));
-        keyboard.set_key_down(KeyCode::Left, i.key_down(egui::Key::ArrowLeft));
+        keyboard.set_key_down(KeyCode::W,     i.key_down(egui::Key::W));
+        keyboard.set_key_down(KeyCode::A,     i.key_down(egui::Key::A));
+        keyboard.set_key_down(KeyCode::S,     i.key_down(egui::Key::S));
+        keyboard.set_key_down(KeyCode::D,     i.key_down(egui::Key::D));
+        keyboard.set_key_down(KeyCode::Up,    i.key_down(egui::Key::ArrowUp));
+        keyboard.set_key_down(KeyCode::Down,  i.key_down(egui::Key::ArrowDown));
+        keyboard.set_key_down(KeyCode::Left,  i.key_down(egui::Key::ArrowLeft));
         keyboard.set_key_down(KeyCode::Right, i.key_down(egui::Key::ArrowRight));
         keyboard.set_key_down(KeyCode::Space, i.key_down(egui::Key::Space));
         keyboard.set_key_down(KeyCode::Enter, i.key_down(egui::Key::Enter));
-        keyboard.set_key_down(KeyCode::Escape, i.key_down(egui::Key::Escape));
+        keyboard.set_key_down(KeyCode::Escape,i.key_down(egui::Key::Escape));
 
         RuntimeInput {
             keyboard,
-            mouse_left: i.pointer.button_down(egui::PointerButton::Primary),
-            mouse_right: i.pointer.button_down(egui::PointerButton::Secondary),
+            mouse_left:   i.pointer.button_down(egui::PointerButton::Primary),
+            mouse_right:  i.pointer.button_down(egui::PointerButton::Secondary),
             mouse_middle: i.pointer.button_down(egui::PointerButton::Middle),
-            mouse_pos: i.pointer.hover_pos().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0)),
+            mouse_pos:    i.pointer.hover_pos().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0)),
         }
     })
 }

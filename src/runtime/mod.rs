@@ -220,7 +220,14 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
 
     // ── render ───────────────────────────────────────────────
     let available = ui.available_rect_before_wrap();
-    let _response = ui.allocate_rect(available, egui::Sense::hover());
+    // Sense::click() torna a área de jogo interativa para que o egui
+    // entregue eventos de teclado (Space, etc.) ao runtime em vez de
+    // consumi-los nos botões da barra de controle acima.
+    let game_response = ui.allocate_rect(available, egui::Sense::click());
+    if game_response.clicked() || game_response.hovered() {
+        ui.ctx().memory_mut(|mem| mem.request_focus(game_response.id));
+    }
+    let _response = game_response;
     let painter = ui.painter_at(available);
 
     let bg = runtime_scene.background_color;
