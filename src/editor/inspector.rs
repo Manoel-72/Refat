@@ -982,82 +982,241 @@ fn draw_animator_component_ui(
         .get(animator.current.as_str())
         .map(|clip| clip.fps)
         .unwrap_or(8.0);
-    let mut frames_text = animator
+    let mut frames: Vec<String> = animator
         .clips
         .get(animator.current.as_str())
-        .map(|clip| clip.frames.join("\n"))
+        .map(|clip| clip.frames.clone())
         .unwrap_or_default();
     let mut playing = animator.playing;
     let mut looped = animator.looped;
     let mut changed = false;
 
-    egui::Grid::new(format!("animator_{}", index))
-        .num_columns(2)
-        .spacing([8.0, 4.0])
+    // ── Configurações básicas ──────────────────────────────────
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(26, 32, 42))
+        .rounding(5.0)
+        .inner_margin(egui::Margin::same(8.0))
         .show(ui, |ui| {
-            ui.label("Clip atual:");
-            changed |= ui.text_edit_singleline(&mut current).changed();
-            ui.end_row();
-            ui.label("FPS:");
-            changed |= ui.add(egui::DragValue::new(&mut fps).speed(0.25).range(1.0..=60.0)).changed();
-            ui.end_row();
-            ui.label("Playing:");
-            changed |= ui.checkbox(&mut playing, "").changed();
-            ui.end_row();
-            ui.label("Loop:");
-            changed |= ui.checkbox(&mut looped, "").changed();
-            ui.end_row();
+            egui::Grid::new(format!("animator_cfg_{}", index))
+                .num_columns(2)
+                .spacing([12.0, 5.0])
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new("Clip:").strong());
+                    changed |= ui.text_edit_singleline(&mut current)
+                        .on_hover_text("Nome do clip de animação atual")
+                        .changed();
+                    ui.end_row();
+
+                    ui.label(egui::RichText::new("FPS:").strong());
+                    ui.horizontal(|ui| {
+                        changed |= ui.add(
+                            egui::DragValue::new(&mut fps)
+                                .speed(0.5)
+                                .range(1.0..=60.0)
+                                .suffix(" fps"),
+                        ).on_hover_text("Quadros por segundo da animação").changed();
+                        let duration = if fps > 0.0 { frames.len() as f32 / fps } else { 0.0 };
+                        ui.label(
+                            egui::RichText::new(format!("= {:.2}s", duration))
+                                .small()
+                                .color(egui::Color32::from_rgb(139, 148, 158)),
+                        );
+                    });
+                    ui.end_row();
+
+                    ui.label(egui::RichText::new("Playing:").strong());
+                    changed |= ui.checkbox(&mut playing, "")
+                        .on_hover_text("Animação tocando no runtime").changed();
+                    ui.end_row();
+
+                    ui.label(egui::RichText::new("Loop:").strong());
+                    changed |= ui.checkbox(&mut looped, "")
+                        .on_hover_text("Repete a animação ao chegar no fim").changed();
+                    ui.end_row();
+                });
         });
 
-    let preview_frames = normalize_animator_frames(&frames_text);
-    ui.group(|ui| {
-        ui.label(egui::RichText::new("Preview simples").strong());
-        ui.label(format!("Clip: {}", if current.trim().is_empty() { "<vazio>" } else { &current }));
-        ui.label(format!("Frames detectados: {}", preview_frames.len()));
-        if let Some(first) = preview_frames.first() {
-            ui.label(format!("Primeiro frame: {}", first));
-        } else {
-            ui.label("Primeiro frame: —");
-        }
-        let duration = if fps > 0.0 { preview_frames.len() as f32 / fps } else { 0.0 };
-        ui.label(format!("Duração estimada: {:.2}s", duration));
+    ui.add_space(6.0);
+
+    // ── Cabeçalho da lista de frames ──────────────────────────
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(format!("Frames  ({})", frames.len()))
+                .strong()
+                .size(12.0),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(
+                egui::Button::new(
+                    egui::RichText::new("Ordenar A-Z").small()
+                )
+                .min_size(egui::vec2(80.0, 18.0))
+            ).on_hover_text("Ordena os frames em ordem alfabética (útil quando os sprites têm numeração no nome)").clicked() {
+                frames.sort();
+                changed = true;
+            }
+            if ui.add(
+                egui::Button::new(egui::RichText::new("Limpar").small())
+                    .min_size(egui::vec2(54.0, 18.0))
+            ).on_hover_text("Remove todos os frames do clip").clicked() {
+                frames.clear();
+                changed = true;
+            }
+        });
     });
 
-    ui.label(egui::RichText::new("Frames (um por linha):").strong());
-    ui.label(egui::RichText::new("Aceita colar com vírgula, ponto e vírgula, espaço ou quebra de linha.").small().weak());
-
-    let response = ui.add(
-        egui::TextEdit::multiline(&mut frames_text)
-            .desired_rows(6)
-            .hint_text("assets/sprites/run_01.png\nassets/sprites/run_02.png"),
+    ui.label(
+        egui::RichText::new("Cole paths de sprites abaixo, um por linha. Arraste sprites do Asset Browser para cá.")
+            .small()
+            .color(egui::Color32::from_rgb(100, 115, 135)),
     );
-    if response.changed() {
-        if !frames_text.contains('\n') && (frames_text.contains(',') || frames_text.contains(';')) {
-            frames_text = normalize_animator_frames(&frames_text).join("\n");
-        }
+
+    // ── Lista visual de frames ─────────────────────────────────
+    let frame_count = frames.len();
+    let mut to_delete: Option<usize> = None;
+    let mut to_move_up: Option<usize> = None;
+    let mut to_move_down: Option<usize> = None;
+
+    if frame_count == 0 {
+        egui::Frame::none()
+            .fill(egui::Color32::from_rgb(20, 26, 35))
+            .rounding(4.0)
+            .inner_margin(egui::Margin::same(10.0))
+            .show(ui, |ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.label(
+                        egui::RichText::new("Nenhum frame. Cole paths abaixo ou use o campo de texto.")
+                            .small()
+                            .color(egui::Color32::from_rgb(80, 95, 115)),
+                    );
+                });
+            });
+    } else {
+        egui::ScrollArea::vertical()
+            .id_source(format!("anim_frames_{}", index))
+            .max_height(180.0)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                for (i, frame) in frames.iter().enumerate() {
+                    egui::Frame::none()
+                        .fill(if i % 2 == 0 {
+                            egui::Color32::from_rgb(24, 30, 40)
+                        } else {
+                            egui::Color32::from_rgb(28, 35, 46)
+                        })
+                        .rounding(3.0)
+                        .inner_margin(egui::Margin { left: 8.0, right: 4.0, top: 2.0, bottom: 2.0 })
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                // Número do frame
+                                ui.label(
+                                    egui::RichText::new(format!("{:>2}.", i + 1))
+                                        .small()
+                                        .monospace()
+                                        .color(egui::Color32::from_rgb(88, 166, 255)),
+                                );
+                                // Nome do arquivo (só o final do path)
+                                let display = frame
+                                    .split(['/', '\\'])
+                                    .last()
+                                    .unwrap_or(frame.as_str());
+                                ui.label(
+                                    egui::RichText::new(display)
+                                        .small()
+                                        .color(egui::Color32::from_rgb(210, 220, 235)),
+                                )
+                                .on_hover_text(frame.as_str());
+
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if ui.add(
+                                        egui::Button::new(egui::RichText::new("X").small().color(egui::Color32::from_rgb(200, 80, 80)))
+                                            .min_size(egui::vec2(18.0, 16.0))
+                                            .frame(false)
+                                    ).on_hover_text("Remover este frame").clicked() {
+                                        to_delete = Some(i);
+                                    }
+                                    if i + 1 < frame_count {
+                                        if ui.add(
+                                            egui::Button::new(egui::RichText::new("v").small())
+                                                .min_size(egui::vec2(16.0, 16.0))
+                                                .frame(false)
+                                        ).on_hover_text("Mover para baixo").clicked() {
+                                            to_move_down = Some(i);
+                                        }
+                                    }
+                                    if i > 0 {
+                                        if ui.add(
+                                            egui::Button::new(egui::RichText::new("^").small())
+                                                .min_size(egui::vec2(16.0, 16.0))
+                                                .frame(false)
+                                        ).on_hover_text("Mover para cima").clicked() {
+                                            to_move_up = Some(i);
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                }
+            });
+    }
+
+    // Aplica ações da lista
+    if let Some(i) = to_delete {
+        frames.remove(i);
+        changed = true;
+    }
+    if let Some(i) = to_move_up {
+        frames.swap(i, i - 1);
+        changed = true;
+    }
+    if let Some(i) = to_move_down {
+        frames.swap(i, i + 1);
         changed = true;
     }
 
+    // ── Campo de texto para adicionar/colar frames ─────────────
+    ui.add_space(4.0);
+    ui.label(egui::RichText::new("Adicionar frames (cole paths, um por linha):").small().strong());
+
+    let paste_id = egui::Id::new(format!("anim_paste_{}", index));
+    let mut paste_buf = ui.data(|d| d.get_temp::<String>(paste_id).unwrap_or_default());
+
+    let resp = ui.add(
+        egui::TextEdit::multiline(&mut paste_buf)
+            .desired_rows(3)
+            .hint_text("sprites/player/run_01.png\nsprites/player/run_02.png")
+            .font(egui::TextStyle::Monospace),
+    );
+
+    if resp.changed() {
+        ui.data_mut(|d| d.insert_temp(paste_id, paste_buf.clone()));
+    }
+
     ui.horizontal(|ui| {
-        ui.label("Frames:");
-        if ui.button("Organizar lista").clicked() {
+        if ui.button("Adicionar").on_hover_text("Adiciona os paths digitados acima à lista de frames").clicked() {
+            let new_frames = normalize_animator_frames(&paste_buf);
+            if !new_frames.is_empty() {
+                frames.extend(new_frames);
+                paste_buf.clear();
+                ui.data_mut(|d| d.insert_temp(paste_id, String::new()));
+                changed = true;
+            }
+        }
+        if ui.button("Substituir tudo").on_hover_text("Substitui toda a lista pelos paths digitados acima").clicked() {
+            let new_frames = normalize_animator_frames(&paste_buf);
+            frames = new_frames;
+            paste_buf.clear();
+            ui.data_mut(|d| d.insert_temp(paste_id, String::new()));
             changed = true;
         }
     });
 
-    // Aplica a normalização fora do closure para evitar conflito de borrow com frames_text
+    // ── Aplica mudanças ────────────────────────────────────────
     if changed {
-        frames_text = normalize_animator_frames(&frames_text).join("\n");
-
-        let frames = normalize_animator_frames(&frames_text);
-
         let mut clips = std::collections::HashMap::new();
         clips.insert(current.clone(), AnimationClip { frames, fps });
-
-        // Preserva o timer atual para não resetar a animação ao editar no inspector
         let preserved_timer = animator.timer;
         let preserved_prev_clip = animator.prev_clip.clone();
-
         updated_components.push((
             index,
             Component::Animator(Animator {

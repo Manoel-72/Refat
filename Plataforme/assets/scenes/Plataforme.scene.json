@@ -2,24 +2,56 @@
   "name": "Plataforme",
   "entities": [
     {
-      "id": "cbe2c384-2f6c-45dd-95b5-6811e931a193",
-      "name": "Camera",
+      "id": "99fa0d23-7d4d-4f6d-8a6f-8052312d443b",
+      "name": "Nova_Elena_RUN_0001",
       "visible": true,
       "children": [],
       "components": [
         {
           "Transform": {
-            "x": 0.0,
-            "y": 0.0,
+            "x": -0.00000667572,
+            "y": 1.8816795,
             "rotation": 0.0,
             "scale_x": 1.0,
             "scale_y": 1.0
           }
         },
         {
+          "Sprite": {
+            "texture_path": "sprites/Nova_Elena_RUN_0001.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        },
+        {
           "Camera2D": {
             "zoom": 1.0,
             "is_main": true
+          }
+        },
+        {
+          "Script": {
+            "file_path": "assets/scripts/player_controller.rs2"
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
           }
         }
       ],

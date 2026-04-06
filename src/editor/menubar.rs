@@ -405,8 +405,8 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
 
                     if app.open_scenes.len() > 1 {
                         if ui.add(
-                            egui::Button::new(egui::RichText::new("✕").color(TEXT_DIM).small())
-                                .min_size(egui::vec2(16.0, 16.0))
+                            egui::Button::new(egui::RichText::new("[x]").color(TEXT_DIM).small())
+                                .min_size(egui::vec2(24.0, 16.0))
                                 .frame(false)
                         ).on_hover_text("Fechar aba").clicked() {
                             app.close_scene_tab(index);
@@ -418,8 +418,8 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
 
                 // Botão + para nova cena
                 if ui.add(
-                    egui::Button::new(egui::RichText::new("＋").color(TEXT_DIM).small())
-                        .min_size(egui::vec2(22.0, 20.0))
+                    egui::Button::new(egui::RichText::new("[+]").color(TEXT_DIM).small())
+                        .min_size(egui::vec2(28.0, 20.0))
                         .frame(false)
                 ).on_hover_text("Nova Cena").clicked() {
                     let next_name = format!("Cena {}", app.open_scenes.len() + 1);

@@ -99,17 +99,31 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                 });
 
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Trocar cena no runtime:");
-                    for path in host.scene_file_candidates() {
-                        let label = path
-                            .file_stem()
-                            .and_then(|n| n.to_str())
-                            .map(|n| n.replace(".scene", ""))
-                            .unwrap_or_else(|| "Cena".to_string());
-                        if ui.small_button(format!("🎬 {}", label)).clicked() {
-                            runtime.queue_scene_change(path.clone());
-                            host.set_status(format!("Cena agendada: {}", label));
-                        }
+                    let scene_candidates = host.scene_file_candidates();
+                    let count = scene_candidates.len();
+                    if count == 0 {
+                        ui.label(egui::RichText::new("Nenhuma cena salva encontrada.").small().weak());
+                    } else {
+                        ui.menu_button(
+                            egui::RichText::new(format!("Trocar cena ({}) v", count)).small(),
+                            |ui| {
+                                ui.set_min_width(220.0);
+                                ui.label(egui::RichText::new("Cenas disponíveis:").small().weak());
+                                ui.separator();
+                                for path in scene_candidates {
+                                    let label = path
+                                        .file_stem()
+                                        .and_then(|n| n.to_str())
+                                        .map(|n| n.replace(".scene", ""))
+                                        .unwrap_or_else(|| "Cena".to_string());
+                                    if ui.button(format!("  Cena 2D  {}", label)).clicked() {
+                                        runtime.queue_scene_change(path.clone());
+                                        host.set_status(format!("Cena agendada: {}", label));
+                                        ui.close_menu();
+                                    }
+                                }
+                            }
+                        );
                     }
                 });
 
