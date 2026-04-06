@@ -78,6 +78,12 @@ fn update_entities_runtime_recursive(
         let my_collider_data = find_entity_collider(entity);
         let old_position = entity.transform().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0));
 
+        // Salva grounded ANTES de apply_gravity, que o reseta para false.
+        // Assim o Lua lê o valor correto do frame anterior (estava no chão = pode pular).
+        let grounded_before_physics = entity.components.iter()
+            .find_map(|c| if let crate::core::component::Component::RigidBody2D(rb) = c { Some(rb.grounded) } else { None })
+            .unwrap_or(false);
+
         script_system::advance_animator(entity, delta_time);
 
         let (extra_x, extra_y) = script_data.extra_velocity.unwrap_or((0.0, 0.0));
@@ -99,6 +105,12 @@ fn update_entities_runtime_recursive(
         // (podem ajustar velocidade/posição reativamente)
         let collision_names = collect_collision_names(entity_ptr, &my_collider_data, colliders);
         collision_contacts.insert(entity.id.clone(), collision_names.clone());
+
+        // Restaura grounded para o valor correto antes de rodar o Lua.
+        // apply_gravity() zera grounded como efeito colateral — mas o Lua
+        // precisa saber se a entidade estava no chão no frame anterior para
+        // permitir o pulo (Space). Sem isso, entity.grounded é sempre false.
+        physics_system::set_grounded(entity, grounded_before_physics);
 
         if let Some(scene_path) = script_system::run_lua_scripts_for_entity(
             entity,
