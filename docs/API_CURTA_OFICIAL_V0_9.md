@@ -154,3 +154,19 @@ Checklist de regressão: `docs/CHECKLIST_REGRESSAO_V0_9_1.md`.
 
 
 - `player_probe_state.lua` pode ser usado na cena de validação para provar isolamento de `state.*` entre scripts da mesma entidade.
+
+
+## `event` — comunicação leve entre scripts
+
+- `event.emit(name, data)` envia um evento simples para o runtime.
+- `event.listen(name, function(data) end)` registra um listener por nome de evento dentro da VM atual.
+- Eventos usam apenas `nil`, `bool`, `integer`, `number` e `string` como payload.
+- Escopo: local ao runtime atual, não persiste entre cenas/sessões.
+- Entrega atual: eventos emitidos em um frame ficam disponíveis no próximo frame.
+
+## Timers nativos
+
+- `game.after(seconds, function() end)` executa uma vez.
+- `game.every(seconds, function() end)` executa repetidamente.
+- Timers vivem só na VM atual do script e são limpos ao trocar cena/reiniciar sessão.
+- Recomendação: registrar timers em `on_start()` para evitar agendamentos duplicados.

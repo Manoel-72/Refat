@@ -58,7 +58,7 @@ Escreva funções `on_start()` e `on_update(dt)` — o engine chama automaticame
 | `game.log(msg)` | função | Imprime no terminal do engine |
 | `game.change_scene(path)` | função | Carrega outra cena (ex: `"assets/scenes/fase2.scene.json"`) |
 | `game.get_collisions()` | função → lista | Nomes das entidades colidindo com esta neste frame |
-| `game.get_current_collisions()` | função → lista | Snapshot dos contatos atuais |
+| `game.get_current_collisions()` | função → lista | Snapshot atual dos nomes em contato (compatibilidade) |
 | `game.get_previous_collisions()` | função → lista | Snapshot dos contatos do frame anterior |
 | `game.collision_enter(name)` | função → bool | True somente no frame em que o contato começou |
 | `game.collision_stay(name)` | função → bool | True enquanto o contato continua |

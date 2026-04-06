@@ -129,6 +129,8 @@ pub fn run_lua_scripts_for_entity(
     collision_exit_ids: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    current_runtime_events: &[crate::runtime::state::RuntimeEvent],
+    pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -158,6 +160,9 @@ pub fn run_lua_scripts_for_entity(
             .unwrap_or(true);
 
         if needs_reload {
+            let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
+            script_state.remove(&scope_key);
+            started_scripts.remove(&format!("lua::{}::{}", entity.id, file_path));
             let source = match std::fs::read_to_string(&full_path) {
                 Ok(s) => s,
                 Err(e) => {
@@ -215,6 +220,7 @@ pub fn run_lua_scripts_for_entity(
             collision_exit_names,
             collision_exit_ids,
             colliders,
+            current_runtime_events,
             scene_label,
             Some(&file_path),
         ) {
@@ -225,6 +231,7 @@ pub fn run_lua_scripts_for_entity(
                 lua_runtime::apply_session_ops(session_state, &result.session_ops);
                 let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
+                lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
                 if result.destroy_entity {
                     pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
                         entity_id: entity.id.clone(),

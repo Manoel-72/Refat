@@ -27,7 +27,7 @@
 
 use std::collections::HashSet;
 
-use mlua::{Lua, Table, Value as LuaValue, Variadic};
+use mlua::{Function, Lua, Table, Value as LuaValue, Variadic};
 
 use crate::{
     core::{component::Component, entity::Entity},
@@ -57,6 +57,7 @@ pub struct LuaScriptResult {
     pub save_ops: Vec<SaveOp>,
     pub session_ops: Vec<SessionOp>,
     pub state_ops: Vec<StateOp>,
+    pub event_ops: Vec<EventOp>,
 }
 
 #[derive(Debug)]
@@ -77,6 +78,14 @@ pub enum StateOp {
     Set(String, crate::runtime::save::SaveValue),
     Remove(String),
     Clear,
+}
+
+#[derive(Debug)]
+pub enum EventOp {
+    Emit {
+        name: String,
+        data: Option<crate::runtime::save::SaveValue>,
+    },
 }
 
 // ── execução ─────────────────────────────────────────────────
@@ -107,6 +116,7 @@ pub fn run_lua_script(
     collision_stay_ids: &[String],
     collision_exit_names: &[String],
     collision_exit_ids: &[String],
+    current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
@@ -134,6 +144,7 @@ pub fn run_lua_script(
         collision_exit_names,
         collision_exit_ids,
         &[],
+        current_runtime_events,
         scene_label,
         script_path,
     )
@@ -163,6 +174,7 @@ pub fn run_lua_script_with_vm(
     collision_exit_names: &[String],
     collision_exit_ids: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
+    current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
@@ -204,103 +216,127 @@ pub fn run_lua_script_with_vm(
         }
     }
 
-fn lua_numeric_value(value: &LuaValue, default: f32) -> f32 {
-    match value {
-        LuaValue::Integer(i) => *i as f32,
-        LuaValue::Number(n) => *n as f32,
-        LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(default),
-        _ => default,
-    }
-}
 
-fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
-    let wrapper = lua.create_table().map_err(|e| e.to_string())?;
-    wrapper.set("value", value).map_err(|e| e.to_string())?;
-
-    let mt = lua.create_table().map_err(|e| e.to_string())?;
-
-    let call_value = value;
-    let call_fn = lua.create_function(move |_, ()| Ok(call_value))
-        .map_err(|e| e.to_string())?;
-    mt.set("__call", call_fn).map_err(|e| e.to_string())?;
-
-    let index_value = value;
-    let index_fn = lua.create_function(move |lua_ctx, (_self, key): (LuaValue, String)| {
-        match key.as_str() {
-            "value" => Ok(LuaValue::Number(index_value as f64)),
-            "get" => {
-                let v = index_value;
-                Ok(LuaValue::Function(lua_ctx.create_function(move |_, ()| Ok(v))?))
-            }
-            _ => Ok(LuaValue::Nil),
+    fn lua_value_to_save_value(value: LuaValue) -> Result<Option<SaveValue>, mlua::Error> {
+        match value {
+            LuaValue::Nil => Ok(None),
+            LuaValue::Boolean(v) => Ok(Some(SaveValue::Bool(v))),
+            LuaValue::Integer(v) => Ok(Some(SaveValue::Int(v))),
+            LuaValue::Number(v) => Ok(Some(SaveValue::Float(v))),
+            LuaValue::String(v) => Ok(Some(SaveValue::Text(v.to_string_lossy().to_string()))),
+            _ => Err(mlua::Error::runtime("Apenas nil, bool, integer, number e string são suportados")),
         }
-    }).map_err(|e| e.to_string())?;
-    mt.set("__index", index_fn).map_err(|e| e.to_string())?;
+    }
 
-    let add_value = value;
-    let add_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        Ok(add_value + lua_numeric_value(&other, 0.0))
-    }).map_err(|e| e.to_string())?;
-    mt.set("__add", add_fn).map_err(|e| e.to_string())?;
+    fn set_scalar_cmd(cmds: &Table, prefix: &str, key: &str, value: LuaValue) -> Result<(), mlua::Error> {
+        match lua_value_to_save_value(value)? {
+            None => Ok(()),
+            Some(SaveValue::Bool(v)) => cmds.set(format!("b:{}:{}", prefix, key), v),
+            Some(SaveValue::Int(v)) => cmds.set(format!("i:{}:{}", prefix, key), v),
+            Some(SaveValue::Float(v)) => cmds.set(format!("f:{}:{}", prefix, key), v),
+            Some(SaveValue::Text(v)) => cmds.set(format!("s:{}:{}", prefix, key), v),
+        }
+    }
 
-    let sub_value = value;
-    let sub_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        Ok(sub_value - lua_numeric_value(&other, 0.0))
-    }).map_err(|e| e.to_string())?;
-    mt.set("__sub", sub_fn).map_err(|e| e.to_string())?;
+    fn dispatch_runtime_events(
+        lua: &Lua,
+        entity: &Entity,
+        scene_label: Option<&str>,
+        script_path: Option<&str>,
+        current_runtime_events: &[crate::runtime::state::RuntimeEvent],
+    ) -> Result<(), String> {
+        let globals = lua.globals();
+        let listeners: Table = match globals.get("__rs2_event_listeners") {
+            Ok(table) => table,
+            Err(_) => return Ok(()),
+        };
 
-    let mul_value = value;
-    let mul_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        Ok(mul_value * lua_numeric_value(&other, 0.0))
-    }).map_err(|e| e.to_string())?;
-    mt.set("__mul", mul_fn).map_err(|e| e.to_string())?;
+        for event in current_runtime_events {
+            let maybe_listener: LuaValue = listeners.get(event.name.as_str()).map_err(|e| e.to_string())?;
+            let LuaValue::Function(listener) = maybe_listener else { continue };
+            let payload = match &event.data {
+                Some(value) => save_value_to_lua(lua, value).map_err(|e| stage_error("event_dispatch", e, entity, scene_label, script_path))?,
+                None => LuaValue::Nil,
+            };
+            if let Err(err) = listener.call::<()>(payload) {
+                eprintln!("{}", stage_error("event_dispatch", err, entity, scene_label, script_path));
+            }
+        }
 
-    let div_value = value;
-    let div_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        let rhs = lua_numeric_value(&other, 1.0);
-        Ok(if rhs.abs() <= f32::EPSILON { div_value } else { div_value / rhs })
-    }).map_err(|e| e.to_string())?;
-    mt.set("__div", div_fn).map_err(|e| e.to_string())?;
+        Ok(())
+    }
 
-    let unm_value = value;
-    let unm_fn = lua.create_function(move |_, _: LuaValue| Ok(-unm_value))
-        .map_err(|e| e.to_string())?;
-    mt.set("__unm", unm_fn).map_err(|e| e.to_string())?;
+    fn advance_timers(
+        lua: &Lua,
+        entity: &Entity,
+        scene_label: Option<&str>,
+        script_path: Option<&str>,
+        delta_time: f32,
+    ) -> Result<(), String> {
+        let globals = lua.globals();
+        let timers: Table = match globals.get("__rs2_timers") {
+            Ok(table) => table,
+            Err(_) => return Ok(()),
+        };
 
-    let tostring_value = value;
-    let tostring_fn = lua.create_function(move |lua_ctx, _: LuaValue| {
-        Ok(LuaValue::String(lua_ctx.create_string(&tostring_value.to_string())?))
-    }).map_err(|e| e.to_string())?;
-    mt.set("__tostring", tostring_fn).map_err(|e| e.to_string())?;
+        let mut due_callbacks: Vec<(bool, f32, Function)> = Vec::new();
+        let mut to_remove: Vec<i64> = Vec::new();
 
-    wrapper.set_metatable(Some(mt));
-    Ok(wrapper)
-}
+        for pair in timers.pairs::<i64, Table>() {
+            let Ok((timer_id, timer)) = pair else { continue };
+            let interval = timer.get::<f32>("interval").unwrap_or(0.0).max(0.0);
+            let repeating = timer.get::<bool>("repeating").unwrap_or(false);
+            let remaining = timer.get::<f32>("remaining").unwrap_or(interval) - delta_time;
+            if remaining <= 0.0 {
+                if let Ok(callback) = timer.get::<Function>("callback") {
+                    due_callbacks.push((repeating, interval, callback));
+                }
+                if repeating {
+                    timer.set("remaining", (remaining + interval).max(0.0)).map_err(|e| e.to_string())?;
+                } else {
+                    to_remove.push(timer_id);
+                }
+            } else {
+                timer.set("remaining", remaining).map_err(|e| e.to_string())?;
+            }
+        }
 
-fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
-    let wrapper = lua.create_table().map_err(|e| e.to_string())?;
-    wrapper.set(1, x).map_err(|e| e.to_string())?;
-    wrapper.set(2, y).map_err(|e| e.to_string())?;
-    wrapper.set("x", x).map_err(|e| e.to_string())?;
-    wrapper.set("y", y).map_err(|e| e.to_string())?;
+        for timer_id in to_remove {
+            timers.raw_remove(timer_id).map_err(|e| e.to_string())?;
+        }
 
-    let mt = lua.create_table().map_err(|e| e.to_string())?;
-    let call_x = x;
-    let call_y = y;
-    let call_fn = lua.create_function(move |lua_ctx, ()| {
-        let t = lua_ctx.create_table()?;
-        t.set(1, call_x)?;
-        t.set(2, call_y)?;
-        t.set("x", call_x)?;
-        t.set("y", call_y)?;
-        Ok(t)
-    }).map_err(|e| e.to_string())?;
-    mt.set("__call", call_fn).map_err(|e| e.to_string())?;
-    wrapper.set_metatable(Some(mt));
-    Ok(wrapper)
-}
+        for (_repeating, _interval, callback) in due_callbacks {
+            if let Err(err) = callback.call::<()>(()) {
+                eprintln!("{}", stage_error("timer_callback", err, entity, scene_label, script_path));
+            }
+        }
 
-    
+        Ok(())
+    }
+
+    fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
+        let wrapper = lua.create_table().map_err(|e| e.to_string())?;
+        wrapper.set(1, x).map_err(|e| e.to_string())?;
+        wrapper.set(2, y).map_err(|e| e.to_string())?;
+        wrapper.set("x", x).map_err(|e| e.to_string())?;
+        wrapper.set("y", y).map_err(|e| e.to_string())?;
+
+        let mt = lua.create_table().map_err(|e| e.to_string())?;
+        let call_x = x;
+        let call_y = y;
+        let call_fn = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            t.set(1, call_x)?;
+            t.set(2, call_y)?;
+            t.set("x", call_x)?;
+            t.set("y", call_y)?;
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        mt.set("__call", call_fn).map_err(|e| e.to_string())?;
+        wrapper.set_metatable(Some(mt));
+        Ok(wrapper)
+    }
+
 // ── tabela `entity` ──────────────────────────────────────
     let entity_tbl = lua.create_table().map_err(|e| e.to_string())?;
 
@@ -496,25 +532,21 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
     // ── tabela `game` ────────────────────────────────────────
     {
         let game_tbl = lua.create_table().map_err(|e| e.to_string())?;
-        let delta_time_value = make_numeric_callable(&lua, delta_time)?;
-        game_tbl.set("delta_time", delta_time_value).ok();
+        let delta_time_fn = lua.create_function(move |_, ()| Ok(delta_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("delta_time", delta_time_fn).ok();
         game_tbl.set("delta_time_value", delta_time).ok();
         let get_delta_time = lua.create_function(move |_, ()| Ok(delta_time))
             .map_err(|e| e.to_string())?;
         game_tbl.set("get_delta_time", get_delta_time).ok();
-        let delta_time_fn = lua.create_function(move |_, ()| Ok(delta_time))
-            .map_err(|e| e.to_string())?;
-        game_tbl.set("delta_time_fn", delta_time_fn).ok();
 
-        let elapsed_time_value = make_numeric_callable(&lua, elapsed_time)?;
-        game_tbl.set("elapsed_time", elapsed_time_value).ok();
+        let elapsed_time_fn = lua.create_function(move |_, ()| Ok(elapsed_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("elapsed_time", elapsed_time_fn).ok();
         game_tbl.set("elapsed_time_value", elapsed_time).ok();
         let get_elapsed_time = lua.create_function(move |_, ()| Ok(elapsed_time))
             .map_err(|e| e.to_string())?;
         game_tbl.set("get_elapsed_time", get_elapsed_time).ok();
-        let elapsed_time_fn = lua.create_function(move |_, ()| Ok(elapsed_time))
-            .map_err(|e| e.to_string())?;
-        game_tbl.set("elapsed_time_fn", elapsed_time_fn).ok();
 
         // game.log/msg + aliases de severidade
         let log_prefix = format_lua_context(entity, scene_label, script_path);
@@ -676,6 +708,43 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         let ray_snap: Vec<(f32, f32, f32, f32, u8, String, String)> = colliders.iter()
             .map(|c| (c.center_x, c.center_y, c.width, c.height, c.layer, c.entity_name.clone(), c.entity_id.clone()))
             .collect();
+        let timers: Table = lua.globals().get("__rs2_timers").unwrap_or_else(|_| lua.create_table().unwrap());
+        lua.globals().set("__rs2_timers", timers.clone()).ok();
+        let timer_counter: i64 = lua.globals().get("__rs2_timer_counter").unwrap_or(0);
+        lua.globals().set("__rs2_timer_counter", timer_counter).ok();
+
+        let timers_after = timers.clone();
+        let after_fn = lua.create_function(move |lua_ctx, (seconds, callback): (f32, Function)| {
+            let seconds = seconds.max(0.0);
+            let current_id: i64 = lua_ctx.globals().get("__rs2_timer_counter").unwrap_or(0);
+            let next_id = current_id + 1;
+            lua_ctx.globals().set("__rs2_timer_counter", next_id)?;
+            let timer = lua_ctx.create_table()?;
+            timer.set("remaining", seconds)?;
+            timer.set("interval", seconds)?;
+            timer.set("repeating", false)?;
+            timer.set("callback", callback)?;
+            timers_after.set(next_id, timer)?;
+            Ok(next_id)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("after", after_fn).ok();
+
+        let timers_every = timers.clone();
+        let every_fn = lua.create_function(move |lua_ctx, (seconds, callback): (f32, Function)| {
+            let seconds = seconds.max(0.0);
+            let current_id: i64 = lua_ctx.globals().get("__rs2_timer_counter").unwrap_or(0);
+            let next_id = current_id + 1;
+            lua_ctx.globals().set("__rs2_timer_counter", next_id)?;
+            let timer = lua_ctx.create_table()?;
+            timer.set("remaining", seconds)?;
+            timer.set("interval", seconds)?;
+            timer.set("repeating", true)?;
+            timer.set("callback", callback)?;
+            timers_every.set(next_id, timer)?;
+            Ok(next_id)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("every", every_fn).ok();
+
         let raycast_fn = lua.create_function(move |lua_ctx, (ox, oy, dx, dy, max_dist): (f32,f32,f32,f32,f32)| {
             let t = lua_ctx.create_table()?;
             // Raycast AABB manual sobre o snapshot de dados seguros
@@ -888,6 +957,33 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         lua.globals().set("state", state_tbl).map_err(|e| e.to_string())?;
     }
 
+    // ── tabela `event` ───────────────────────────────────────
+    {
+        let event_tbl = lua.create_table().map_err(|e| e.to_string())?;
+        let event_cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
+        let listeners: Table = lua.globals().get("__rs2_event_listeners").unwrap_or_else(|_| lua.create_table().unwrap());
+        lua.globals().set("__rs2_event_listeners", listeners.clone()).ok();
+
+        let listeners_for_set = listeners.clone();
+        let listen_fn = lua.create_function(move |_, (name, callback): (String, Function)| {
+            listeners_for_set.set(name, callback)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        event_tbl.set("listen", listen_fn).ok();
+
+        let emit_cmds = event_cmds.clone();
+        let emit_fn = lua.create_function(move |lua_ctx, (name, data): (String, LuaValue)| {
+            let seq: i64 = emit_cmds.get("seq").unwrap_or(0) + 1;
+            emit_cmds.set("seq", seq)?;
+            emit_cmds.set(format!("name:{}", seq), name.clone())?;
+            set_scalar_cmd(&emit_cmds, &seq.to_string(), "data", data)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        event_tbl.set("emit", emit_fn).ok();
+        event_tbl.set("_cmds", event_cmds).ok();
+        lua.globals().set("event", event_tbl).map_err(|e| e.to_string())?;
+    }
+
     // print(...) global com prefixo contextual para logs Lua
     {
         let print_prefix = format!("{}[stage=print]", format_lua_context(entity, scene_label, script_path));
@@ -912,10 +1008,14 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         }
     }
 
+    dispatch_runtime_events(lua, entity, scene_label, script_path, current_runtime_events)?;
+
     // on_update(delta_time)
     if let Ok(f) = lua.globals().get::<mlua::Function>("on_update") {
         f.call::<()>(delta_time).map_err(|e| stage_error("on_update", e, entity, scene_label, script_path))?;
     }
+
+    advance_timers(lua, entity, scene_label, script_path, delta_time)?;
 
     // ── coleta resultados de entity._cmds ────────────────────
     if let Ok(entity_tbl) = lua.globals().get::<Table>("entity") {
@@ -1063,6 +1163,27 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         }
     }
 
+    if let Ok(event_tbl) = lua.globals().get::<Table>("event") {
+        if let Ok(cmds) = event_tbl.get::<Table>("_cmds") {
+            let max_seq = cmds.get::<i64>("seq").unwrap_or(0);
+            for seq in 1..=max_seq {
+                let Ok(name) = cmds.get::<String>(format!("name:{}", seq)) else { continue };
+                let data = if let Ok(LuaValue::Boolean(v)) = cmds.get::<LuaValue>(format!("b:{}:data", seq)) {
+                    Some(SaveValue::Bool(v))
+                } else if let Ok(LuaValue::Integer(v)) = cmds.get::<LuaValue>(format!("i:{}:data", seq)) {
+                    Some(SaveValue::Int(v))
+                } else if let Ok(LuaValue::Number(v)) = cmds.get::<LuaValue>(format!("f:{}:data", seq)) {
+                    Some(SaveValue::Float(v))
+                } else if let Ok(LuaValue::String(v)) = cmds.get::<LuaValue>(format!("s:{}:data", seq)) {
+                    Some(SaveValue::Text(v.to_string_lossy().to_string()))
+                } else {
+                    None
+                };
+                result.event_ops.push(EventOp::Emit { name, data });
+            }
+        }
+    }
+
     Ok(result)
 }
 
@@ -1187,7 +1308,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -1198,11 +1319,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -1212,11 +1333,25 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
     }
 }
+pub fn apply_event_ops(
+    pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
+    ops: &[EventOp],
+) {
+    for op in ops {
+        match op {
+            EventOp::Emit { name, data } => pending_runtime_events.push(crate::runtime::state::RuntimeEvent {
+                name: name.clone(),
+                data: data.clone(),
+            }),
+        }
+    }
+}
+
 pub fn apply_session_ops(session_data: &mut std::collections::HashMap<String, SaveValue>, ops: &[SessionOp]) {
     for op in ops {
         match op {

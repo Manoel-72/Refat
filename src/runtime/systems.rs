@@ -45,6 +45,8 @@ pub fn update_entities_runtime(
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    current_runtime_events: &[crate::runtime::state::RuntimeEvent],
+    pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -69,6 +71,8 @@ pub fn update_entities_runtime(
         previous_collision_contacts,
         previous_collision_contact_ids,
         pending_destroys,
+        current_runtime_events,
+        pending_runtime_events,
     )
 }
 
@@ -92,6 +96,8 @@ fn update_entities_runtime_recursive(
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    current_runtime_events: &[crate::runtime::state::RuntimeEvent],
+    pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -182,6 +188,8 @@ fn update_entities_runtime_recursive(
             &collision_exit_ids,
             colliders,
             pending_destroys,
+            current_runtime_events,
+            pending_runtime_events,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -229,6 +237,8 @@ fn update_entities_runtime_recursive(
             previous_collision_contacts,
             previous_collision_contact_ids,
             pending_destroys,
+            current_runtime_events,
+            pending_runtime_events,
         ) {
             return Some(command);
         }

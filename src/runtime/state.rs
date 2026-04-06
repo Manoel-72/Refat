@@ -51,6 +51,12 @@ pub struct PendingDestroyRequest {
     pub entity_id: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct RuntimeEvent {
+    pub name: String,
+    pub data: Option<SaveValue>,
+}
+
 #[derive(Clone, Default)]
 pub struct RuntimeInput {
     pub keyboard: InputState,
@@ -131,6 +137,10 @@ pub struct RuntimeState {
     /// Cache de VMs Lua: chave = "entity_id::script_path", valor = (VM, mtime do arquivo).
     /// Evita criar uma Lua::new() por frame — criada uma vez, reutilizada.
     pub lua_vms: HashMap<String, (mlua::Lua, std::time::SystemTime)>,
+    /// Eventos disponíveis para consumo neste frame.
+    pub current_runtime_events: Vec<RuntimeEvent>,
+    /// Eventos emitidos durante o frame atual para consumo no próximo frame.
+    pub pending_runtime_events: Vec<RuntimeEvent>,
     /// Contatos de colisão do frame atual: entity_id -> nomes das entidades em contato.
     pub collision_contacts: HashMap<String, Vec<String>>,
     /// Contatos de colisão do frame anterior: entity_id -> nomes das entidades em contato.
@@ -171,6 +181,8 @@ impl RuntimeState {
             session_state: HashMap::new(),
             script_state: ScriptState::new(),
             lua_vms: HashMap::new(),
+            current_runtime_events: Vec::new(),
+            pending_runtime_events: Vec::new(),
             collision_contacts: HashMap::new(),
             previous_collision_contacts: HashMap::new(),
             collision_contact_ids: HashMap::new(),
@@ -232,6 +244,9 @@ impl RuntimeState {
         self.save_data = data;
         self.clear_session_state();
         self.clear_script_state();
+        self.lua_vms.clear();
+        self.current_runtime_events.clear();
+        self.pending_runtime_events.clear();
         self.game_state.score = 0;
         self.game_state.loading_label = None;
 
@@ -332,6 +347,8 @@ impl RuntimeState {
         self.clear_session_state();
         self.clear_script_state();
         self.lua_vms.clear();
+        self.current_runtime_events.clear();
+        self.pending_runtime_events.clear();
         self.clear_collision_tracking();
     }
 
@@ -340,6 +357,9 @@ impl RuntimeState {
     pub fn start_new_game_session(&mut self) {
         self.clear_session_state();
         self.clear_script_state();
+        self.lua_vms.clear();
+        self.current_runtime_events.clear();
+        self.pending_runtime_events.clear();
         self.game_state.score = 0;
         self.game_state.loading_label = None;
     }
@@ -658,6 +678,8 @@ impl RuntimeState {
         self.last_spawned_entity_id = None;
         self.clear_script_state();
         self.lua_vms.clear();
+        self.current_runtime_events.clear();
+        self.pending_runtime_events.clear();
         self.clear_collision_tracking();
     }
 
@@ -672,6 +694,7 @@ impl RuntimeState {
         self.delta_time = dt;
         self.elapsed_time += dt;
         self.frame_count += 1;
+        self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
 
         let player_input = systems::input_system::player_axis(&self.input);
 
@@ -730,6 +753,8 @@ impl RuntimeState {
                 &self.previous_collision_contacts,
                 &self.previous_collision_contact_ids,
                 &mut self.pending_destroys,
+                &self.current_runtime_events,
+                &mut self.pending_runtime_events,
             );
 
             self.last_stage = RuntimeFrameStage::UpdateCamera;
