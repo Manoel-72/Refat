@@ -6,6 +6,7 @@ use crate::core::{
     component::{Component, Sprite, TextLabel, UIButton},
     entity::Entity,
 };
+use crate::renderer::gfx::paint_rotated_placeholder;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiAction {
@@ -150,6 +151,27 @@ pub fn draw_runtime_entity(
                     scale_y < 0.0,
                 );
             }
+        } else {
+            // Sem textura: desenha retângulo colorido usando a cor do Sprite
+            // Tamanho baseado no BoxCollider se existir, senão 32×32
+            let fallback_w = entity.components.iter()
+                .find_map(|c| if let crate::core::component::Component::BoxCollider(b) = c { Some(b.width) } else { None })
+                .unwrap_or(32.0);
+            let fallback_h = entity.components.iter()
+                .find_map(|c| if let crate::core::component::Component::BoxCollider(b) = c { Some(b.height) } else { None })
+                .unwrap_or(32.0);
+            let draw_size = egui::vec2(
+                fallback_w * scale_x.abs().max(0.25) * camera.zoom,
+                fallback_h * scale_y.abs().max(0.25) * camera.zoom,
+            );
+            paint_rotated_placeholder(
+                painter,
+                world_screen_pos,
+                draw_size,
+                rotation,
+                tint,
+                egui::Stroke::NONE,
+            );
         }
     } else if has_camera {
         // Runtime final: não desenha contorno de câmera.

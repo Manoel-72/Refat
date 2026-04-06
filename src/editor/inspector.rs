@@ -40,7 +40,41 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
     let selected_id = match &app.selected_entity_id {
         Some(id) => id.clone(),
         None => {
-            ui.label("Nenhuma entidade selecionada.");
+            // ── Propriedades da Cena (nenhuma entidade selecionada) ──
+            ui.heading("🎬 Propriedades da Cena");
+            ui.separator();
+            ui.label(egui::RichText::new(format!("Nome: {}", app.scene.name)).strong());
+            ui.add_space(8.0);
+
+            ui.label(egui::RichText::new("Cor de Fundo").strong());
+            let bg = &mut app.scene.background_color;
+            egui::Grid::new("scene_bg_color_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("R:");
+                    ui.add(egui::Slider::new(&mut bg[0], 0.0..=1.0).show_value(true));
+                    ui.end_row();
+                    ui.label("G:");
+                    ui.add(egui::Slider::new(&mut bg[1], 0.0..=1.0).show_value(true));
+                    ui.end_row();
+                    ui.label("B:");
+                    ui.add(egui::Slider::new(&mut bg[2], 0.0..=1.0).show_value(true));
+                    ui.end_row();
+                });
+
+            // Preview da cor
+            let preview_color = egui::Color32::from_rgb(
+                (bg[0].clamp(0.0,1.0)*255.0) as u8,
+                (bg[1].clamp(0.0,1.0)*255.0) as u8,
+                (bg[2].clamp(0.0,1.0)*255.0) as u8,
+            );
+            let (preview_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::hover());
+            ui.painter().rect_filled(preview_rect, 4.0, preview_color);
+            ui.add_space(6.0);
+
+            ui.label(egui::RichText::new("Entidades na cena:").weak().small());
+            ui.label(format!("  {} entidade(s)", app.scene.entities.len()));
             return;
         }
     };

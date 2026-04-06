@@ -125,6 +125,8 @@ pub struct EditorApp {
     pub selected_entity_id: Option<String>,
     /// Entidades selecionadas (seleção múltipla)
     pub selected_entity_ids: Vec<String>,
+    /// Clipboard para copiar/colar entidades (Ctrl+C / Ctrl+V)
+    pub entity_clipboard: Option<crate::core::entity::Entity>,
     /// Asset selecionado (caminho)
     pub selected_asset: Option<PathBuf>,
     /// Gerenciador de assets
@@ -231,6 +233,7 @@ impl EditorApp {
             scene: initial_scene.clone(),
             selected_entity_id: None,
             selected_entity_ids: Vec::new(),
+            entity_clipboard: None,
             selected_asset: None,
             assets,
             project_root: initial_project_root,
@@ -355,72 +358,256 @@ impl EditorApp {
     }
 
     fn show_project_hub(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+        // Fundo escuro uniforme
+        let bg = egui::Color32::from_rgb(22, 27, 34);
+        let panel_bg = egui::Color32::from_rgb(30, 36, 46);
+        let accent = egui::Color32::from_rgb(88, 166, 255);
+        let text_dim = egui::Color32::from_rgb(140, 155, 175);
+        let btn_bg = egui::Color32::from_rgb(38, 46, 60);
+        let btn_hover = egui::Color32::from_rgb(50, 62, 80);
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(bg))
+            .show(ctx, |ui| {
+
+            // ── Título centrado ──
+            ui.add_space(28.0);
             ui.vertical_centered(|ui| {
-                ui.add_space(20.0);
-                ui.heading(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION));
-                ui.label("Hub de Projetos");
+                ui.label(
+                    egui::RichText::new(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION))
+                        .size(22.0)
+                        .color(egui::Color32::WHITE)
+                        .strong(),
+                );
+                ui.label(
+                    egui::RichText::new("Hub de Projetos")
+                        .size(13.0)
+                        .color(text_dim),
+                );
+            });
+            ui.add_space(24.0);
+
+            // ── Layout 2 colunas ──
+            let avail = ui.available_width();
+            let col_w = (avail - 24.0) * 0.5;
+
+            ui.horizontal(|ui| {
                 ui.add_space(12.0);
-            });
 
-            ui.columns(2, |cols| {
-                cols[0].group(|ui| {
-                    ui.heading("Último projeto");
-                    match self.project_hub_session.last_project.clone() {
-                        Some(path) => {
-                            ui.label(path.clone());
-                            if ui.button("Continuar último projeto").clicked() {
-                                let root = PathBuf::from(path);
-                                if let Err(e) = self.load_project_root(ctx, root) {
-                                    self.status_msg = format!("❌ {}", e);
+                // ── Coluna esquerda: Último Projeto + Recentes ──
+                ui.vertical(|ui| {
+                    ui.set_width(col_w);
+
+                    // Último Projeto
+                    egui::Frame::none()
+                        .fill(panel_bg)
+                        .rounding(8.0)
+                        .inner_margin(egui::Margin::same(14.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("Último Projeto")
+                                    .color(text_dim)
+                                    .size(11.0),
+                            );
+                            ui.add_space(4.0);
+                            match self.project_hub_session.last_project.clone() {
+                                Some(path) => {
+                                    ui.label(
+                                        egui::RichText::new(&path)
+                                            .color(egui::Color32::WHITE)
+                                            .size(13.0),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new("Continuar último projeto")
+                                            .color(text_dim)
+                                            .size(11.0),
+                                    );
+                                    ui.add_space(10.0);
+                                    let btn = egui::Button::new(
+                                        egui::RichText::new("Continuar último projeto")
+                                            .color(egui::Color32::WHITE),
+                                    )
+                                    .fill(egui::Color32::from_rgb(56, 100, 200))
+                                    .min_size(egui::vec2(ui.available_width(), 32.0));
+                                    if ui.add(btn).clicked() {
+                                        let root = PathBuf::from(path);
+                                        if let Err(e) = self.load_project_root(ctx, root) {
+                                            self.status_msg = format!("❌ {}", e);
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        None => { ui.label("Nenhum projeto recente salvo."); }
-                    }
-                });
-
-                cols[1].group(|ui| {
-                    ui.heading("Ações");
-                    if ui.button("Novo Projeto...").clicked() {
-                        let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).to_string_lossy().to_string();
-                        self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
-                    }
-                    if ui.button("Abrir Projeto...").clicked() {
-                        self.open_project_dialog = Some(String::new());
-                    }
-                    if ui.button("Entrar no editor atual").clicked() {
-                        self.enter_editor_for_current_project(ctx);
-                    }
-                    if ui.button("Sair").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                });
-            });
-
-            ui.add_space(12.0);
-            egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.heading("Projetos recentes");
-                if self.project_hub_session.recent_projects.is_empty() {
-                    ui.label("Nenhum projeto recente.");
-                } else {
-                    let recent = self.project_hub_session.recent_projects.clone();
-                    for path in recent {
-                        ui.horizontal(|ui| {
-                            ui.label(path.clone());
-                            if ui.button("Abrir").clicked() {
-                                if let Err(e) = self.load_project_root(ctx, PathBuf::from(&path)) {
-                                    self.status_msg = format!("❌ {}", e);
+                                None => {
+                                    ui.label(
+                                        egui::RichText::new("Nenhum projeto recente salvo.")
+                                            .color(text_dim),
+                                    );
                                 }
                             }
                         });
-                    }
-                }
+
+                    ui.add_space(12.0);
+
+                    // Projetos Recentes
+                    egui::Frame::none()
+                        .fill(panel_bg)
+                        .rounding(8.0)
+                        .inner_margin(egui::Margin::same(14.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("Projetos Recentes")
+                                    .color(text_dim)
+                                    .size(11.0),
+                            );
+                            ui.add_space(6.0);
+                            if self.project_hub_session.recent_projects.is_empty() {
+                                ui.label(
+                                    egui::RichText::new("Nenhum projeto recente.")
+                                        .color(text_dim),
+                                );
+                            } else {
+                                let recent = self.project_hub_session.recent_projects.clone();
+                                for path in recent {
+                                    let resp = ui.add(
+                                        egui::Button::new(
+                                            egui::RichText::new(&path)
+                                                .color(egui::Color32::WHITE)
+                                                .size(12.0),
+                                        )
+                                        .fill(btn_bg)
+                                        .min_size(egui::vec2(ui.available_width() - 60.0, 28.0)),
+                                    );
+                                    // "Abrir" ao lado
+                                    // layout manual: usamos horizontal dentro
+                                    let _ = resp; // handled below via horizontal
+                                    ui.add_space(-28.0); // volta para fazer horizontal
+                                    ui.horizontal(|ui| {
+                                        let w = ui.available_width();
+                                        let path_resp = ui.add(
+                                            egui::Button::new(
+                                                egui::RichText::new(&path)
+                                                    .color(egui::Color32::WHITE)
+                                                    .size(12.0),
+                                            )
+                                            .fill(btn_bg)
+                                            .min_size(egui::vec2(w - 64.0, 28.0)),
+                                        );
+                                        let open_resp = ui.add(
+                                            egui::Button::new(
+                                                egui::RichText::new("Abrir")
+                                                    .color(accent),
+                                            )
+                                            .fill(btn_bg)
+                                            .min_size(egui::vec2(56.0, 28.0)),
+                                        );
+                                        if path_resp.double_clicked() || open_resp.clicked() {
+                                            if let Err(e) = self.load_project_root(ctx, PathBuf::from(&path)) {
+                                                self.status_msg = format!("❌ {}", e);
+                                            }
+                                        }
+                                    });
+                                    ui.add_space(2.0);
+                                }
+                            }
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new("Selecione um projeto para começar.")
+                                    .color(text_dim)
+                                    .size(10.0),
+                            );
+                        });
+                });
+
+                ui.add_space(12.0);
+
+                // ── Coluna direita: Ações ──
+                ui.vertical(|ui| {
+                    ui.set_width(col_w);
+                    egui::Frame::none()
+                        .fill(panel_bg)
+                        .rounding(8.0)
+                        .inner_margin(egui::Margin::same(14.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("Ações")
+                                    .color(text_dim)
+                                    .size(11.0),
+                            );
+                            ui.add_space(8.0);
+
+                            let actions: &[(&str, &str)] = &[
+                                ("Novo Projeto...", "🆕"),
+                                ("Abrir Projeto...", "📂"),
+                                ("Entrar no editor atual", "✏"),
+                                ("Sair", "🚪"),
+                            ];
+
+                            for (label, icon) in actions {
+                                let full = format!("{}  {}", icon, label);
+                                let btn = egui::Button::new(
+                                    egui::RichText::new(&full)
+                                        .color(egui::Color32::WHITE)
+                                        .size(13.0),
+                                )
+                                .fill(btn_bg)
+                                .min_size(egui::vec2(ui.available_width(), 38.0));
+
+                                let hover_id = egui::Id::new(format!("hub_btn_{}", label));
+                                let resp = ui.add(btn);
+                                if resp.hovered() {
+                                    ui.painter().rect_filled(
+                                        resp.rect,
+                                        6.0,
+                                        btn_hover,
+                                    );
+                                }
+
+                                // Seta › à direita
+                                ui.painter().text(
+                                    egui::pos2(resp.rect.right() - 16.0, resp.rect.center().y),
+                                    egui::Align2::CENTER_CENTER,
+                                    "›",
+                                    egui::FontId::proportional(16.0),
+                                    text_dim,
+                                );
+
+                                if resp.clicked() {
+                                    match *label {
+                                        "Novo Projeto..." => {
+                                            let base = std::env::current_dir()
+                                                .unwrap_or_else(|_| PathBuf::from("."))
+                                                .to_string_lossy()
+                                                .to_string();
+                                            self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
+                                        }
+                                        "Abrir Projeto..." => {
+                                            self.open_project_dialog = Some(String::new());
+                                        }
+                                        "Entrar no editor atual" => {
+                                            self.enter_editor_for_current_project(ctx);
+                                        }
+                                        "Sair" => {
+                                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                ui.add_space(4.0);
+                            }
+                        });
+                });
+
+                ui.add_space(12.0);
             });
 
+            // ── Status ──
             if !self.status_msg.is_empty() {
-                ui.add_space(8.0);
-                ui.label(self.status_msg.clone());
+                ui.add_space(12.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new(&self.status_msg)
+                            .color(egui::Color32::from_rgb(255, 180, 80)),
+                    );
+                });
             }
         });
 
@@ -1431,6 +1618,39 @@ impl eframe::App for EditorApp {
             })
         {
             self.redo_scene();
+        }
+
+        // Ctrl+C — copia entidade selecionada
+        if !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::C))
+        {
+            if let Some(id) = &self.selected_entity_id.clone() {
+                if let Some(entity) = self.scene.find_entity(id).cloned() {
+                    self.entity_clipboard = Some(entity);
+                    self.status_msg = "📋 Entidade copiada.".to_string();
+                }
+            }
+        }
+
+        // Ctrl+V — cola entidade copiada (com novo ID e nome sufixado)
+        if !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::V))
+        {
+            if let Some(template) = self.entity_clipboard.clone() {
+                self.push_undo_state();
+                let mut cloned = template.clone();
+                cloned.id = uuid::Uuid::new_v4().to_string();
+                cloned.name = format!("{} (cópia)", template.name);
+                // Desloca levemente para não sobrepor exatamente
+                if let Some(t) = cloned.transform_mut() {
+                    t.x += 32.0;
+                    t.y -= 32.0;
+                }
+                let new_id = cloned.id.clone();
+                self.scene.add_entity(cloned);
+                self.select_single_entity(Some(new_id));
+                self.status_msg = format!("📋 '{}' colada.", template.name);
+            }
         }
 
         if self.play_state == EditorPlayState::Edit && self.runtime.active_scene.is_some() {

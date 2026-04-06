@@ -157,7 +157,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 });
 
                 ui.menu_button("❓ Ajuda", |ui| {
-                    ui.label("RS2BR-Engine v0.6.0");
+                    ui.label(format!("{} {}", crate::core::version::ENGINE_TITLE, crate::core::version::ENGINE_VERSION));
                     ui.separator();
                     ui.label("Atalhos:");
                     ui.label("• Ctrl + Z / Ctrl + Y = desfazer / refazer");

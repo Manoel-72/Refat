@@ -18,6 +18,7 @@ use super::{AssetBrowserFilter, EditorApp};
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     let assets_root = app.project_root.join("assets");
 
+    // ── Cabeçalho + Busca ──
     ui.horizontal_wrapped(|ui| {
         ui.heading("Assets");
         ui.separator();
@@ -25,17 +26,18 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         ui.add(
             egui::TextEdit::singleline(&mut app.asset_search)
                 .hint_text("sprite, MATR, script rs2/lua...")
-                .desired_width(180.0),
+                .desired_width(160.0),
         );
-        if ui.button("✖ Limpar").clicked() {
+        if ui.button("✖").on_hover_text("Limpar busca").clicked() {
             app.asset_search.clear();
             app.asset_filter = AssetBrowserFilter::All;
         }
+    });
 
-        if ui.button("📥 Importar Sprite").clicked() {
-            import_sprite_file(app, &assets_root);
-        }
-        if ui.button("🎬 Cena").clicked() {
+    // ── Grupo "Criar" ──
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new("Criar:").weak().small());
+        if ui.small_button("🎬 Cena").clicked() {
             match app.assets.create_scene_file(&assets_root.join("scenes"), "nova_cena") {
                 Ok(path) => {
                     app.assets.refresh();
@@ -45,19 +47,25 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 Err(error) => app.status_msg = format!("❌ {}", error),
             }
         }
-        if ui.button("📜 Script RS2").clicked() {
+        if ui.small_button("📜 Script RS2").clicked() {
             app.new_script_dialog = Some((assets_root.join("scripts"), "meu_script".to_string()));
         }
-        if ui.button("📁 Pasta").clicked() {
+        if ui.small_button("🌙 Script Lua").clicked() {
+            app.new_lua_dialog = Some((assets_root.join("scripts"), "novo_script".to_string()));
+        }
+        if ui.small_button("📁 Pasta").clicked() {
             app.new_folder_dialog = Some((assets_root.clone(), "nova_pasta".to_string()));
         }
-        if ui.button("📦 Template").clicked() {
+        if ui.small_button("📦 Template").clicked() {
             app.new_template_dialog = Some("MeuProjeto".to_string());
         }
-        if ui.button("🔷 Entidade").clicked() {
-            app.new_entity_dialog = Some("Entidade".to_string());
+
+        ui.separator();
+        ui.label(egui::RichText::new("Importar:").weak().small());
+        if ui.small_button("📥 Sprite").clicked() {
+            import_sprite_file(app, &assets_root);
         }
-        if ui.button("🔄 Recarregar").clicked() {
+        if ui.small_button("🔄").on_hover_text("Recarregar assets").clicked() {
             app.assets.refresh();
             app.status_msg = "✅ Assets recarregados.".to_string();
         }
@@ -389,6 +397,25 @@ fn show_node(
 
             if response.clicked() {
                 *action = Some(AssetAction::Select(node_path.clone()));
+            }
+
+            // Duplo clique em script (.rs2 ou .lua) abre no VS Code
+            if response.double_clicked() {
+                let ext = node_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if matches!(ext, "rs2" | "lua") {
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = std::process::Command::new("cmd")
+                            .args(["/C", "code", &node_path.to_string_lossy()])
+                            .spawn();
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let _ = std::process::Command::new("code")
+                            .arg(&node_path)
+                            .spawn();
+                    }
+                }
             }
 
             if can_drag && response.drag_started() {
