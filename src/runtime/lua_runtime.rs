@@ -184,6 +184,15 @@ pub fn run_lua_script_with_vm(
         }
     }
 
+fn lua_numeric_value(value: &LuaValue, default: f32) -> f32 {
+    match value {
+        LuaValue::Integer(i) => *i as f32,
+        LuaValue::Number(n) => *n as f32,
+        LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(default),
+        _ => default,
+    }
+}
+
 fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
     let wrapper = lua.create_table().map_err(|e| e.to_string())?;
     wrapper.set("value", value).map_err(|e| e.to_string())?;
@@ -195,51 +204,41 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
         .map_err(|e| e.to_string())?;
     mt.set("__call", call_fn).map_err(|e| e.to_string())?;
 
+    let index_value = value;
+    let index_fn = lua.create_function(move |lua_ctx, (_self, key): (LuaValue, String)| {
+        match key.as_str() {
+            "value" => Ok(LuaValue::Number(index_value as f64)),
+            "get" => {
+                let v = index_value;
+                Ok(LuaValue::Function(lua_ctx.create_function(move |_, ()| Ok(v))?))
+            }
+            _ => Ok(LuaValue::Nil),
+        }
+    }).map_err(|e| e.to_string())?;
+    mt.set("__index", index_fn).map_err(|e| e.to_string())?;
+
     let add_value = value;
     let add_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        let rhs = match other {
-            LuaValue::Integer(i) => i as f32,
-            LuaValue::Number(n) => n as f32,
-            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
-            _ => 0.0,
-        };
-        Ok(add_value + rhs)
+        Ok(add_value + lua_numeric_value(&other, 0.0))
     }).map_err(|e| e.to_string())?;
     mt.set("__add", add_fn).map_err(|e| e.to_string())?;
 
     let sub_value = value;
     let sub_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        let rhs = match other {
-            LuaValue::Integer(i) => i as f32,
-            LuaValue::Number(n) => n as f32,
-            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
-            _ => 0.0,
-        };
-        Ok(sub_value - rhs)
+        Ok(sub_value - lua_numeric_value(&other, 0.0))
     }).map_err(|e| e.to_string())?;
     mt.set("__sub", sub_fn).map_err(|e| e.to_string())?;
 
     let mul_value = value;
     let mul_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        let rhs = match other {
-            LuaValue::Integer(i) => i as f32,
-            LuaValue::Number(n) => n as f32,
-            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
-            _ => 0.0,
-        };
-        Ok(mul_value * rhs)
+        Ok(mul_value * lua_numeric_value(&other, 0.0))
     }).map_err(|e| e.to_string())?;
     mt.set("__mul", mul_fn).map_err(|e| e.to_string())?;
 
     let div_value = value;
     let div_fn = lua.create_function(move |_, (_self, other): (LuaValue, LuaValue)| {
-        let rhs = match other {
-            LuaValue::Integer(i) => i as f32,
-            LuaValue::Number(n) => n as f32,
-            LuaValue::Table(t) => t.get::<f32>("value").unwrap_or(0.0),
-            _ => 1.0,
-        };
-        Ok(div_value / rhs)
+        let rhs = lua_numeric_value(&other, 1.0);
+        Ok(if rhs.abs() <= f32::EPSILON { div_value } else { div_value / rhs })
     }).map_err(|e| e.to_string())?;
     mt.set("__div", div_fn).map_err(|e| e.to_string())?;
 
@@ -259,7 +258,8 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
 }
 
 
-    // ── tabela `entity` ──────────────────────────────────────
+    
+// ── tabela `entity` ──────────────────────────────────────
     let entity_tbl = lua.create_table().map_err(|e| e.to_string())?;
 
     // leitura de Transform
@@ -451,9 +451,17 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
         let game_tbl = lua.create_table().map_err(|e| e.to_string())?;
         let delta_time_value = make_numeric_callable(&lua, delta_time)?;
         game_tbl.set("delta_time", delta_time_value).ok();
+        game_tbl.set("delta_time_value", delta_time).ok();
+        let get_delta_time = lua.create_function(move |_, ()| Ok(delta_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("get_delta_time", get_delta_time).ok();
 
         let elapsed_time_value = make_numeric_callable(&lua, elapsed_time)?;
         game_tbl.set("elapsed_time", elapsed_time_value).ok();
+        game_tbl.set("elapsed_time_value", elapsed_time).ok();
+        let get_elapsed_time = lua.create_function(move |_, ()| Ok(elapsed_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("get_elapsed_time", get_elapsed_time).ok();
 
         // game.log/msg + aliases de severidade
         let log_prefix = format_lua_context(entity, scene_label, script_path);

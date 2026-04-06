@@ -1,3 +1,22 @@
+local function time_now()
+    if type(game.get_elapsed_time) == "function" then
+        return game.get_elapsed_time()
+    end
+    if type(game.elapsed_time) == "function" then
+        return game.elapsed_time()
+    end
+    if type(game.elapsed_time) == "table" and type(game.elapsed_time.value) == "number" then
+        return game.elapsed_time.value
+    end
+    if type(game.elapsed_time_value) == "number" then
+        return game.elapsed_time_value
+    end
+    if type(game.elapsed_time) == "number" then
+        return game.elapsed_time
+    end
+    return 0
+end
+
 -- =============================================================
 -- pickup_test.lua — pickup que testa entity.destroy()
 --
@@ -14,7 +33,7 @@ end
 
 function on_update(dt)
     -- Pulsa levemente para indicar que está ativo
-    local t = type(game.elapsed_time) == "function" and game.elapsed_time() or game.elapsed_time
+    local t = time_now()
     local scale = 1.0 + math.sin(t * 3.0) * 0.1
     -- (scale_x/y são somente leitura na V0.9.1, mas o efeito de "entrar/sair" é via log)
 

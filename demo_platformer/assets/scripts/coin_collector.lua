@@ -1,3 +1,22 @@
+local function time_now()
+    if type(game.get_elapsed_time) == "function" then
+        return game.get_elapsed_time()
+    end
+    if type(game.elapsed_time) == "function" then
+        return game.elapsed_time()
+    end
+    if type(game.elapsed_time) == "table" and type(game.elapsed_time.value) == "number" then
+        return game.elapsed_time.value
+    end
+    if type(game.elapsed_time_value) == "number" then
+        return game.elapsed_time_value
+    end
+    if type(game.elapsed_time) == "number" then
+        return game.elapsed_time
+    end
+    return 0
+end
+
 -- =============================================================
 --  coin_collector.lua  —  RS2BR-Engine Exemplo Oficial #3
 --  Moeda coletável: pulsa visualmente e some ao ser tocada.
@@ -22,21 +41,20 @@ function on_update(dt)
     end
 
     local base_y = state.get("base_y", entity.y)
-    local t = type(game.elapsed_time) == "function" and game.elapsed_time() or game.elapsed_time
+    local t = time_now()
     entity.set_position(entity.x, base_y + math.sin(t * BOB_SPEED) * 6)
 
-    local cols = game.get_collisions()
-    for _, name in ipairs(cols) do
-        if name == "Player" then
-            state.set("collected", true)
-            entity.set_visible(false)
+    if game.collision_enter("Player") or game.collision_stay("Player") then
+        state.set("collected", true)
+        entity.set_collision_enabled(false)
+        entity.set_visible(false)
 
-            local current = session.get("score", 0)
-            local next_score = current + 1
-            session.set("score", next_score)
+        local current = session.get("score", 0)
+        local next_score = current + 1
+        session.set("score", next_score)
 
-            game.log("Moeda coletada! score agora = " .. next_score)
-            return
-        end
+        game.log("Moeda coletada! score agora = " .. next_score)
+        entity.destroy()
+        return
     end
 end
