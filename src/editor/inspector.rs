@@ -13,7 +13,31 @@ use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
-    ui.heading("🔍 Inspector");
+    // ── Cabeçalho do Inspector ──
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(22, 27, 34))
+        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("🔍 Inspector").strong().size(13.0));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if app.selected_entity_id.is_some() {
+                        ui.label(
+                            egui::RichText::new("entidade selecionada")
+                                .small()
+                                .color(egui::Color32::from_rgb(63, 185, 80)),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new("cena")
+                                .small()
+                                .color(egui::Color32::from_rgb(88, 166, 255)),
+                        );
+                    }
+                });
+            });
+        });
+
     ui.separator();
 
     egui::ScrollArea::vertical()
@@ -41,24 +65,41 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
         Some(id) => id.clone(),
         None => {
             // ── Propriedades da Cena (nenhuma entidade selecionada) ──
-            ui.heading("🎬 Propriedades da Cena");
-            ui.separator();
-            ui.label(egui::RichText::new(format!("Nome: {}", app.scene.name)).strong());
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgb(28, 34, 44))
+                .rounding(6.0)
+                .inner_margin(egui::Margin::same(10.0))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new("🎬 Propriedades da Cena").strong().size(13.0));
+                    ui.add_space(2.0);
+                    ui.label(
+                        egui::RichText::new(format!("📄 {}", app.scene.name))
+                            .color(egui::Color32::from_rgb(88, 166, 255))
+                    );
+                });
+
             ui.add_space(8.0);
 
-            ui.label(egui::RichText::new("Cor de Fundo").strong());
+            ui.label(egui::RichText::new("🎨 Cor de Fundo").strong());
+            ui.label(
+                egui::RichText::new("Cor que aparece atrás de todos os objetos na cena")
+                    .small()
+                    .color(egui::Color32::from_rgb(100, 115, 135)),
+            );
+            ui.add_space(4.0);
+
             let bg = &mut app.scene.background_color;
             egui::Grid::new("scene_bg_color_grid")
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("R:");
+                    ui.label(egui::RichText::new("R").color(egui::Color32::from_rgb(255, 100, 100)));
                     ui.add(egui::Slider::new(&mut bg[0], 0.0..=1.0).show_value(true));
                     ui.end_row();
-                    ui.label("G:");
+                    ui.label(egui::RichText::new("G").color(egui::Color32::from_rgb(100, 220, 100)));
                     ui.add(egui::Slider::new(&mut bg[1], 0.0..=1.0).show_value(true));
                     ui.end_row();
-                    ui.label("B:");
+                    ui.label(egui::RichText::new("B").color(egui::Color32::from_rgb(100, 140, 255)));
                     ui.add(egui::Slider::new(&mut bg[2], 0.0..=1.0).show_value(true));
                     ui.end_row();
                 });
@@ -69,12 +110,37 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                 (bg[1].clamp(0.0,1.0)*255.0) as u8,
                 (bg[2].clamp(0.0,1.0)*255.0) as u8,
             );
-            let (preview_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::hover());
+            let (preview_rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), 28.0), egui::Sense::hover()
+            );
             ui.painter().rect_filled(preview_rect, 4.0, preview_color);
-            ui.add_space(6.0);
 
-            ui.label(egui::RichText::new("Entidades na cena:").weak().small());
-            ui.label(format!("  {} entidade(s)", app.scene.entities.len()));
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            ui.label(
+                egui::RichText::new(format!("📦 {} entidade(s) na cena", app.scene.entities.len()))
+                    .color(egui::Color32::from_rgb(88, 166, 255))
+            );
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Dica para iniciantes
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgb(20, 30, 46))
+                .rounding(5.0)
+                .inner_margin(egui::Margin::same(8.0))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new("💡 Como usar o Inspector").strong().small());
+                    ui.add_space(3.0);
+                    ui.label(egui::RichText::new("• Clique em uma entidade na Hierarquia (esquerda) para ver e editar suas propriedades aqui.").small().color(egui::Color32::from_rgb(139, 148, 158)));
+                    ui.add_space(2.0);
+                    ui.label(egui::RichText::new("• Você pode adicionar componentes como Sprite, Script, Collider e muito mais.").small().color(egui::Color32::from_rgb(139, 148, 158)));
+                });
+
             return;
         }
     };

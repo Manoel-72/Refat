@@ -26,44 +26,71 @@ enum QuickCreateKind {
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     let entity_count = count_entities(&app.scene.entities);
 
-    // Cabeçalho da viewport
-    ui.horizontal_wrapped(|ui| {
-        ui.heading("🎬 Cena 2D");
-        ui.separator();
-        ui.label(format!("📌 {}", app.scene.name));
-        ui.separator();
-        ui.label(format!("{:.0}%", app.scene_zoom * 100.0));
-        ui.separator();
-        ui.label(format!("🎯 {} entidades", entity_count));
+    // ── Cabeçalho da viewport ──
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(22, 27, 34))
+        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 4.0, bottom: 3.0 })
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("🎬 Cena 2D").strong().size(13.0));
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("📌 {}", app.scene.name))
+                        .color(egui::Color32::from_rgb(88, 166, 255))
+                        .size(12.0),
+                );
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("{:.0}%", app.scene_zoom * 100.0))
+                        .color(egui::Color32::from_rgb(139, 148, 158))
+                        .size(12.0),
+                );
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("🎯 {} obj", entity_count))
+                        .color(egui::Color32::from_rgb(139, 148, 158))
+                        .size(12.0),
+                );
 
-        if app.play_state != EditorPlayState::Edit {
-            ui.separator();
-            ui.colored_label(
-                egui::Color32::from_rgb(120, 255, 180),
-                "▶ Runtime em janela separada",
-            );
-        }
-
-        ui.checkbox(&mut app.show_entity_names, "🏷 Nomes");
-        ui.checkbox(&mut app.show_colliders, "📐 Colliders");
-        ui.checkbox(&mut app.snap_to_grid, "📏 Snap 32px");
-
-        if ui.small_button("🎯 Resetar Visão").clicked() {
-            app.scene_zoom = 1.0;
-            app.scene_pan = egui::Vec2::ZERO;
-        }
-
-        if let Some(selected_id) = &app.selected_entity_id {
-            if ui.small_button("📍 Focar Seleção").clicked() {
-                if let Some((x, y)) = find_entity_position(&app.scene.entities, selected_id) {
-                    app.scene_pan = egui::vec2(-(x * app.scene_zoom), y * app.scene_zoom);
+                if app.play_state != EditorPlayState::Edit {
+                    ui.separator();
+                    ui.colored_label(
+                        egui::Color32::from_rgb(63, 185, 80),
+                        "▶ Runtime ativo",
+                    );
                 }
-            }
-        }
-    });
+
+                ui.separator();
+                ui.checkbox(&mut app.show_entity_names, "🏷 Nomes")
+                    .on_hover_text("Exibe o nome de cada entidade na viewport");
+                ui.checkbox(&mut app.show_colliders, "📐 Colliders")
+                    .on_hover_text("Mostra os box colliders como bordas verdes");
+                ui.checkbox(&mut app.snap_to_grid, "📏 Snap 32px")
+                    .on_hover_text("Encaixa entidades na grade de 32px ao mover");
+
+                if ui.small_button("🎯 Resetar Visão")
+                    .on_hover_text("Volta zoom 100% e centraliza a viewport").clicked() {
+                    app.scene_zoom = 1.0;
+                    app.scene_pan = egui::Vec2::ZERO;
+                }
+
+                if let Some(selected_id) = &app.selected_entity_id {
+                    if ui.small_button("📍 Focar")
+                        .on_hover_text("Centraliza a viewport na entidade selecionada").clicked() {
+                        if let Some((x, y)) = find_entity_position(&app.scene.entities, selected_id) {
+                            app.scene_pan = egui::vec2(-(x * app.scene_zoom), y * app.scene_zoom);
+                        }
+                    }
+                }
+            });
+        });
 
     ui.label(
-        "Clique para selecionar | Ctrl + clique = multi-seleção | Arraste entidade = mover | Arraste no vazio = caixa de seleção | Scroll = zoom",
+        egui::RichText::new(
+            "Clique = selecionar  |  Ctrl+Clique = multi  |  Arraste = mover  |  Scroll = zoom  |  Clique direito = criar"
+        )
+        .small()
+        .color(egui::Color32::from_rgb(80, 92, 110)),
     );
     ui.separator();
 

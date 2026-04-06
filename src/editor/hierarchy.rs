@@ -13,28 +13,54 @@ use crate::{
 use super::{DeleteTarget, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
-    ui.heading("🌳 Hierarquia");
+    // ── Cabeçalho da Hierarquia ──
+    egui::Frame::none()
+        .fill(egui::Color32::from_rgb(22, 27, 34))
+        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("🌳 Hierarquia").strong().size(13.0));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let count = app.scene.entities.len();
+                    ui.label(
+                        egui::RichText::new(format!("{} entidade(s)", count))
+                            .small()
+                            .color(egui::Color32::from_rgb(88, 166, 255)),
+                    );
+                });
+            });
+        });
+
     ui.separator();
 
+    // ── Botão Nova Entidade + info de seleção ──
     ui.horizontal_wrapped(|ui| {
-        if ui.button("➕ Nova Entidade").clicked() {
+        if ui.add(
+            egui::Button::new(egui::RichText::new("➕ Nova Entidade").size(12.0))
+                .min_size(egui::vec2(130.0, 24.0))
+        ).on_hover_text("Cria uma entidade vazia na cena (ou use clique direito)").clicked() {
             app.new_entity_dialog = Some("Entidade".to_string());
         }
 
         if !app.selected_entity_ids.is_empty() {
             ui.label(
                 egui::RichText::new(format!(
-                    "{} item(ns) selecionado(s)",
+                    "✔ {} selecionado(s)",
                     app.selected_entity_ids.len()
                 ))
                 .small()
-                .weak(),
+                .color(egui::Color32::from_rgb(88, 166, 255)),
             );
         }
     });
 
+    ui.add_space(2.0);
+    ui.label(
+        egui::RichText::new("💡 Clique direito para mais opções")
+            .small()
+            .color(egui::Color32::from_rgb(100, 112, 130)),
+    );
     ui.separator();
-    ui.label(egui::RichText::new("Dica: clique direito em um item ou na área vazia para criar rapidamente.").small().weak());
 
     // Um contexto de clique direito disponível na área vazia da hierarquia
     // (para criar entidades na raiz sem clicar em um item existente)

@@ -551,7 +551,7 @@ impl EditorApp {
                                 .fill(btn_bg)
                                 .min_size(egui::vec2(ui.available_width(), 38.0));
 
-                                let hover_id = egui::Id::new(format!("hub_btn_{}", label));
+                                let _hover_id = egui::Id::new(format!("hub_btn_{}", label));
                                 let resp = ui.add(btn);
                                 if resp.hovered() {
                                     ui.painter().rect_filled(
@@ -1540,38 +1540,40 @@ fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // ── Tema escuro profundo — v0.9 ──
         let mut visuals = egui::Visuals::dark();
-        visuals.override_text_color = Some(egui::Color32::from_rgb(232, 236, 242));
-        visuals.panel_fill = egui::Color32::from_rgb(42, 48, 58);
-        visuals.faint_bg_color = egui::Color32::from_rgb(56, 63, 76);
-        visuals.extreme_bg_color = egui::Color32::from_rgb(32, 37, 46);
-        visuals.code_bg_color = egui::Color32::from_rgb(36, 42, 52);
-        visuals.window_fill = egui::Color32::from_rgb(46, 52, 63);
-        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 54, 66);
-        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(52, 59, 72);
-        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(61, 68, 82);
-        visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(70, 78, 94);
-        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(86, 96, 115);
-        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(96, 107, 128);
-        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(90, 126, 189);
-        visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(80, 112, 168);
-        visuals.widgets.open.bg_fill = egui::Color32::from_rgb(76, 85, 102);
-        visuals.selection.bg_fill = egui::Color32::from_rgb(92, 134, 214);
-        visuals.selection.stroke.color = egui::Color32::from_rgb(225, 236, 252);
-        visuals.hyperlink_color = egui::Color32::from_rgb(120, 180, 255);
-        visuals.window_stroke.color = egui::Color32::from_rgb(92, 100, 118);
-        visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::from_rgb(88, 97, 115);
-        visuals.widgets.inactive.bg_stroke.color = egui::Color32::from_rgb(98, 108, 128);
-        visuals.widgets.hovered.bg_stroke.color = egui::Color32::from_rgb(125, 137, 160);
-        visuals.widgets.active.bg_stroke.color = egui::Color32::from_rgb(160, 190, 240);
-        visuals.widgets.open.bg_stroke.color = egui::Color32::from_rgb(112, 123, 145);
-        visuals.window_rounding = 4.0.into();
-        visuals.menu_rounding = 4.0.into();
-        visuals.widgets.noninteractive.rounding = 4.0.into();
-        visuals.widgets.inactive.rounding = 4.0.into();
-        visuals.widgets.hovered.rounding = 4.0.into();
-        visuals.widgets.active.rounding = 4.0.into();
-        visuals.widgets.open.rounding = 4.0.into();
+        visuals.override_text_color = Some(egui::Color32::from_rgb(220, 227, 236));
+        visuals.panel_fill              = egui::Color32::from_rgb(22, 27, 34);
+        visuals.faint_bg_color          = egui::Color32::from_rgb(30, 36, 46);
+        visuals.extreme_bg_color        = egui::Color32::from_rgb(13, 17, 23);
+        visuals.code_bg_color           = egui::Color32::from_rgb(20, 26, 35);
+        visuals.window_fill             = egui::Color32::from_rgb(28, 33, 42);
+        visuals.widgets.noninteractive.bg_fill      = egui::Color32::from_rgb(30, 36, 46);
+        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(35, 42, 54);
+        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(40, 47, 60);
+        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(44, 52, 66);
+        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(52, 62, 80);
+        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(56, 67, 85);
+        visuals.widgets.active.bg_fill              = egui::Color32::from_rgb(56, 106, 188);
+        visuals.widgets.active.weak_bg_fill         = egui::Color32::from_rgb(46, 92, 168);
+        visuals.widgets.open.bg_fill                = egui::Color32::from_rgb(38, 46, 60);
+        visuals.selection.bg_fill                   = egui::Color32::from_rgb(56, 106, 188);
+        visuals.selection.stroke.color              = egui::Color32::from_rgb(88, 166, 255);
+        visuals.hyperlink_color                     = egui::Color32::from_rgb(88, 166, 255);
+        visuals.window_stroke.color                         = egui::Color32::from_rgb(48, 56, 70);
+        visuals.widgets.noninteractive.bg_stroke.color      = egui::Color32::from_rgb(44, 52, 66);
+        visuals.widgets.inactive.bg_stroke.color            = egui::Color32::from_rgb(50, 60, 75);
+        visuals.widgets.hovered.bg_stroke.color             = egui::Color32::from_rgb(88, 166, 255);
+        visuals.widgets.active.bg_stroke.color              = egui::Color32::from_rgb(120, 190, 255);
+        visuals.widgets.open.bg_stroke.color                = egui::Color32::from_rgb(60, 72, 90);
+        visuals.widgets.noninteractive.fg_stroke.color      = egui::Color32::from_rgb(48, 56, 70);
+        visuals.window_rounding                             = 6.0.into();
+        visuals.menu_rounding                               = 5.0.into();
+        visuals.widgets.noninteractive.rounding             = 4.0.into();
+        visuals.widgets.inactive.rounding                   = 4.0.into();
+        visuals.widgets.hovered.rounding                    = 4.0.into();
+        visuals.widgets.active.rounding                     = 4.0.into();
+        visuals.widgets.open.rounding                       = 4.0.into();
         ctx.set_visuals(visuals);
 
         if self.app_screen == EditorScreen::ProjectHub {
@@ -1739,6 +1741,8 @@ impl eframe::App for EditorApp {
             });
         });
 
+        self.show_new_project_dialog(ctx);
+        self.show_open_project_dialog(ctx);
         self.show_new_script_dialog(ctx);
         self.show_new_lua_dialog(ctx);
         self.show_new_folder_dialog(ctx);

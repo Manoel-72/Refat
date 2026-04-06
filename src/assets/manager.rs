@@ -9,8 +9,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::core::{
-    component::{BoxCollider, Camera2D, Component, RigidBody2D, Sprite, Velocity},
-    entity::Entity,
     project::create_basic_project_template_at,
 };
 
