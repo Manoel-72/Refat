@@ -1,37 +1,42 @@
-local every_count = 0
-local started = false
-
-local function emit_timer_event(message)
-    if event ~= nil and type(event.emit) == "function" then
-        event.emit("validation_timer", message)
-    end
-end
-
 function on_start()
+    state.set("timer_started", true)
+    state.set("timer_every_count", state.get("timer_every_count", 0))
+    state.set("timer_after_done", state.get("timer_after_done", false))
+    state.set("timer_last_message", state.get("timer_last_message", "armed"))
+
     if type(game.after) == "function" then
         game.after(1.0, function()
+            state.set("timer_after_done", true)
+            state.set("timer_last_message", "after_1s")
             game.log("[TIMER] after(1.0) executou")
-            emit_timer_event("after_1s")
+            if event ~= nil and type(event.emit) == "function" then
+                event.emit("validation_timer", "after_1s")
+            end
         end)
     else
+        state.set("timer_last_message", "after_missing")
         game.log("[TIMER] game.after não disponível nesta build")
     end
 
     if type(game.every) == "function" then
         game.every(0.75, function()
-            every_count = every_count + 1
-            game.log("[TIMER] every(0.75) tick=" .. tostring(every_count))
-            emit_timer_event("every_tick_" .. tostring(every_count))
+            local count = state.get("timer_every_count", 0) + 1
+            state.set("timer_every_count", count)
+            state.set("timer_last_message", "every_tick_" .. tostring(count))
+            game.log("[TIMER] every(0.75) tick=" .. tostring(count))
+            if event ~= nil and type(event.emit) == "function" then
+                event.emit("validation_timer", "every_tick_" .. tostring(count))
+            end
         end)
     else
+        state.set("timer_last_message", "every_missing")
         game.log("[TIMER] game.every não disponível nesta build")
     end
-
-    started = true
 end
 
 function on_update(dt)
-    if started then
-        entity.set_text("[TIMER] every_count=" .. tostring(every_count))
-    end
+    local count = state.get("timer_every_count", 0)
+    local after_done = state.get("timer_after_done", false)
+    local last_message = state.get("timer_last_message", "none")
+    entity.set_text("[TIMER] count=" .. tostring(count) .. " | after=" .. tostring(after_done) .. " | last=" .. tostring(last_message))
 end
