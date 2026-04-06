@@ -2,38 +2,257 @@
   "name": "engine_validation",
   "entities": [
     {
-      "name": "Player",
-      "transform": {
-        "x": 0,
-        "y": 5
-      },
-      "components": {
-        "Sprite": {
-          "texture": "player.png"
+      "id": "f5a35cb6-25c7-4cfd-bfab-08a78e56b909",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
         },
-        "BoxCollider": {
-          "w": 1,
-          "h": 1,
-          "layer": "player",
-          "mask": [
-            "world"
-          ]
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
         }
-      }
+      ],
+      "matr_source": null
     },
     {
-      "name": "Ground",
-      "transform": {
-        "x": 0,
-        "y": 0
-      },
-      "components": {
-        "BoxCollider": {
-          "w": 20,
-          "h": 1,
-          "layer": "world"
+      "id": "38f8b16d-78a0-446a-9563-1e8b5c1541bc",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 96.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
         }
-      }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "b8d5ac25-b81c-46db-b734-4823826febd7",
+      "name": "Ground",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 512.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "e7a238ce-75de-4da4-afa1-3b2f69c0a9a1",
+      "name": "Wall",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 160.0,
+            "y": 64.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 160.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "81eba68d-cc80-4008-852b-5c87d45e7dfe",
+      "name": "Ceiling",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 176.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 256.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "92eb9125-34a1-4b94-897a-1b926cd3fd67",
+      "name": "TriggerZone",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -128.0,
+            "y": 32.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 64.0,
+            "height": 64.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "layer": 0,
+            "mask": 0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "sprites/player.png",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        }
+      ],
+      "matr_source": null
     }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
   ]
 }
