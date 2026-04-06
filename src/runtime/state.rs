@@ -20,6 +20,18 @@ use crate::{
     },
 };
 
+pub type ScriptStateScopeKey = String;
+pub type ScriptState = HashMap<ScriptStateScopeKey, HashMap<String, SaveValue>>;
+
+pub fn make_script_state_scope_key(entity_id: &str, script_path: &str) -> ScriptStateScopeKey {
+    format!("{}::{}", entity_id, script_path)
+}
+
+pub fn script_scope_prefix(entity_id: &str) -> String {
+    format!("{}::", entity_id)
+}
+
+
 
 #[derive(Debug, Clone)]
 pub struct PendingSpawnRequest {
@@ -107,8 +119,9 @@ pub struct RuntimeState {
     pub save_data: SaveData,
     /// Estado temporário da sessão atual (não persistido em arquivo por padrão).
     pub session_state: HashMap<String, SaveValue>,
-    /// Estado temporário por entidade/script (memória de execução, não persistida).
-    pub script_state: HashMap<String, HashMap<String, SaveValue>>,
+    /// Estado temporário por entidade+script (memória de execução, não persistida).
+    /// Chave: "entity_id::script_path"
+    pub script_state: ScriptState,
     /// Cache de VMs Lua: chave = "entity_id::script_path", valor = (VM, mtime do arquivo).
     /// Evita criar uma Lua::new() por frame — criada uma vez, reutilizada.
     pub lua_vms: HashMap<String, (mlua::Lua, std::time::SystemTime)>,
@@ -145,7 +158,7 @@ impl RuntimeState {
             last_spawned_entity_id: None,
             save_data: SaveData::new(),
             session_state: HashMap::new(),
-            script_state: HashMap::new(),
+            script_state: ScriptState::new(),
             lua_vms: HashMap::new(),
             collision_contacts: HashMap::new(),
             previous_collision_contacts: HashMap::new(),
@@ -333,45 +346,55 @@ impl RuntimeState {
     }
 
     pub fn clear_script_state_for_entity(&mut self, entity_id: &str) {
-        self.script_state.remove(entity_id);
+        let prefix = script_scope_prefix(entity_id);
+        self.script_state.retain(|scope_key, _| !scope_key.starts_with(&prefix));
     }
 
-    pub fn script_get(&self, entity_id: &str, key: &str) -> Option<&SaveValue> {
-        self.script_state.get(entity_id)?.get(key)
+    pub fn clear_script_state_for_scope(&mut self, entity_id: &str, script_path: &str) {
+        let scope_key = make_script_state_scope_key(entity_id, script_path);
+        self.script_state.remove(&scope_key);
     }
 
-    pub fn script_set<K, V>(&mut self, entity_id: &str, key: K, value: V)
+    pub fn script_get(&self, entity_id: &str, script_path: &str, key: &str) -> Option<&SaveValue> {
+        let scope_key = make_script_state_scope_key(entity_id, script_path);
+        self.script_state.get(&scope_key)?.get(key)
+    }
+
+    pub fn script_set<K, V>(&mut self, entity_id: &str, script_path: &str, key: K, value: V)
     where
         K: Into<String>,
         V: Into<SaveValue>,
     {
+        let scope_key = make_script_state_scope_key(entity_id, script_path);
         self.script_state
-            .entry(entity_id.to_string())
+            .entry(scope_key)
             .or_default()
             .insert(key.into(), value.into());
     }
 
-    pub fn script_has(&self, entity_id: &str, key: &str) -> bool {
+    pub fn script_has(&self, entity_id: &str, script_path: &str, key: &str) -> bool {
+        let scope_key = make_script_state_scope_key(entity_id, script_path);
         self.script_state
-            .get(entity_id)
+            .get(&scope_key)
             .map(|state| state.contains_key(key))
             .unwrap_or(false)
     }
 
-    pub fn script_remove(&mut self, entity_id: &str, key: &str) -> Option<SaveValue> {
+    pub fn script_remove(&mut self, entity_id: &str, script_path: &str, key: &str) -> Option<SaveValue> {
+        let scope_key = make_script_state_scope_key(entity_id, script_path);
         let removed = self
             .script_state
-            .get_mut(entity_id)
+            .get_mut(&scope_key)
             .and_then(|state| state.remove(key));
 
         let should_prune = self
             .script_state
-            .get(entity_id)
+            .get(&scope_key)
             .map(|state| state.is_empty())
             .unwrap_or(false);
 
         if should_prune {
-            self.script_state.remove(entity_id);
+            self.script_state.remove(&scope_key);
         }
 
         removed
@@ -701,10 +724,13 @@ impl RuntimeState {
     }
 
     fn cleanup_destroyed_entity_runtime_data(&mut self, entity_id: &str) {
-        self.script_state.remove(entity_id);
-        self.started_scripts.retain(|key| !key.contains(entity_id));
+        let script_prefix = script_scope_prefix(entity_id);
+        let started_prefix = format!("lua::{}::", entity_id);
+        let vm_prefix = format!("vm::{}::", entity_id);
+        self.script_state.retain(|scope_key, _| !scope_key.starts_with(&script_prefix));
+        self.started_scripts.retain(|key| !key.starts_with(&started_prefix));
         self.started_audio.retain(|key| !key.contains(entity_id));
-        self.lua_vms.retain(|key: &String, _| !key.contains(entity_id));
+        self.lua_vms.retain(|key: &String, _| !key.starts_with(&vm_prefix));
         self.collision_contacts.remove(entity_id);
         self.previous_collision_contacts.remove(entity_id);
         self.collision_enter_contacts.remove(entity_id);

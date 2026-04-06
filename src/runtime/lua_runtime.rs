@@ -257,6 +257,28 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
     Ok(wrapper)
 }
 
+fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
+    let wrapper = lua.create_table().map_err(|e| e.to_string())?;
+    wrapper.set(1, x).map_err(|e| e.to_string())?;
+    wrapper.set(2, y).map_err(|e| e.to_string())?;
+    wrapper.set("x", x).map_err(|e| e.to_string())?;
+    wrapper.set("y", y).map_err(|e| e.to_string())?;
+
+    let mt = lua.create_table().map_err(|e| e.to_string())?;
+    let call_x = x;
+    let call_y = y;
+    let call_fn = lua.create_function(move |lua_ctx, ()| {
+        let t = lua_ctx.create_table()?;
+        t.set(1, call_x)?;
+        t.set(2, call_y)?;
+        t.set("x", call_x)?;
+        t.set("y", call_y)?;
+        Ok(t)
+    }).map_err(|e| e.to_string())?;
+    mt.set("__call", call_fn).map_err(|e| e.to_string())?;
+    wrapper.set_metatable(Some(mt));
+    Ok(wrapper)
+}
 
     
 // ── tabela `entity` ──────────────────────────────────────
@@ -431,13 +453,18 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
         input_tbl.set("key_pressed", key_pressed).ok();
 
         let (mx, my) = input.mouse_pos;
-        let mouse_pos = lua.create_function(move |lua, ()| {
-            let t = lua.create_table()?;
+        let mouse_pos = make_vec2_callable(&lua, mx, my)?;
+        input_tbl.set("mouse_pos", mouse_pos).ok();
+
+        let get_mouse_pos = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
             t.set(1, mx)?;
             t.set(2, my)?;
+            t.set("x", mx)?;
+            t.set("y", my)?;
             Ok(t)
         }).map_err(|e| e.to_string())?;
-        input_tbl.set("mouse_pos", mouse_pos).ok();
+        input_tbl.set("get_mouse_pos", get_mouse_pos).ok();
 
         input_tbl.set("mouse_left",   input.mouse_left).ok();
         input_tbl.set("mouse_right",  input.mouse_right).ok();
@@ -455,6 +482,9 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
         let get_delta_time = lua.create_function(move |_, ()| Ok(delta_time))
             .map_err(|e| e.to_string())?;
         game_tbl.set("get_delta_time", get_delta_time).ok();
+        let delta_time_fn = lua.create_function(move |_, ()| Ok(delta_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("delta_time_fn", delta_time_fn).ok();
 
         let elapsed_time_value = make_numeric_callable(&lua, elapsed_time)?;
         game_tbl.set("elapsed_time", elapsed_time_value).ok();
@@ -462,6 +492,9 @@ fn make_numeric_callable(lua: &Lua, value: f32) -> Result<Table, String> {
         let get_elapsed_time = lua.create_function(move |_, ()| Ok(elapsed_time))
             .map_err(|e| e.to_string())?;
         game_tbl.set("get_elapsed_time", get_elapsed_time).ok();
+        let elapsed_time_fn = lua.create_function(move |_, ()| Ok(elapsed_time))
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("elapsed_time_fn", elapsed_time_fn).ok();
 
         // game.log/msg + aliases de severidade
         let log_prefix = format_lua_context(entity, scene_label, script_path);
@@ -1108,31 +1141,31 @@ pub fn apply_session_ops(session_data: &mut std::collections::HashMap<String, Sa
 
 
 pub fn apply_state_ops(
-    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, SaveValue>>,
-    entity_id: &str,
+    script_state: &mut crate::runtime::state::ScriptState,
+    script_scope_key: &str,
     ops: &[StateOp],
 ) {
     for op in ops {
         match op {
             StateOp::Set(key, value) => {
                 script_state
-                    .entry(entity_id.to_string())
+                    .entry(script_scope_key.to_string())
                     .or_default()
                     .insert(key.clone(), value.clone());
             }
             StateOp::Remove(key) => {
-                let should_remove_entity = if let Some(entity_state) = script_state.get_mut(entity_id) {
+                let should_remove_entity = if let Some(entity_state) = script_state.get_mut(script_scope_key) {
                     entity_state.remove(key);
                     entity_state.is_empty()
                 } else {
                     false
                 };
                 if should_remove_entity {
-                    script_state.remove(entity_id);
+                    script_state.remove(script_scope_key);
                 }
             }
             StateOp::Clear => {
-                script_state.remove(entity_id);
+                script_state.remove(script_scope_key);
             }
         }
     }

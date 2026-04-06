@@ -1,5 +1,11 @@
 {
   "name": "Validation Scene — RS2BR V0.9.1",
+  "_comment": "Cena oficial de regressão. Exercita: session.*, state.*, collision_enter/stay/exit, collision_enabled, entity.destroy(). Abra no editor e pressione Play para validar.",
+  "background_color": [
+    0.05,
+    0.08,
+    0.15
+  ],
   "entities": [
     {
       "id": "ent-cam-val",
@@ -22,8 +28,7 @@
             "is_main": true
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-player-val",
@@ -69,9 +74,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": false,
-            "collision_enabled": true,
             "layer": 1,
-            "mask": 2
+            "mask": 2,
+            "collision_enabled": true
           }
         },
         {
@@ -79,8 +84,7 @@
             "file_path": "assets/scripts/player_platformer.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-ground-val",
@@ -120,13 +124,12 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": false,
-            "collision_enabled": true,
             "layer": 2,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-plat-val-a",
@@ -166,13 +169,12 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": false,
-            "collision_enabled": true,
             "layer": 2,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-plat-val-b",
@@ -212,13 +214,12 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": false,
-            "collision_enabled": true,
             "layer": 2,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-enemy-val",
@@ -264,9 +265,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": false,
-            "collision_enabled": true,
             "layer": 2,
-            "mask": 2
+            "mask": 2,
+            "collision_enabled": true
           }
         },
         {
@@ -274,8 +275,7 @@
             "file_path": "assets/scripts/enemy_patrol.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-coin-val-1",
@@ -308,9 +308,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": true,
-            "collision_enabled": true,
             "layer": 4,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         },
         {
@@ -318,8 +318,7 @@
             "file_path": "assets/scripts/coin_collector.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-coin-val-2",
@@ -352,9 +351,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": true,
-            "collision_enabled": true,
             "layer": 4,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         },
         {
@@ -362,8 +361,7 @@
             "file_path": "assets/scripts/coin_collector.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-coin-val-3",
@@ -396,9 +394,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": true,
-            "collision_enabled": true,
             "layer": 4,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         },
         {
@@ -406,8 +404,7 @@
             "file_path": "assets/scripts/coin_collector.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-pickup-val",
@@ -440,9 +437,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": true,
-            "collision_enabled": true,
             "layer": 4,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         },
         {
@@ -450,8 +447,7 @@
             "file_path": "assets/scripts/pickup_test.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-probe-val",
@@ -461,8 +457,8 @@
       "components": [
         {
           "Transform": {
-            "x": -144.15727,
-            "y": -43.453888,
+            "x": -100.0,
+            "y": -270.0,
             "rotation": 0.0,
             "scale_x": 1.0,
             "scale_y": 1.0
@@ -484,9 +480,9 @@
             "offset_x": 0.0,
             "offset_y": 0.0,
             "is_trigger": true,
-            "collision_enabled": true,
             "layer": 4,
-            "mask": 1
+            "mask": 1,
+            "collision_enabled": true
           }
         },
         {
@@ -494,8 +490,7 @@
             "file_path": "assets/scripts/collision_probe.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-hud-score-val",
@@ -528,8 +523,7 @@
             "file_path": "assets/scripts/score_hud.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-hud-legend-val",
@@ -557,8 +551,7 @@
             "screen_space": true
           }
         }
-      ],
-      "matr_source": null
+      ]
     },
     {
       "id": "ent-hud-save-val",
@@ -591,13 +584,7 @@
             "file_path": "assets/scripts/save_validation_hud.lua"
           }
         }
-      ],
-      "matr_source": null
+      ]
     }
-  ],
-  "background_color": [
-    0.05,
-    0.08,
-    0.15
   ]
 }

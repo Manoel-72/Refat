@@ -40,7 +40,7 @@ Escreva funções `on_start()` e `on_update(dt)` — o engine chama automaticame
 |---|---|---|
 | `input.key_held(name)` | bool | Tecla mantida pressionada neste frame |
 | `input.key_pressed(name)` | bool | Tecla pressionada **neste frame apenas** |
-| `input.mouse_pos()` | `{x, y}` | Posição do mouse na janela |
+| `input.mouse_pos() / input.get_mouse_pos()` | `{x, y}` | Posição do mouse na janela |
 | `input.mouse_left` | bool | Botão esquerdo do mouse pressionado |
 | `input.mouse_right` | bool | Botão direito do mouse |
 
@@ -53,8 +53,8 @@ Escreva funções `on_start()` e `on_update(dt)` — o engine chama automaticame
 
 | Campo / Função | Tipo | Descrição |
 |---|---|---|
-| `game.delta_time()` | função → number | Segundos desde o último frame |
-| `game.elapsed_time()` | função → number | Segundos desde o início da cena |
+| `game.delta_time()` (oficial) | função → number | Segundos desde o último frame |
+| `game.elapsed_time()` (oficial) | função → number | Segundos desde o início da cena |
 | `game.log(msg)` | função | Imprime no terminal do engine |
 | `game.change_scene(path)` | função | Carrega outra cena (ex: `"assets/scenes/fase2.scene.json"`) |
 | `game.get_collisions()` | função → lista | Nomes das entidades colidindo com esta neste frame |

@@ -112,7 +112,7 @@ pub fn run_lua_scripts_for_entity(
     input: &crate::runtime::state::RuntimeInput,
     save_data: &mut crate::runtime::save::SaveData,
     session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
-    script_state: &mut std::collections::HashMap<String, std::collections::HashMap<String, crate::runtime::save::SaveValue>>,
+    script_state: &mut crate::runtime::state::ScriptState,
     delta_time: f32,
     elapsed_time: f32,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
@@ -193,7 +193,7 @@ pub fn run_lua_scripts_for_entity(
             input,
             save_data,
             session_state,
-            script_state.get(&entity.id),
+            script_state.get(&crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path)),
             delta_time,
             elapsed_time,
             already_started,
@@ -211,7 +211,8 @@ pub fn run_lua_scripts_for_entity(
                 lua_runtime::apply_lua_result(entity, &result);
                 lua_runtime::apply_save_ops(save_data, &result.save_ops);
                 lua_runtime::apply_session_ops(session_state, &result.session_ops);
-                lua_runtime::apply_state_ops(script_state, &entity.id, &result.state_ops);
+                let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
+                lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 if result.destroy_entity {
                     pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
                         entity_id: entity.id.clone(),

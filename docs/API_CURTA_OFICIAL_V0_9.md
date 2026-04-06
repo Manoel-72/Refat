@@ -6,7 +6,7 @@ Este documento resume o uso oficial da API de gameplay da engine.
 
 - `save.*` = persistente entre sessões
 - `session.*` = temporário da partida atual
-- `state.*` = memória temporária por entidade/script
+- `state.*` = memória temporária por entidade + script
 
 ### Use `save.*` para
 - checkpoint
@@ -31,8 +31,8 @@ Este documento resume o uso oficial da API de gameplay da engine.
 ## API principal
 
 ### game
-- `game.delta_time()` → delta time do frame
-- `game.elapsed_time()` → tempo acumulado da cena
+- `game.delta_time()` (oficial) → delta time do frame
+- `game.elapsed_time()` (oficial) → tempo acumulado da cena
 - `game.get_position()` → posição atual da entidade/script atual, quando suportado pelo runtime
 - `game.set_position(x, y)` → move a entidade atual, quando suportado pelo runtime
 - `game.get_velocity()` → velocidade atual da entidade/script atual, quando suportado pelo runtime
@@ -48,7 +48,7 @@ Este documento resume o uso oficial da API de gameplay da engine.
 ### input
 - `input.key_held(name)`
 - `input.key_pressed(name)`
-- `input.mouse_pos()`
+- `input.mouse_pos() / input.get_mouse_pos()`
 - `input.mouse_left`
 - `input.mouse_right`
 

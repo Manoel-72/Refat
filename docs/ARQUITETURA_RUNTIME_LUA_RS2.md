@@ -51,8 +51,8 @@ A recomendação atual é evitar duplicar responsabilidade na mesma entidade. Pa
 - `entity.set_visible(bool)`
 - `entity.play_anim("clip")`
 - `input.key_held("A")`, `input.key_pressed("Space")`
-- `input.mouse_pos()`, `input.mouse_left`, `input.mouse_right`
-- `game.delta_time()`, `game.elapsed_time()`
+- `input.mouse_pos() / input.get_mouse_pos()`, `input.mouse_left`, `input.mouse_right`
+- `game.delta_time()` (oficial), `game.elapsed_time()` (oficial)
 - `game.log("msg")`
 - `game.change_scene("path")`
 - `game.get_collisions()` — lista de nomes das entidades em contato
@@ -109,7 +109,7 @@ A runtime agora diferencia explicitamente dois fluxos:
 
 - `save.*` = persistente
 - `session.*` = temporário da partida atual
-- `state.*` = memória temporária por entidade/script
+- `state.*` = memória temporária por entidade + script
 
 ### Migração oficial dos scripts demo
 
