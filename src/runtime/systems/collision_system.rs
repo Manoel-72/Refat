@@ -91,6 +91,9 @@ pub fn aabb_mtv(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> Mtv {
 
 pub fn collect_colliders(entities: &[Entity], out: &mut Vec<RuntimeCollider>) {
     for entity in entities {
+        if !entity.visible {
+            continue;
+        }
         let mut transform = None;
         let mut collider_data = None;
 

@@ -44,6 +44,7 @@ pub struct LuaScriptResult {
     pub set_rotation: Option<f32>,
     pub set_visible: Option<bool>,
     pub play_anim: Option<String>,
+    pub set_text: Option<String>,
     pub change_scene: Option<String>,
     pub apply_impulse: Option<(f32, f32)>,
     pub save_ops: Vec<SaveOp>,
@@ -170,6 +171,15 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("play_anim", play_anim).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_text = lua.create_function(move |_, text: String| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("text", text)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_text", set_text).ok();
     }
     // entity.apply_impulse(ix, iy) — acumula impulso (somado à velocidade no apply)
     {
@@ -404,6 +414,9 @@ pub fn run_lua_script_with_vm(
             if let Ok(clip) = cmds.get::<String>("anim") {
                 result.play_anim = Some(clip);
             }
+            if let Ok(text) = cmds.get::<String>("text") {
+                result.set_text = Some(text);
+            }
             if let (Ok(ix), Ok(iy)) = (cmds.get::<f32>("impulse_x"), cmds.get::<f32>("impulse_y")) {
                 result.apply_impulse = Some((ix, iy));
             }
@@ -484,6 +497,14 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
                 if anim.clips.contains_key(clip.as_str()) {
                     anim.current = clip.clone();
                 }
+                break;
+            }
+        }
+    }
+    if let Some(text) = &r.set_text {
+        for c in &mut entity.components {
+            if let Component::TextLabel(label) = c {
+                label.text = text.clone();
                 break;
             }
         }
