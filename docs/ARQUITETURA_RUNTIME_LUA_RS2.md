@@ -167,3 +167,11 @@ Use isso para pickups, projéteis e inimigos derrotados sem quebrar a atualizaç
 - Objetivo: registrar de forma curta e oficial a API de gameplay e a regra de estado da engine.
 - Regra oficial: `save.*` persistente, `session.*` sessão atual, `state.*` memória por entidade/script.
 - Referências práticas: `demo_platformer/LUA_API.md` e `docs/CENA_VALIDACAO_V0_9.md`.
+
+
+## Bloco 2 — colisão por id
+- `game.collision_enter_id(id)` / `game.collision_stay_id(id)` / `game.collision_exit_id(id)`
+- `game.get_current_collision_ids()` / `game.get_previous_collision_ids()`
+- `game.get_collision_ids()` / `game.get_collision_names()`
+- `game.get_current_collision_info()` retorna lista de `{ id, name }`
+- `game.raycast(...)` agora também retorna `id` quando houver hit

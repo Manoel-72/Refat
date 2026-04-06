@@ -18,6 +18,8 @@
 //    game.collision_enter(name) → bool, true apenas no frame de entrada
 //    game.collision_stay(name)  → bool, true enquanto continuar em contato
 //    game.collision_exit(name)  → bool, true apenas no frame de saída
+//    game.collision_enter_id(id), game.collision_stay_id(id), game.collision_exit_id(id)
+//    game.get_current_collision_ids(), game.get_current_collision_info()
 //    game.raycast(ox,oy,dx,dy,dist) → {hit, x, y, dist, name} ou nil
 //    entity.id, entity.apply_impulse(ix, iy), entity.destroy()
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
@@ -94,11 +96,17 @@ pub fn run_lua_script(
     delta_time: f32,
     elapsed_time: f32,
     started: bool,
+    collision_entries: &[crate::runtime::systems::CollisionEntry],
     collision_names: &[String],
+    collision_ids: &[String],
     previous_collision_names: &[String],
+    previous_collision_ids: &[String],
     collision_enter_names: &[String],
+    collision_enter_ids: &[String],
     collision_stay_names: &[String],
+    collision_stay_ids: &[String],
     collision_exit_names: &[String],
+    collision_exit_ids: &[String],
     scene_label: Option<&str>,
     script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
@@ -114,11 +122,17 @@ pub fn run_lua_script(
         delta_time,
         elapsed_time,
         started,
+        collision_entries,
         collision_names,
+        collision_ids,
         previous_collision_names,
+        previous_collision_ids,
         collision_enter_names,
+        collision_enter_ids,
         collision_stay_names,
+        collision_stay_ids,
         collision_exit_names,
+        collision_exit_ids,
         &[],
         scene_label,
         script_path,
@@ -137,11 +151,17 @@ pub fn run_lua_script_with_vm(
     delta_time: f32,
     elapsed_time: f32,
     started: bool,
+    collision_entries: &[crate::runtime::systems::CollisionEntry],
     collision_names: &[String],
+    collision_ids: &[String],
     previous_collision_names: &[String],
+    previous_collision_ids: &[String],
     collision_enter_names: &[String],
+    collision_enter_ids: &[String],
     collision_stay_names: &[String],
+    collision_stay_ids: &[String],
     collision_exit_names: &[String],
+    collision_exit_ids: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
     scene_label: Option<&str>,
     script_path: Option<&str>,
@@ -540,11 +560,19 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         }).map_err(|e| e.to_string())?;
         game_tbl.set("get_collisions", get_collisions).ok();
 
-        let current_cols: Vec<String> = collision_names.to_vec();
-        let previous_cols: Vec<String> = previous_collision_names.to_vec();
+        let current_cols_snapshot: Vec<String> = collision_names.to_vec();
+        let current_cols_for_names = current_cols_snapshot.clone();
+        let current_col_ids_snapshot: Vec<String> = collision_ids.to_vec();
+        let current_col_ids_alias = current_col_ids_snapshot.clone();
+        let current_col_entries: Vec<(String, String)> = collision_entries.iter().map(|entry| (entry.id.clone(), entry.name.clone())).collect();
+        let previous_cols_snapshot: Vec<String> = previous_collision_names.to_vec();
+        let previous_col_ids_snapshot: Vec<String> = previous_collision_ids.to_vec();
         let enter_cols: Vec<String> = collision_enter_names.to_vec();
+        let enter_col_ids: Vec<String> = collision_enter_ids.to_vec();
         let stay_cols: Vec<String> = collision_stay_names.to_vec();
+        let stay_col_ids: Vec<String> = collision_stay_ids.to_vec();
         let exit_cols: Vec<String> = collision_exit_names.to_vec();
+        let exit_col_ids: Vec<String> = collision_exit_ids.to_vec();
 
         let collision_enter = lua.create_function(move |_, name: String| {
             Ok(enter_cols.iter().any(|n| n.eq_ignore_ascii_case(&name)))
@@ -561,9 +589,22 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         }).map_err(|e| e.to_string())?;
         game_tbl.set("collision_exit", collision_exit).ok();
 
+        let collision_enter_id = lua.create_function(move |_, id: String| {
+            Ok(enter_col_ids.iter().any(|existing| existing == &id))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_enter_id", collision_enter_id).ok();
+
+        let collision_stay_id = lua.create_function(move |_, id: String| {
+            Ok(stay_col_ids.iter().any(|existing| existing == &id))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_stay_id", collision_stay_id).ok();
+
+        let collision_exit_id = lua.create_function(move |_, id: String| {
+            Ok(exit_col_ids.iter().any(|existing| existing == &id))
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("collision_exit_id", collision_exit_id).ok();
+
         // Mantém snapshots brutos disponíveis para compatibilidade e debug.
-        let current_cols_snapshot = current_cols.clone();
-        let previous_cols_snapshot = previous_cols.clone();
         let get_collisions_previous = lua.create_function(move |lua_ctx, ()| {
             let t = lua_ctx.create_table()?;
             for (i, name) in previous_cols_snapshot.iter().enumerate() {
@@ -582,10 +623,58 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
         }).map_err(|e| e.to_string())?;
         game_tbl.set("get_current_collisions", get_collisions_current).ok();
 
-        // game.raycast(ox, oy, dx, dy, max_dist) → {hit=true, x, y, dist, name} | {hit=false}
+        let get_current_collision_ids = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, id) in current_col_ids_snapshot.iter().enumerate() {
+                t.set(i + 1, id.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_current_collision_ids", get_current_collision_ids).ok();
+
+        let get_previous_collision_ids = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, id) in previous_col_ids_snapshot.iter().enumerate() {
+                t.set(i + 1, id.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_previous_collision_ids", get_previous_collision_ids).ok();
+
+        let get_collision_ids = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, id) in current_col_ids_alias.iter().enumerate() {
+                t.set(i + 1, id.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_collision_ids", get_collision_ids).ok();
+
+        let get_collision_names = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, name) in current_cols_for_names.iter().enumerate() {
+                t.set(i + 1, name.as_str())?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_collision_names", get_collision_names).ok();
+
+        let get_current_collision_info = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            for (i, (id, name)) in current_col_entries.iter().enumerate() {
+                let entry = lua_ctx.create_table()?;
+                entry.set("id", id.as_str())?;
+                entry.set("name", name.as_str())?;
+                t.set(i + 1, entry)?;
+            }
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        game_tbl.set("get_current_collision_info", get_current_collision_info).ok();
+
+        // game.raycast(ox, oy, dx, dy, max_dist) → {hit=true, x, y, dist, name, id} | {hit=false}
         // Snapshot sem raw ptr — apenas dados geométricos + nome, seguro para closure.
-        let ray_snap: Vec<(f32, f32, f32, f32, u8, String)> = colliders.iter()
-            .map(|c| (c.center_x, c.center_y, c.width, c.height, c.layer, c.entity_name.clone()))
+        let ray_snap: Vec<(f32, f32, f32, f32, u8, String, String)> = colliders.iter()
+            .map(|c| (c.center_x, c.center_y, c.width, c.height, c.layer, c.entity_name.clone(), c.entity_id.clone()))
             .collect();
         let raycast_fn = lua.create_function(move |lua_ctx, (ox, oy, dx, dy, max_dist): (f32,f32,f32,f32,f32)| {
             let t = lua_ctx.create_table()?;
@@ -598,15 +687,15 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
             let (ndx, ndy) = (dx / len, dy / len);
             let min_dim = ray_snap.iter().map(|c| c.2.min(c.3)).fold(f32::MAX, f32::min);
             let step = (min_dim * 0.5).max(2.0).min(16.0);
-            let mut best: Option<(f32, f32, f32, String)> = None; // (hit_x, hit_y, dist, name)
+            let mut best: Option<(f32, f32, f32, String, String)> = None; // (hit_x, hit_y, dist, name, id)
             let mut d = 0.0_f32;
             while d <= max_dist {
                 let px = ox + ndx * d;
                 let py = oy + ndy * d;
-                for (cx, cy, w, h, _layer, name) in &ray_snap {
+                for (cx, cy, w, h, _layer, name, id) in &ray_snap {
                     if (px - cx).abs() <= w * 0.5 && (py - cy).abs() <= h * 0.5 {
                         if best.is_none() {
-                            best = Some((px, py, d, name.clone()));
+                            best = Some((px, py, d, name.clone(), id.clone()));
                         }
                     }
                 }
@@ -615,12 +704,13 @@ fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
             }
             match best {
                 None => { t.set("hit", false)?; }
-                Some((hx, hy, hd, hname)) => {
+                Some((hx, hy, hd, hname, hid)) => {
                     t.set("hit", true)?;
                     t.set("x", hx)?;
                     t.set("y", hy)?;
                     t.set("dist", hd)?;
                     t.set("name", hname)?;
+                    t.set("id", hid)?;
                 }
             }
             Ok(t)
@@ -1097,7 +1187,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -1108,11 +1198,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], None, None).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -1122,7 +1212,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
     }

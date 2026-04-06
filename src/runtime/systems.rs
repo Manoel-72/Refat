@@ -41,7 +41,9 @@ pub fn update_entities_runtime(
     input: &crate::runtime::state::RuntimeInput,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    collision_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
+    previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
@@ -63,7 +65,9 @@ pub fn update_entities_runtime(
         input,
         lua_vms,
         collision_contacts,
+        collision_contact_ids,
         previous_collision_contacts,
+        previous_collision_contact_ids,
         pending_destroys,
     )
 }
@@ -84,7 +88,9 @@ fn update_entities_runtime_recursive(
     input: &crate::runtime::state::RuntimeInput,
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    collision_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
+    previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
@@ -118,23 +124,32 @@ fn update_entities_runtime_recursive(
 
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
-        let collision_names = collect_collision_names(entity_ptr, &my_collider_data, colliders);
+        let collision_entries = collect_collision_entries(entity_ptr, &my_collider_data, colliders);
+        let collision_names: Vec<String> = collision_entries.iter().map(|entry| entry.name.clone()).collect();
+        let collision_ids: Vec<String> = collision_entries.iter().map(|entry| entry.id.clone()).collect();
         let previous_collision_names = previous_collision_contacts.get(&entity.id).cloned().unwrap_or_default();
+        let previous_collision_ids = previous_collision_contact_ids.get(&entity.id).cloned().unwrap_or_default();
         collision_contacts.insert(entity.id.clone(), collision_names.clone());
+        collision_contact_ids.insert(entity.id.clone(), collision_ids.clone());
 
         let current_collision_set: std::collections::HashSet<String> = collision_names.iter().cloned().collect();
         let previous_collision_set: std::collections::HashSet<String> = previous_collision_names.iter().cloned().collect();
+        let current_collision_id_set: std::collections::HashSet<String> = collision_ids.iter().cloned().collect();
+        let previous_collision_id_set: std::collections::HashSet<String> = previous_collision_ids.iter().cloned().collect();
 
-        let mut collision_enter_names: Vec<String> =
-            current_collision_set.difference(&previous_collision_set).cloned().collect();
-        let mut collision_stay_names: Vec<String> =
-            current_collision_set.intersection(&previous_collision_set).cloned().collect();
-        let mut collision_exit_names: Vec<String> =
-            previous_collision_set.difference(&current_collision_set).cloned().collect();
+        let mut collision_enter_names: Vec<String> = current_collision_set.difference(&previous_collision_set).cloned().collect();
+        let mut collision_stay_names: Vec<String> = current_collision_set.intersection(&previous_collision_set).cloned().collect();
+        let mut collision_exit_names: Vec<String> = previous_collision_set.difference(&current_collision_set).cloned().collect();
+        let mut collision_enter_ids: Vec<String> = current_collision_id_set.difference(&previous_collision_id_set).cloned().collect();
+        let mut collision_stay_ids: Vec<String> = current_collision_id_set.intersection(&previous_collision_id_set).cloned().collect();
+        let mut collision_exit_ids: Vec<String> = previous_collision_id_set.difference(&current_collision_id_set).cloned().collect();
 
         collision_enter_names.sort();
         collision_stay_names.sort();
         collision_exit_names.sort();
+        collision_enter_ids.sort();
+        collision_stay_ids.sort();
+        collision_exit_ids.sort();
 
         // Restaura grounded para o valor correto antes de rodar o Lua.
         // apply_gravity() zera grounded como efeito colateral — mas o Lua
@@ -154,11 +169,17 @@ fn update_entities_runtime_recursive(
             delta_time,
             elapsed_time,
             lua_vms,
+            &collision_entries,
             &collision_names,
+            &collision_ids,
             &previous_collision_names,
+            &previous_collision_ids,
             &collision_enter_names,
+            &collision_enter_ids,
             &collision_stay_names,
+            &collision_stay_ids,
             &collision_exit_names,
+            &collision_exit_ids,
             colliders,
             pending_destroys,
         ) {
@@ -204,7 +225,9 @@ fn update_entities_runtime_recursive(
             input,
             lua_vms,
             collision_contacts,
+            collision_contact_ids,
             previous_collision_contacts,
+            previous_collision_contact_ids,
             pending_destroys,
         ) {
             return Some(command);
@@ -361,26 +384,24 @@ fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, bo
     })
 }
 
-fn collect_collision_names(
+#[derive(Debug, Clone)]
+pub struct CollisionEntry {
+    pub id: String,
+    pub name: String,
+}
+
+fn collect_collision_entries(
     entity_ptr: *const Entity,
     my_collider_data: &Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
     colliders: &[collision_system::RuntimeCollider],
-) -> Vec<String> {
+) -> Vec<CollisionEntry> {
     let Some((_, _, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = *my_collider_data else {
         return Vec::new();
     };
-
     let Some(me) = colliders.iter().find(|c| std::ptr::eq(entity_ptr, c.entity_ptr)) else {
         return Vec::new();
     };
-
-    let my_rect = (
-        me.center_x - width * 0.5,
-        me.center_y - height * 0.5,
-        width,
-        height,
-    );
-
+    let my_rect = (me.center_x - width * 0.5, me.center_y - height * 0.5, width, height);
     let my_col = collision_system::RuntimeCollider {
         center_x: me.center_x,
         center_y: me.center_y,
@@ -394,28 +415,21 @@ fn collect_collision_names(
         entity_id: me.entity_id.clone(),
         entity_name: me.entity_name.clone(),
     };
-
-    let mut names = Vec::new();
+    let mut entries = Vec::new();
     for other in colliders {
-        if std::ptr::eq(entity_ptr, other.entity_ptr) {
-            continue;
-        }
-        if !collision_system::layers_interact(&my_col, other) {
-            continue;
-        }
-        let other_rect = (
-            other.center_x - other.width * 0.5,
-            other.center_y - other.height * 0.5,
-            other.width,
-            other.height,
-        );
+        if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
+        if !collision_system::layers_interact(&my_col, other) { continue; }
+        let other_rect = (other.center_x - other.width * 0.5, other.center_y - other.height * 0.5, other.width, other.height);
         if !collision_system::aabb_mtv(my_rect, other_rect).is_zero() {
-            names.push(if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() });
+            entries.push(CollisionEntry {
+                id: other.entity_id.clone(),
+                name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
+            });
         }
     }
-    names.sort();
-    names.dedup();
-    names
+    entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
+    entries.dedup_by(|a, b| a.id == b.id);
+    entries
 }
 
 

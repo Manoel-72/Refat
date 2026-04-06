@@ -209,3 +209,11 @@ Use isso para pickups, projéteis e inimigos derrotados sem quebrar a atualizaç
 
 ## Documento curto oficial
 Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e oficial da API e da regra de estado (`save.*`, `session.*`, `state.*`).
+
+
+## Bloco 2 — colisão por id
+- `game.collision_enter_id(id)` / `game.collision_stay_id(id)` / `game.collision_exit_id(id)`
+- `game.get_current_collision_ids()` / `game.get_previous_collision_ids()`
+- `game.get_collision_ids()` / `game.get_collision_names()`
+- `game.get_current_collision_info()` retorna lista de `{ id, name }`
+- `game.raycast(...)` agora também retorna `id` quando houver hit

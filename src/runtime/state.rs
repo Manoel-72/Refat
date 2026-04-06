@@ -129,12 +129,17 @@ pub struct RuntimeState {
     pub collision_contacts: HashMap<String, Vec<String>>,
     /// Contatos de colisão do frame anterior: entity_id -> nomes das entidades em contato.
     pub previous_collision_contacts: HashMap<String, Vec<String>>,
+    pub collision_contact_ids: HashMap<String, Vec<String>>,
+    pub previous_collision_contact_ids: HashMap<String, Vec<String>>,
     /// Entradas de colisão reais do frame atual: entity_id -> nomes que começaram contato neste frame.
     pub collision_enter_contacts: HashMap<String, Vec<String>>,
     /// Permanências de colisão reais do frame atual: entity_id -> nomes que continuaram em contato neste frame.
     pub collision_stay_contacts: HashMap<String, Vec<String>>,
     /// Saídas de colisão reais do frame atual: entity_id -> nomes que deixaram contato neste frame.
     pub collision_exit_contacts: HashMap<String, Vec<String>>,
+    pub collision_enter_contact_ids: HashMap<String, Vec<String>>,
+    pub collision_stay_contact_ids: HashMap<String, Vec<String>>,
+    pub collision_exit_contact_ids: HashMap<String, Vec<String>>,
 }
 
 impl RuntimeState {
@@ -162,9 +167,14 @@ impl RuntimeState {
             lua_vms: HashMap::new(),
             collision_contacts: HashMap::new(),
             previous_collision_contacts: HashMap::new(),
+            collision_contact_ids: HashMap::new(),
+            previous_collision_contact_ids: HashMap::new(),
             collision_enter_contacts: HashMap::new(),
             collision_stay_contacts: HashMap::new(),
             collision_exit_contacts: HashMap::new(),
+            collision_enter_contact_ids: HashMap::new(),
+            collision_stay_contact_ids: HashMap::new(),
+            collision_exit_contact_ids: HashMap::new(),
         }
     }
 
@@ -403,53 +413,56 @@ impl RuntimeState {
     fn clear_collision_tracking(&mut self) {
         self.collision_contacts.clear();
         self.previous_collision_contacts.clear();
+        self.collision_contact_ids.clear();
+        self.previous_collision_contact_ids.clear();
         self.collision_enter_contacts.clear();
         self.collision_stay_contacts.clear();
         self.collision_exit_contacts.clear();
+        self.collision_enter_contact_ids.clear();
+        self.collision_stay_contact_ids.clear();
+        self.collision_exit_contact_ids.clear();
     }
 
     fn rebuild_collision_events(&mut self) {
         self.collision_enter_contacts.clear();
         self.collision_stay_contacts.clear();
         self.collision_exit_contacts.clear();
+        self.collision_enter_contact_ids.clear();
+        self.collision_stay_contact_ids.clear();
+        self.collision_exit_contact_ids.clear();
 
         let mut entity_ids: HashSet<String> = HashSet::new();
         entity_ids.extend(self.collision_contacts.keys().cloned());
         entity_ids.extend(self.previous_collision_contacts.keys().cloned());
+        entity_ids.extend(self.collision_contact_ids.keys().cloned());
+        entity_ids.extend(self.previous_collision_contact_ids.keys().cloned());
 
         for entity_id in entity_ids {
-            let current: HashSet<String> = self
-                .collision_contacts
-                .get(&entity_id)
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
-            let previous: HashSet<String> = self
-                .previous_collision_contacts
-                .get(&entity_id)
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
+            let current_names: HashSet<String> = self.collision_contacts.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+            let previous_names: HashSet<String> = self.previous_collision_contacts.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
 
-            let mut enter: Vec<String> = current.difference(&previous).cloned().collect();
-            let mut stay: Vec<String> = current.intersection(&previous).cloned().collect();
-            let mut exit: Vec<String> = previous.difference(&current).cloned().collect();
+            let mut enter_names: Vec<String> = current_names.difference(&previous_names).cloned().collect();
+            let mut stay_names: Vec<String> = current_names.intersection(&previous_names).cloned().collect();
+            let mut exit_names: Vec<String> = previous_names.difference(&current_names).cloned().collect();
+            enter_names.sort();
+            stay_names.sort();
+            exit_names.sort();
+            if !enter_names.is_empty() { self.collision_enter_contacts.insert(entity_id.clone(), enter_names); }
+            if !stay_names.is_empty() { self.collision_stay_contacts.insert(entity_id.clone(), stay_names); }
+            if !exit_names.is_empty() { self.collision_exit_contacts.insert(entity_id.clone(), exit_names); }
 
-            enter.sort();
-            stay.sort();
-            exit.sort();
+            let current_ids: HashSet<String> = self.collision_contact_ids.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+            let previous_ids: HashSet<String> = self.previous_collision_contact_ids.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
 
-            if !enter.is_empty() {
-                self.collision_enter_contacts.insert(entity_id.clone(), enter);
-            }
-            if !stay.is_empty() {
-                self.collision_stay_contacts.insert(entity_id.clone(), stay);
-            }
-            if !exit.is_empty() {
-                self.collision_exit_contacts.insert(entity_id.clone(), exit);
-            }
+            let mut enter_ids: Vec<String> = current_ids.difference(&previous_ids).cloned().collect();
+            let mut stay_ids: Vec<String> = current_ids.intersection(&previous_ids).cloned().collect();
+            let mut exit_ids: Vec<String> = previous_ids.difference(&current_ids).cloned().collect();
+            enter_ids.sort();
+            stay_ids.sort();
+            exit_ids.sort();
+            if !enter_ids.is_empty() { self.collision_enter_contact_ids.insert(entity_id.clone(), enter_ids); }
+            if !stay_ids.is_empty() { self.collision_stay_contact_ids.insert(entity_id.clone(), stay_ids); }
+            if !exit_ids.is_empty() { self.collision_exit_contact_ids.insert(entity_id.clone(), exit_ids); }
         }
     }
 
@@ -636,7 +649,9 @@ impl RuntimeState {
             let elapsed = self.elapsed_time;
             let input_snap = self.input.clone();
             self.previous_collision_contacts = self.collision_contacts.clone();
+            self.previous_collision_contact_ids = self.collision_contact_ids.clone();
             self.collision_contacts.clear();
+            self.collision_contact_ids.clear();
             let scene_label = Some(scene.name.as_str());
             runtime_command = systems::update_entities_runtime(
                 &mut scene.entities,
@@ -653,7 +668,9 @@ impl RuntimeState {
                 &input_snap,
                 &mut self.lua_vms,
                 &mut self.collision_contacts,
+                &mut self.collision_contact_ids,
                 &self.previous_collision_contacts,
+                &self.previous_collision_contact_ids,
                 &mut self.pending_destroys,
             );
 
@@ -731,11 +748,40 @@ impl RuntimeState {
         self.started_scripts.retain(|key| !key.starts_with(&started_prefix));
         self.started_audio.retain(|key| !key.contains(entity_id));
         self.lua_vms.retain(|key: &String, _| !key.starts_with(&vm_prefix));
+        self.purge_entity_from_collision_tracking(entity_id);
+    }
+
+
+    fn purge_entity_from_collision_tracking(&mut self, entity_id: &str) {
+        let removed_name = self.find_entity_name_in_collision_tracking(entity_id);
         self.collision_contacts.remove(entity_id);
         self.previous_collision_contacts.remove(entity_id);
+        self.collision_contact_ids.remove(entity_id);
+        self.previous_collision_contact_ids.remove(entity_id);
         self.collision_enter_contacts.remove(entity_id);
         self.collision_stay_contacts.remove(entity_id);
         self.collision_exit_contacts.remove(entity_id);
+        self.collision_enter_contact_ids.remove(entity_id);
+        self.collision_stay_contact_ids.remove(entity_id);
+        self.collision_exit_contact_ids.remove(entity_id);
+        if let Some(name) = removed_name.as_ref() {
+            for contacts in self.collision_contacts.values_mut() { contacts.retain(|existing| existing != name); }
+            for contacts in self.previous_collision_contacts.values_mut() { contacts.retain(|existing| existing != name); }
+            for contacts in self.collision_enter_contacts.values_mut() { contacts.retain(|existing| existing != name); }
+            for contacts in self.collision_stay_contacts.values_mut() { contacts.retain(|existing| existing != name); }
+            for contacts in self.collision_exit_contacts.values_mut() { contacts.retain(|existing| existing != name); }
+        }
+        for contacts in self.collision_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
+        for contacts in self.previous_collision_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
+        for contacts in self.collision_enter_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
+        for contacts in self.collision_stay_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
+        for contacts in self.collision_exit_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
+    }
+
+    fn find_entity_name_in_collision_tracking(&self, entity_id: &str) -> Option<String> {
+        self.active_scene.as_ref().and_then(|scene| scene.find_entity(entity_id)).map(|entity| {
+            if entity.name.trim().is_empty() { entity.id.clone() } else { entity.name.clone() }
+        })
     }
 
     fn build_spawn_entity(template: &str, x: f32, y: f32) -> Entity {
