@@ -252,14 +252,26 @@ pub fn run_lua_script_with_vm(
         };
 
         for event in current_runtime_events {
-            let maybe_listener: LuaValue = listeners.get(event.name.as_str()).map_err(|e| e.to_string())?;
-            let LuaValue::Function(listener) = maybe_listener else { continue };
+            let maybe_listeners: LuaValue = listeners.get(event.name.as_str()).map_err(|e| e.to_string())?;
             let payload = match &event.data {
                 Some(value) => save_value_to_lua(lua, value).map_err(|e| stage_error("event_dispatch", e, entity, scene_label, script_path))?,
                 None => LuaValue::Nil,
             };
-            if let Err(err) = listener.call::<()>(payload) {
-                eprintln!("{}", stage_error("event_dispatch", err, entity, scene_label, script_path));
+            match maybe_listeners {
+                LuaValue::Function(listener) => {
+                    if let Err(err) = listener.call::<()>(payload.clone()) {
+                        eprintln!("{}", stage_error("event_dispatch", err, entity, scene_label, script_path));
+                    }
+                }
+                LuaValue::Table(entries) => {
+                    for pair in entries.sequence_values::<Function>() {
+                        let Ok(listener) = pair else { continue };
+                        if let Err(err) = listener.call::<()>(payload.clone()) {
+                            eprintln!("{}", stage_error("event_dispatch", err, entity, scene_label, script_path));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -965,8 +977,14 @@ pub fn run_lua_script_with_vm(
         lua.globals().set("__rs2_event_listeners", listeners.clone()).ok();
 
         let listeners_for_set = listeners.clone();
-        let listen_fn = lua.create_function(move |_, (name, callback): (String, Function)| {
-            listeners_for_set.set(name, callback)?;
+        let listen_fn = lua.create_function(move |lua_ctx, (name, callback): (String, Function)| {
+            let existing: Table = match listeners_for_set.get::<LuaValue>(name.as_str())? {
+                LuaValue::Table(t) => t,
+                _ => lua_ctx.create_table()?,
+            };
+            let next_index = existing.raw_len() + 1;
+            existing.set(next_index, callback)?;
+            listeners_for_set.set(name, existing)?;
             Ok(())
         }).map_err(|e| e.to_string())?;
         event_tbl.set("listen", listen_fn).ok();
@@ -998,8 +1016,12 @@ pub fn run_lua_script_with_vm(
         lua.globals().set("print", print_fn).map_err(|e| e.to_string())?;
     }
 
-    // ── carrega e executa o script ───────────────────────────
-    lua.load(lua_source).exec().map_err(|e| stage_error("load", format!("Erro ao carregar script: {e}"), entity, scene_label, script_path))?;
+    // ── carrega e executa o script uma única vez por VM ─────
+    let chunk_loaded = lua.globals().get::<bool>("__rs2_chunk_loaded").unwrap_or(false);
+    if !chunk_loaded {
+        lua.load(lua_source).exec().map_err(|e| stage_error("load", format!("Erro ao carregar script: {e}"), entity, scene_label, script_path))?;
+        lua.globals().set("__rs2_chunk_loaded", true).map_err(|e| stage_error("load", e, entity, scene_label, script_path))?;
+    }
 
     // on_start (apenas na primeira vez)
     if !started {
@@ -1009,13 +1031,12 @@ pub fn run_lua_script_with_vm(
     }
 
     dispatch_runtime_events(lua, entity, scene_label, script_path, current_runtime_events)?;
+    advance_timers(lua, entity, scene_label, script_path, delta_time)?;
 
     // on_update(delta_time)
     if let Ok(f) = lua.globals().get::<mlua::Function>("on_update") {
         f.call::<()>(delta_time).map_err(|e| stage_error("on_update", e, entity, scene_label, script_path))?;
     }
-
-    advance_timers(lua, entity, scene_label, script_path, delta_time)?;
 
     // ── coleta resultados de entity._cmds ────────────────────
     if let Ok(entity_tbl) = lua.globals().get::<Table>("entity") {
@@ -1180,7 +1201,13 @@ pub fn run_lua_script_with_vm(
                     None
                 };
                 result.event_ops.push(EventOp::Emit { name, data });
+                let _ = cmds.raw_remove(format!("name:{}", seq));
+                let _ = cmds.raw_remove(format!("b:{}:data", seq));
+                let _ = cmds.raw_remove(format!("i:{}:data", seq));
+                let _ = cmds.raw_remove(format!("f:{}:data", seq));
+                let _ = cmds.raw_remove(format!("s:{}:data", seq));
             }
+            let _ = cmds.set("seq", 0);
         }
     }
 

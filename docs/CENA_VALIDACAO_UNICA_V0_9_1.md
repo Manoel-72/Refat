@@ -31,3 +31,31 @@ Scripts adicionados:
 - Mantive o projeto incremental, sem trocar a cena inicial padrão.
 - A cena é de regressão manual, pequena e local.
 - Se a build ainda não tiver `event.*` ou timers ativos, os scripts logam essa ausência em vez de inventar workaround.
+
+
+## HUD de eventos ajustada (v2)
+
+A linha `[EVENT]` agora separa emissões e recebimentos por canal:
+- `emit_total`
+- `emit_ping`
+- `emit_collision`
+- `emit_timer`
+- `recv_total`
+- `recv_ping`
+- `recv_collision`
+- `recv_timer`
+- `last_emit` ou `last_recv` com nome e payload
+
+Isso evita leitura enganosa quando timers emitem eventos diretamente.
+
+
+## HUD de eventos ajustada (v4)
+
+Os contadores compartilhados de emissão/recebimento agora usam `session.*`, não `state.*`.
+
+Motivo:
+- `state.*` é local por entidade/script
+- a HUD de eventos precisa enxergar emissões vindas de scripts diferentes
+- `session.*` é o escopo correto para telemetria compartilhada da cena de regressão
+
+Com isso, `emit_total` e `recv_total` passam a refletir o que realmente aconteceu no runtime da cena.

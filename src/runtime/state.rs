@@ -110,6 +110,7 @@ pub struct RuntimeGameState {
     pub loading_label: Option<String>,
 }
 
+
 pub struct RuntimeState {
     pub active_scene: Option<Scene>,
     pub elapsed_time: f32,
@@ -245,8 +246,7 @@ impl RuntimeState {
         self.clear_session_state();
         self.clear_script_state();
         self.lua_vms.clear();
-        self.current_runtime_events.clear();
-        self.pending_runtime_events.clear();
+        self.clear_lua_runtime_events();
         self.game_state.score = 0;
         self.game_state.loading_label = None;
 
@@ -347,8 +347,7 @@ impl RuntimeState {
         self.clear_session_state();
         self.clear_script_state();
         self.lua_vms.clear();
-        self.current_runtime_events.clear();
-        self.pending_runtime_events.clear();
+        self.clear_lua_runtime_events();
         self.clear_collision_tracking();
     }
 
@@ -358,8 +357,7 @@ impl RuntimeState {
         self.clear_session_state();
         self.clear_script_state();
         self.lua_vms.clear();
-        self.current_runtime_events.clear();
-        self.pending_runtime_events.clear();
+        self.clear_lua_runtime_events();
         self.game_state.score = 0;
         self.game_state.loading_label = None;
     }
@@ -445,6 +443,11 @@ impl RuntimeState {
         }
 
         removed
+    }
+
+    fn clear_lua_runtime_events(&mut self) {
+        self.current_runtime_events.clear();
+        self.pending_runtime_events.clear();
     }
 
     fn clear_collision_tracking(&mut self) {
@@ -678,8 +681,7 @@ impl RuntimeState {
         self.last_spawned_entity_id = None;
         self.clear_script_state();
         self.lua_vms.clear();
-        self.current_runtime_events.clear();
-        self.pending_runtime_events.clear();
+        self.clear_lua_runtime_events();
         self.clear_collision_tracking();
     }
 
@@ -729,6 +731,7 @@ impl RuntimeState {
             self.last_stage = RuntimeFrameStage::ResolveCollisions;
             let elapsed = self.elapsed_time;
             let input_snap = self.input.clone();
+            let incoming_lua_events = self.current_runtime_events.clone();
             self.previous_collision_contacts = self.collision_contacts.clone();
             self.previous_collision_contact_ids = self.collision_contact_ids.clone();
             self.collision_contacts.clear();
@@ -753,7 +756,7 @@ impl RuntimeState {
                 &self.previous_collision_contacts,
                 &self.previous_collision_contact_ids,
                 &mut self.pending_destroys,
-                &self.current_runtime_events,
+                &incoming_lua_events,
                 &mut self.pending_runtime_events,
             );
 
