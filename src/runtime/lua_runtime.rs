@@ -191,6 +191,7 @@ pub fn run_lua_script(
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
+    camera_snapshot: (f32, f32, f32),
 ) -> Result<LuaScriptResult, String> {
     let cache_key = build_direct_vm_cache_key(lua_source, entity, script_path);
     DIRECT_LUA_VM_CACHE.with(|cache| {
@@ -223,6 +224,7 @@ pub fn run_lua_script(
             current_runtime_events,
             scene_label,
             script_path,
+            camera_snapshot,
         )
     })
 }
@@ -255,6 +257,7 @@ pub fn run_lua_script_with_vm(
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
+    camera_snapshot: (f32, f32, f32),
 ) -> Result<LuaScriptResult, String> {
     let mut result = LuaScriptResult::default();
 
@@ -721,6 +724,13 @@ pub fn run_lua_script_with_vm(
         let mouse_pos = make_vec2_callable(&lua, mx, my)?;
         input_tbl.set("mouse_pos", mouse_pos).ok();
 
+        let (cam_x, cam_y, zoom) = camera_snapshot;
+        let safe_zoom = zoom.max(0.0001);
+        let world_x = (mx / safe_zoom) + cam_x;
+        let world_y = cam_y - (my / safe_zoom);
+        let mouse_world_pos = make_vec2_callable(&lua, world_x, world_y)?;
+        input_tbl.set("mouse_world_pos", mouse_world_pos).ok();
+
         let get_mouse_pos = lua.create_function(move |lua_ctx, ()| {
             let t = lua_ctx.create_table()?;
             t.set(1, mx)?;
@@ -731,6 +741,16 @@ pub fn run_lua_script_with_vm(
         }).map_err(|e| e.to_string())?;
         input_tbl.set("get_mouse_pos", get_mouse_pos).ok();
 
+        let get_mouse_world_pos = lua.create_function(move |lua_ctx, ()| {
+            let t = lua_ctx.create_table()?;
+            t.set(1, world_x)?;
+            t.set(2, world_y)?;
+            t.set("x", world_x)?;
+            t.set("y", world_y)?;
+            Ok(t)
+        }).map_err(|e| e.to_string())?;
+        input_tbl.set("get_mouse_world_pos", get_mouse_world_pos).ok();
+
         input_tbl.set("mouse_left",   input.mouse_left).ok();
         input_tbl.set("mouse_right",  input.mouse_right).ok();
         input_tbl.set("mouse_middle", input.mouse_middle).ok();
@@ -740,6 +760,12 @@ pub fn run_lua_script_with_vm(
             Ok(gamepad_buttons.contains(&button))
         }).map_err(|e| e.to_string())?;
         input_tbl.set("gamepad_button", gamepad_button).ok();
+
+        let gamepad_axes = input.gamepad_axes.clone();
+        let gamepad_axis = lua.create_function(move |_, axis: u32| {
+            Ok(gamepad_axes.get(&axis).copied().unwrap_or(0.0))
+        }).map_err(|e| e.to_string())?;
+        input_tbl.set("gamepad_axis", gamepad_axis).ok();
 
         lua.globals().set("input", input_tbl).map_err(|e| e.to_string())?;
     }
@@ -2023,7 +2049,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -2034,11 +2060,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -2048,7 +2074,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
     }

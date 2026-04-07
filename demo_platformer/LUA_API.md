@@ -257,3 +257,9 @@ Observação: gamepad ainda não é exposto ao Lua neste runtime embutido.
 
 - `spawn_result:<seq>`
 - `rs2_spawn_done:<seq>`
+
+
+## Input extra
+- `input.mouse_world_pos` / `input.get_mouse_world_pos()` → posição do mouse convertida para mundo usando câmera atual.
+- `input.gamepad_button(n)` → snapshot do botão do controle.
+- `input.gamepad_axis(n)` → snapshot do eixo do controle; hoje retorna `0.0` se o host não preencher.

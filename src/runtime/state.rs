@@ -107,6 +107,10 @@ pub struct RuntimeInput {
     /// O backend atual do runtime ainda não alimenta isso; a API Lua
     /// já fica pronta para evolução sem quebrar scripts.
     pub gamepad_buttons: HashSet<u32>,
+    /// Snapshot simples dos eixos de gamepad.
+    /// O backend atual do runtime ainda não alimenta isso; por enquanto
+    /// os scripts recebem 0.0 quando o host não preencher esse mapa.
+    pub gamepad_axes: HashMap<u32, f32>,
 }
 
 impl RuntimeInput {
@@ -124,6 +128,10 @@ impl RuntimeInput {
 
     pub fn is_gamepad_button_held(&self, button: u32) -> bool {
         self.gamepad_buttons.contains(&button)
+    }
+
+    pub fn gamepad_axis_value(&self, axis: u32) -> f32 {
+        self.gamepad_axes.get(&axis).copied().unwrap_or(0.0)
     }
 }
 

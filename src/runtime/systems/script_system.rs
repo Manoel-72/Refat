@@ -141,6 +141,7 @@ pub fn run_lua_scripts_for_entity(
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
     audio_runtime: &mut audio_system::AudioRuntime,
+    camera_snapshot: (f32, f32, f32),
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -234,6 +235,7 @@ pub fn run_lua_scripts_for_entity(
             current_runtime_events,
             scene_label,
             Some(&file_path),
+            camera_snapshot,
         ) {
             Ok(result) => {
                 let change_scene = result.change_scene.clone();

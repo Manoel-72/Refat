@@ -18,7 +18,7 @@ pub mod ui_system;
 use std::{collections::{HashMap, HashSet}, path::Path};
 
 use crate::core::{component::Component, entity::Entity};
-use crate::runtime::script::ScriptAction;
+use crate::runtime::{camera, script::ScriptAction};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeCommand {
@@ -58,6 +58,8 @@ pub fn update_entities_runtime(
     collision_system::collect_colliders(entities, &mut colliders);
     let mut tag_index: HashMap<String, Vec<(String, String)>> = HashMap::new();
     collect_tag_index(entities, &mut tag_index);
+    let camera_view = camera::find_main_camera(entities);
+    let camera_snapshot = (camera_view.x, camera_view.y, camera_view.zoom.max(0.1));
 
     update_entities_runtime_recursive(
         entities,
@@ -88,6 +90,7 @@ pub fn update_entities_runtime(
         camera_shake,
         camera_zoom,
         audio_runtime,
+        camera_snapshot,
     )
 }
 
@@ -120,6 +123,7 @@ fn update_entities_runtime_recursive(
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
     audio_runtime: &mut audio_system::AudioRuntime,
+    camera_snapshot: (f32, f32, f32),
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -219,6 +223,7 @@ fn update_entities_runtime_recursive(
             camera_shake,
             camera_zoom,
             audio_runtime,
+            camera_snapshot,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -275,6 +280,7 @@ fn update_entities_runtime_recursive(
             camera_shake,
             camera_zoom,
             audio_runtime,
+            camera_snapshot,
         ) {
             return Some(command);
         }
