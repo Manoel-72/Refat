@@ -126,9 +126,39 @@ impl Default for Velocity {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BodyType {
+    Static,
+    Kinematic,
+    Trigger,
+}
+
+impl Default for BodyType {
+    fn default() -> Self {
+        Self::Kinematic
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Shape2D {
+    Box { width: f32, height: f32 },
+    Circle { radius: f32 },
+}
+
+impl Default for Shape2D {
+    fn default() -> Self {
+        Self::Box { width: 32.0, height: 32.0 }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoxCollider {
+    /// Campos legados preservados para compatibilidade com cenas antigas.
+    #[serde(default = "default_collider_size")]
     pub width: f32,
+    #[serde(default = "default_collider_size")]
     pub height: f32,
     pub offset_x: f32,
     pub offset_y: f32,
@@ -137,23 +167,77 @@ pub struct BoxCollider {
     /// Se false, o collider existe na entidade mas é ignorado pelo runtime.
     #[serde(default = "default_collision_enabled")]
     pub collision_enabled: bool,
-    /// Layer desta entidade (bits 0–7). 0 = padrão (interage com tudo).
+    /// Layer desta entidade. 0 = padrão/interage com tudo.
     #[serde(default)]
-    pub layer: u8,
+    pub layer: u32,
     /// Máscara de layers com quem esta entidade pode colidir. 0 = todos.
     #[serde(default)]
-    pub mask: u8,
+    pub mask: u32,
+    #[serde(default)]
+    pub body_type: BodyType,
+    #[serde(default)]
+    pub shape: Shape2D,
+    #[serde(default)]
+    pub one_way: bool,
+    #[serde(default = "default_one_way_margin")]
+    pub one_way_margin: f32,
+}
+
+impl BoxCollider {
+    pub fn resolved_shape(&self) -> Shape2D {
+        match &self.shape {
+            Shape2D::Circle { radius } => Shape2D::Circle {
+                radius: (*radius).max(0.0),
+            },
+            Shape2D::Box { .. } => Shape2D::Box {
+                width: self.width.max(0.0),
+                height: self.height.max(0.0),
+            },
+        }
+    }
+
+    pub fn resolved_body_type(&self, rigidbody: Option<&RigidBody2D>) -> BodyType {
+        if self.is_trigger || matches!(self.body_type, BodyType::Trigger) {
+            BodyType::Trigger
+        } else if matches!(self.body_type, BodyType::Static)
+            || rigidbody.map(|rb| rb.is_static).unwrap_or(false)
+        {
+            BodyType::Static
+        } else {
+            BodyType::Kinematic
+        }
+    }
+
+    pub fn half_height_for_grounding(&self) -> f32 {
+        match self.resolved_shape() {
+            Shape2D::Box { height, .. } => height * 0.5,
+            Shape2D::Circle { radius } => radius,
+        }
+    }
+
+    pub fn radius(&self) -> f32 {
+        match self.resolved_shape() {
+            Shape2D::Circle { radius } => radius,
+            Shape2D::Box { width, height } => (width.min(height) * 0.5).max(0.0),
+        }
+    }
 }
 
 impl Default for BoxCollider {
     fn default() -> Self {
         Self {
-            width: 32.0, height: 32.0,
-            offset_x: 0.0, offset_y: 0.0,
+            width: 32.0,
+            height: 32.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
             is_trigger: false,
             collision_enabled: true,
             layer: 0,
             mask: 0,
+            body_type: BodyType::Kinematic,
+            shape: Shape2D::Box { width: 32.0, height: 32.0 },
+            one_way: false,
+            one_way_margin: default_one_way_margin(),
         }
     }
 }
@@ -197,6 +281,8 @@ fn default_text_size() -> f32 { 24.0 }
 fn default_button_width() -> f32 { 220.0 }
 fn default_button_height() -> f32 { 48.0 }
 fn default_collision_enabled() -> bool { true }
+fn default_collider_size() -> f32 { 32.0 }
+fn default_one_way_margin() -> f32 { 6.0 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationClip {
@@ -265,7 +351,7 @@ pub struct TextLabel {
 impl Default for TextLabel {
     fn default() -> Self {
         Self {
-            text: "Novo texto".to_string(),
+            text: "Texto".to_string(),
             font_size: default_text_size(),
             color_r: 1.0,
             color_g: 1.0,
@@ -277,57 +363,58 @@ impl Default for TextLabel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UIButton {
-    #[serde(default)]
-    pub text: String,
-    #[serde(default = "default_button_width")]
+    pub label: String,
+    pub action: String,
     pub width: f32,
-    #[serde(default = "default_button_height")]
     pub height: f32,
-    #[serde(default = "default_text_size")]
+
+    pub text: String,
     pub font_size: f32,
-    #[serde(default)]
+
     pub target_scene: String,
-    #[serde(default)]
     pub close_runtime: bool,
-    #[serde(default)]
-    pub color_r: f32,
-    #[serde(default)]
-    pub color_g: f32,
-    #[serde(default)]
-    pub color_b: f32,
-    #[serde(default = "default_ui_alpha")]
-    pub color_a: f32,
-    #[serde(default)]
-    pub text_r: f32,
-    #[serde(default)]
-    pub text_g: f32,
-    #[serde(default)]
-    pub text_b: f32,
-    #[serde(default = "default_ui_alpha")]
-    pub text_a: f32,
-    #[serde(default)]
+
     pub screen_space: bool,
+
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub color_a: f32,
+
+    pub text_r: f32,
+    pub text_g: f32,
+    pub text_b: f32,
+    pub text_a: f32,
 }
+
 
 impl Default for UIButton {
     fn default() -> Self {
         Self {
-            text: "Button".to_string(),
+            label: "Button".to_string(),
+            action: "".to_string(),
             width: default_button_width(),
             height: default_button_height(),
-            font_size: 20.0,
-            target_scene: String::new(),
+
+            text: "Button".to_string(),
+            font_size: 18.0,
+
+            target_scene: "".to_string(),
             close_runtime: false,
-            color_r: 0.18,
-            color_g: 0.58,
-            color_b: 0.32,
+
+            screen_space: true,
+
+            color_r: 0.2,
+            color_g: 0.6,
+            color_b: 0.2,
             color_a: 1.0,
+
             text_r: 1.0,
             text_g: 1.0,
             text_b: 1.0,
             text_a: 1.0,
-            screen_space: true,
         }
     }
 }

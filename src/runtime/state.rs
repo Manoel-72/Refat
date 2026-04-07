@@ -570,6 +570,25 @@ impl RuntimeState {
             if !enter_ids.is_empty() { self.collision_enter_contact_ids.insert(entity_id.clone(), enter_ids); }
             if !stay_ids.is_empty() { self.collision_stay_contact_ids.insert(entity_id.clone(), stay_ids); }
             if !exit_ids.is_empty() { self.collision_exit_contact_ids.insert(entity_id.clone(), exit_ids); }
+
+            for other_name in self.collision_enter_contacts.get(&entity_id).cloned().unwrap_or_default() {
+                self.pending_runtime_events.push(RuntimeEvent {
+                    name: format!("collision_enter:{}:{}", entity_id, other_name),
+                    data: Some(SaveValue::Text(other_name)),
+                });
+            }
+            for other_name in self.collision_stay_contacts.get(&entity_id).cloned().unwrap_or_default() {
+                self.pending_runtime_events.push(RuntimeEvent {
+                    name: format!("collision_stay:{}:{}", entity_id, other_name),
+                    data: Some(SaveValue::Text(other_name)),
+                });
+            }
+            for other_name in self.collision_exit_contacts.get(&entity_id).cloned().unwrap_or_default() {
+                self.pending_runtime_events.push(RuntimeEvent {
+                    name: format!("collision_exit:{}:{}", entity_id, other_name),
+                    data: Some(SaveValue::Text(other_name)),
+                });
+            }
         }
     }
 
@@ -1054,6 +1073,10 @@ impl RuntimeState {
             collision_enabled: true,
             layer: 0,
             mask: 0,
+            body_type: crate::core::component::BodyType::Kinematic,
+            shape: crate::core::component::Shape2D::Box { width: 32.0, height: 32.0 },
+            one_way: false,
+            one_way_margin: 6.0,
         }));
         entity.add_component(Component::Sprite(Sprite {
             texture_path: String::new(),

@@ -63,7 +63,7 @@ pub fn scan_script_behavior(
                 result.is_static = rb.is_static;
             }
             Component::BoxCollider(collider) => {
-                result.collider_half_height = collider.height.max(0.0) * 0.5;
+                result.collider_half_height = collider.half_height_for_grounding();
             }
             Component::Script(script) => {
                 if let Ok(behavior) = load_script_behavior_checked(project_root, &script.file_path) {

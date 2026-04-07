@@ -1,0 +1,10 @@
+Validation scene ajustada para teste rápido.
+
+Ordem dos testes da esquerda para a direita:
+1) SolidBox -> deve gerar [COLLISION] e bloquear
+2) TriggerCircle -> deve gerar [COLLISION] e NAO bloquear
+3) DisabledBox -> nao deve gerar log
+4) MaskedOutCircle -> nao deve gerar log
+5) OneWayPlatform -> teste pulando por baixo e caindo por cima
+
+Cena: demo_platformer/assets/scenes/validation.scene.json

@@ -17,7 +17,7 @@ pub mod ui_system;
 
 use std::{collections::{HashMap, HashSet}, path::Path};
 
-use crate::core::{component::Component, entity::Entity};
+use crate::core::{component::{BodyType, Component, Shape2D}, entity::Entity};
 use crate::runtime::{camera, script::ScriptAction};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,49 +298,20 @@ struct CollisionState {
 fn handle_entity_collisions(
     entity: &mut Entity,
     entity_ptr: *const Entity,
-    my_collider_data: Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
-    _old_position: (f32, f32),
+    my_collider_data: Option<collision_system::RuntimeCollider>,
+    old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
     const GROUND_EPSILON: f32 = 0.001;
 
-    let Some((off_x, off_y, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = my_collider_data else {
+    let Some(mut current_col) = my_collider_data else {
         return CollisionState::default();
     };
-    if !my_collision_enabled {
+    if !current_col.collision_enabled {
         return CollisionState::default();
     }
 
-    let Some(pos) = entity.transform().map(|t| (t.x, t.y)) else {
-        return CollisionState::default();
-    };
-
-    let falling_or_idle = entity
-        .velocity()
-        .map(|v| v.y <= 0.0)
-        .unwrap_or(true);
-
-    let my_rect = (
-        pos.0 + off_x - width * 0.5,
-        pos.1 + off_y - height * 0.5,
-        width,
-        height,
-    );
-
-    let my_col = collision_system::RuntimeCollider {
-        center_x: pos.0 + off_x,
-        center_y: pos.1 + off_y,
-        width,
-        height,
-        is_trigger: is_my_trigger,
-        collision_enabled: my_collision_enabled,
-        layer: my_layer,
-        mask: my_mask,
-        entity_ptr,
-        entity_id: entity.id.clone(),
-        entity_name: entity.name.clone(),
-    };
-
+    let falling_or_idle = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
     let mut state = CollisionState::default();
     let mut total_mtv_x = 0.0_f32;
     let mut total_mtv_y = 0.0_f32;
@@ -351,25 +322,56 @@ fn handle_entity_collisions(
         if std::ptr::eq(entity_ptr, other.entity_ptr) {
             continue;
         }
-
-        if !collision_system::layers_interact(&my_col, other) {
+        if !collision_system::can_collide(&current_col, other) {
+            continue;
+        }
+        if !collision_system::intersects(&current_col, other) {
             continue;
         }
 
-        let other_rect = (
-            other.center_x - other.width * 0.5,
-            other.center_y - other.height * 0.5,
-            other.width,
-            other.height,
+        println!(
+            "[COLLISION] {} <-> {} | trigger_a={} trigger_b={} | body_a={:?} body_b={:?} | layer_a={} mask_a={} | layer_b={} mask_b={}",
+            if entity.name.trim().is_empty() { &entity.id } else { &entity.name },
+            if other.entity_name.trim().is_empty() { &other.entity_id } else { &other.entity_name },
+            current_col.is_trigger,
+            other.is_trigger,
+            current_col.body_type,
+            other.body_type,
+            current_col.layer,
+            current_col.mask,
+            other.layer,
+            other.mask
         );
 
-        let mtv = collision_system::aabb_mtv(my_rect, other_rect);
-        if mtv.is_zero() {
+        let either_trigger = current_col.is_trigger
+            || other.is_trigger
+            || matches!(current_col.body_type, BodyType::Trigger)
+            || matches!(other.body_type, BodyType::Trigger);
+        if either_trigger {
+            state.triggered = true;
             continue;
         }
 
-        if is_my_trigger || other.is_trigger {
-            state.triggered = true;
+        state.collided = true;
+
+        if other.one_way && !matches!(other.body_type, BodyType::Trigger) {
+            let old_bottom = old_position.1 + current_col.height * 0.5;
+            let other_top = other.center_y - other.height * 0.5;
+            let moving_down = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
+            let approached_from_above = old_bottom >= other_top - other.one_way_margin;
+            let allow_block = moving_down && approached_from_above && current_col.center_y >= other.center_y;
+            if !allow_block {
+                continue;
+            }
+        }
+
+        let movable = !matches!(current_col.body_type, BodyType::Static | BodyType::Trigger);
+        if !movable {
+            continue;
+        }
+
+        let mtv = collision_system::mtv(&current_col, other);
+        if mtv.is_zero() {
             continue;
         }
 
@@ -381,10 +383,11 @@ fn handle_entity_collisions(
 
         total_mtv_x += mtv.x;
         total_mtv_y += mtv.y;
-        state.collided = true;
+        current_col.center_x += mtv.x;
+        current_col.center_y += mtv.y;
     }
 
-    if state.collided {
+    if total_mtv_x != 0.0 || total_mtv_y != 0.0 {
         if let Some(transform) = entity.transform_mut() {
             transform.x += total_mtv_x;
             transform.y += total_mtv_y;
@@ -397,7 +400,6 @@ fn handle_entity_collisions(
             physics_system::set_grounded(entity, true);
         } else {
             physics_system::set_grounded(entity, false);
-
             if hit_ceiling {
                 if let Some(vel) = entity.velocity_mut() {
                     if vel.y > 0.0 { vel.y = 0.0; }
@@ -429,10 +431,40 @@ fn apply_camera_follow(
     }
 }
 
-fn find_entity_collider(entity: &Entity) -> Option<(f32, f32, f32, f32, bool, bool, u8, u8)> {
-    entity.components.iter().find_map(|component| match component {
-        Component::BoxCollider(c) if c.collision_enabled => Some((c.offset_x, c.offset_y, c.width, c.height, c.is_trigger, c.collision_enabled, c.layer, c.mask)),
+fn find_entity_collider(entity: &Entity) -> Option<collision_system::RuntimeCollider> {
+    let transform = entity.transform()?;
+    let rigidbody = entity.components.iter().find_map(|component| match component {
+        Component::RigidBody2D(rb) => Some(rb),
         _ => None,
+    });
+    let collider = entity.components.iter().find_map(|component| match component {
+        Component::BoxCollider(c) if c.collision_enabled => Some(c),
+        _ => None,
+    })?;
+
+    let shape = collider.resolved_shape();
+    let (width, height) = match &shape {
+        Shape2D::Box { width, height } => (*width, *height),
+        Shape2D::Circle { radius } => (radius * 2.0, radius * 2.0),
+    };
+    let body_type = collider.resolved_body_type(rigidbody);
+
+    Some(collision_system::RuntimeCollider {
+        center_x: transform.x + collider.offset_x,
+        center_y: transform.y + collider.offset_y,
+        width,
+        height,
+        shape,
+        body_type,
+        is_trigger: collider.is_trigger || matches!(body_type, BodyType::Trigger),
+        collision_enabled: collider.collision_enabled,
+        layer: collider.layer,
+        mask: collider.mask,
+        one_way: collider.one_way,
+        one_way_margin: collider.one_way_margin,
+        entity_ptr: entity as *const Entity,
+        entity_id: entity.id.clone(),
+        entity_name: entity.name.clone(),
     })
 }
 
@@ -445,37 +477,22 @@ pub struct CollisionEntry {
 fn collect_collision_entries(
     entity: &Entity,
     entity_ptr: *const Entity,
-    my_collider_data: &Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
+    my_collider_data: &Option<collision_system::RuntimeCollider>,
     colliders: &[collision_system::RuntimeCollider],
 ) -> Vec<CollisionEntry> {
-    let Some((off_x, off_y, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = *my_collider_data else {
+    let Some(my_col) = my_collider_data.clone() else {
         return Vec::new();
-    };
-    let Some((x, y)) = entity.transform().map(|t| (t.x, t.y)) else {
-        return Vec::new();
-    };
-    let center_x = x + off_x;
-    let center_y = y + off_y;
-    let my_rect = (center_x - width * 0.5, center_y - height * 0.5, width, height);
-    let my_col = collision_system::RuntimeCollider {
-        center_x,
-        center_y,
-        width,
-        height,
-        is_trigger: is_my_trigger,
-        collision_enabled: my_collision_enabled,
-        layer: my_layer,
-        mask: my_mask,
-        entity_ptr,
-        entity_id: entity.id.clone(),
-        entity_name: entity.name.clone(),
     };
     let mut entries = Vec::new();
     for other in colliders {
         if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-        if !collision_system::layers_interact(&my_col, other) { continue; }
-        let other_rect = (other.center_x - other.width * 0.5, other.center_y - other.height * 0.5, other.width, other.height);
-        if !collision_system::aabb_mtv(my_rect, other_rect).is_zero() {
+        if !collision_system::can_collide(&my_col, other) { continue; }
+        if collision_system::intersects(&my_col, other) {
+            println!(
+                "[COLLISION_QUERY] {} <-> {}",
+                if entity.name.trim().is_empty() { &entity.id } else { &entity.name },
+                if other.entity_name.trim().is_empty() { &other.entity_id } else { &other.entity_name }
+            );
             entries.push(CollisionEntry {
                 id: other.entity_id.clone(),
                 name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
@@ -486,7 +503,6 @@ fn collect_collision_entries(
     entries.dedup_by(|a, b| a.id == b.id);
     entries
 }
-
 
 fn collect_tag_index(entities: &[Entity], tag_index: &mut HashMap<String, Vec<(String, String)>>) {
     for entity in entities {

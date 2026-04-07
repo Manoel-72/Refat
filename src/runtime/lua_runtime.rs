@@ -1130,7 +1130,7 @@ pub fn run_lua_script_with_vm(
 
         // game.raycast(ox, oy, dx, dy, max_dist) → {hit=true, x, y, dist, name, id} | {hit=false}
         // Snapshot sem raw ptr — apenas dados geométricos + nome, seguro para closure.
-        let ray_snap: Vec<(f32, f32, f32, f32, u8, String, String)> = colliders.iter()
+        let ray_snap: Vec<(f32, f32, f32, f32, u32, String, String)> = colliders.iter()
             .map(|c| (c.center_x, c.center_y, c.width, c.height, c.layer, c.entity_name.clone(), c.entity_id.clone()))
             .collect();
         let timers: Table = lua.globals().get("__rs2_timers").unwrap_or_else(|_| lua.create_table().unwrap());

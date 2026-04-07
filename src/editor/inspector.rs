@@ -7,7 +7,7 @@
 use eframe::egui;
 use crate::{
     assets::is_rs2_script_file,
-    component::{AnimationClip, Animator, Audio, BoxCollider, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
+    component::{AnimationClip, Animator, Audio, BodyType, BoxCollider, Shape2D, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
 };
 use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
@@ -415,49 +415,100 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                     Component::BoxCollider(bc) => {
                         let mut w = bc.width;
                         let mut h = bc.height;
+                        let mut radius = match &bc.shape {
+                            Shape2D::Circle { radius } => *radius,
+                            Shape2D::Box { .. } => (bc.width.min(bc.height) * 0.5).max(1.0),
+                        };
                         let mut ox = bc.offset_x;
                         let mut oy = bc.offset_y;
                         let mut is_trigger = bc.is_trigger;
                         let mut collision_enabled = bc.collision_enabled;
-                        let layer = bc.layer;
-                        let mask = bc.mask;
+                        let mut layer = bc.layer;
+                        let mut mask = bc.mask;
+                        let mut body_type = bc.body_type;
+                        let mut one_way = bc.one_way;
+                        let mut one_way_margin = bc.one_way_margin;
+                        let mut use_circle = matches!(bc.shape, Shape2D::Circle { .. });
                         let mut changed = false;
 
                         egui::Grid::new(format!("bc_{}", i))
                             .num_columns(2)
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
-                                ui.label("Largura:");
-                                changed |= ui.add(egui::DragValue::new(&mut w).speed(0.5)).changed();
+                                ui.label("Tipo de corpo:");
+                                egui::ComboBox::from_id_source(format!("bc_body_type_{}", i))
+                                    .selected_text(match body_type {
+                                        BodyType::Static => "Static",
+                                        BodyType::Kinematic => "Kinematic",
+                                        BodyType::Trigger => "Trigger",
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        changed |= ui.selectable_value(&mut body_type, BodyType::Static, "Static").changed();
+                                        changed |= ui.selectable_value(&mut body_type, BodyType::Kinematic, "Kinematic").changed();
+                                        changed |= ui.selectable_value(&mut body_type, BodyType::Trigger, "Trigger").changed();
+                                    });
                                 ui.end_row();
-                                ui.label("Altura:");
-                                changed |= ui.add(egui::DragValue::new(&mut h).speed(0.5)).changed();
+                                ui.label("Shape:");
+                                changed |= ui.checkbox(&mut use_circle, "Circle").changed();
                                 ui.end_row();
+                                if use_circle {
+                                    ui.label("Raio:");
+                                    changed |= ui.add(egui::DragValue::new(&mut radius).speed(0.5).range(1.0..=4096.0)).changed();
+                                    ui.end_row();
+                                } else {
+                                    ui.label("Largura:");
+                                    changed |= ui.add(egui::DragValue::new(&mut w).speed(0.5).range(1.0..=4096.0)).changed();
+                                    ui.end_row();
+                                    ui.label("Altura:");
+                                    changed |= ui.add(egui::DragValue::new(&mut h).speed(0.5).range(1.0..=4096.0)).changed();
+                                    ui.end_row();
+                                }
                                 ui.label("Offset X:");
                                 changed |= ui.add(egui::DragValue::new(&mut ox).speed(0.5)).changed();
                                 ui.end_row();
                                 ui.label("Offset Y:");
                                 changed |= ui.add(egui::DragValue::new(&mut oy).speed(0.5)).changed();
                                 ui.end_row();
-                                ui.label("Trigger:");
+                                ui.label("Trigger legado:");
                                 changed |= ui.checkbox(&mut is_trigger, "").changed();
                                 ui.end_row();
                                 ui.label("Colisão habilitada:");
                                 changed |= ui.checkbox(&mut collision_enabled, "").changed();
                                 ui.end_row();
+                                ui.label("Layer:");
+                                changed |= ui.add(egui::DragValue::new(&mut layer).speed(1.0).range(0..=u32::MAX)).changed();
+                                ui.end_row();
+                                ui.label("Mask:");
+                                changed |= ui.add(egui::DragValue::new(&mut mask).speed(1.0).range(0..=u32::MAX)).changed();
+                                ui.end_row();
+                                ui.label("One-way platform:");
+                                changed |= ui.checkbox(&mut one_way, "").changed();
+                                ui.end_row();
+                                ui.label("Margem one-way:");
+                                changed |= ui.add(egui::DragValue::new(&mut one_way_margin).speed(0.25).range(0.0..=64.0)).changed();
+                                ui.end_row();
                             });
                         if changed {
+                            let shape = if use_circle {
+                                Shape2D::Circle { radius: radius.max(1.0) }
+                            } else {
+                                Shape2D::Box { width: w.max(1.0), height: h.max(1.0) }
+                            };
                             updated_components.push((
                                 i,
                                 Component::BoxCollider(BoxCollider {
-                                    width: w,
-                                    height: h,
+                                    width: if use_circle { radius.max(1.0) * 2.0 } else { w.max(1.0) },
+                                    height: if use_circle { radius.max(1.0) * 2.0 } else { h.max(1.0) },
                                     offset_x: ox,
                                     offset_y: oy,
                                     is_trigger,
                                     collision_enabled,
                                     layer,
                                     mask,
+                                    body_type,
+                                    shape,
+                                    one_way,
+                                    one_way_margin,
                                 }),
                             ));
                         }
@@ -1405,6 +1456,8 @@ fn draw_ui_button_component_ui(
         updated_components.push((
             index,
             Component::UIButton(UIButton {
+                label: text.clone(),
+                action: target_scene.clone(),
                 text,
                 width,
                 height,
