@@ -25,10 +25,9 @@
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
 // ============================================================
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use mlua::{Function, Lua, Table, Value as LuaValue, Variadic};
-use std::{collections::HashMap, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
 
 use crate::{
     core::{component::Component, entity::Entity},
@@ -41,23 +40,6 @@ use crate::{
 
 // ── contexto que o script pode modificar ─────────────────────
 
-fn should_emit_runtime_log(key: &str, min_interval: Duration) -> bool {
-    static LOG_TIMES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
-    let now = Instant::now();
-    let store = LOG_TIMES.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = match store.lock() {
-        Ok(guard) => guard,
-        Err(_) => return true,
-    };
-    match guard.get(key) {
-        Some(last) if now.duration_since(*last) < min_interval => false,
-        _ => {
-            guard.insert(key.to_string(), now);
-            true
-        }
-    }
-}
-
 /// Resultado de executar um script Lua num frame.
 #[derive(Debug, Default)]
 pub struct LuaScriptResult {
@@ -69,6 +51,17 @@ pub struct LuaScriptResult {
     pub set_collision_enabled: Option<bool>,
     pub play_anim: Option<String>,
     pub set_text: Option<String>,
+    pub set_color: Option<(f32, f32, f32, f32)>,
+    pub set_hp: Option<f32>,
+    pub damage: Option<f32>,
+    pub heal: Option<f32>,
+    pub set_flip_x: Option<bool>,
+    pub add_tags: Vec<String>,
+    pub spawn_entities: Vec<(String, f32, f32)>,
+    pub spawn_prefabs: Vec<(String, f32, f32)>,
+    pub spawn_particles: Vec<(f32, f32, f32, f32, f32, f32, f32, f32, f32)>,
+    pub camera_shake: Option<(f32, f32)>,
+    pub camera_zoom: Option<f32>,
     pub change_scene: Option<String>,
     pub apply_impulse: Option<(f32, f32)>,
     pub destroy_entity: bool,
@@ -162,6 +155,7 @@ pub fn run_lua_script(
         collision_exit_names,
         collision_exit_ids,
         &[],
+        &HashMap::new(),
         current_runtime_events,
         scene_label,
         script_path,
@@ -192,6 +186,7 @@ pub fn run_lua_script_with_vm(
     collision_exit_names: &[String],
     collision_exit_ids: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
+    tag_index: &HashMap<String, Vec<(String, String)>>,
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
@@ -398,6 +393,9 @@ pub fn run_lua_script_with_vm(
     entity_tbl.set("collision_enabled", collision_enabled).ok();
     entity_tbl.set("name", entity.name.clone()).ok();
     entity_tbl.set("id", entity.id.clone()).ok();
+    entity_tbl.set("hp", entity.hp()).ok();
+    entity_tbl.set("max_hp", entity.max_hp()).ok();
+    entity_tbl.set("is_dead", entity.is_dead).ok();
 
     {
         let entity_name = entity.name.clone();
@@ -426,6 +424,36 @@ pub fn run_lua_script_with_vm(
         entity_tbl.set("is_collision_enabled", is_collision_enabled_fn).ok();
     }
 
+    {
+        let current_hp = entity.hp();
+        let hp_fn = lua.create_function(move |_, ()| Ok(current_hp)).map_err(|e| e.to_string())?;
+        entity_tbl.set("get_hp", hp_fn).ok();
+    }
+    {
+        let current_alive = entity.is_alive();
+        let alive_fn = lua.create_function(move |_, ()| Ok(current_alive)).map_err(|e| e.to_string())?;
+        entity_tbl.set("is_alive", alive_fn).ok();
+    }
+    {
+        let current_anim = entity.components.iter().find_map(|c| if let Component::Animator(anim) = c { Some(anim.current.clone()) } else { None }).unwrap_or_else(|| "idle".to_string());
+        let anim_fn = lua.create_function(move |lua_ctx, ()| Ok(LuaValue::String(lua_ctx.create_string(&current_anim)?))).map_err(|e| e.to_string())?;
+        entity_tbl.set("get_anim", anim_fn).ok();
+    }
+    {
+        let anim_finished = entity.components.iter().find_map(|c| if let Component::Animator(anim) = c {
+            let clip_name = if anim.current.trim().is_empty() { "idle" } else { anim.current.trim() };
+            let clip = anim.clips.get(clip_name);
+            Some(match clip {
+                Some(clip) if !anim.looped && clip.fps > f32::EPSILON && !clip.frames.is_empty() => {
+                    anim.timer >= (clip.frames.len() as f32 / clip.fps)
+                }
+                Some(_) => false,
+                None => false,
+            })
+        } else { None }).unwrap_or(false);
+        let anim_finished_fn = lua.create_function(move |_, ()| Ok(anim_finished)).map_err(|e| e.to_string())?;
+        entity_tbl.set("is_anim_finished", anim_finished_fn).ok();
+    }
     // comandos de escrita — armazenados numa tabela interna _cmds
     let cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
     entity_tbl.set("_cmds", cmds).ok();
@@ -495,6 +523,85 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("set_text", set_text).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_color = lua.create_function(move |_, (r, g, b, a): (f32, f32, f32, f32)| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("color_r", r)?;
+            cmds.set("color_g", g)?;
+            cmds.set("color_b", b)?;
+            cmds.set("color_a", a)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_color", set_color).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_hp = lua.create_function(move |_, value: f32| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("set_hp", value)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_hp", set_hp).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let damage_fn = lua.create_function(move |_, value: f32| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("damage", value)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("damage", damage_fn).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let heal_fn = lua.create_function(move |_, value: f32| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("heal", value)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("heal", heal_fn).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_anim = lua.create_function(move |_, clip_name: String| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("anim", clip_name)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_anim", set_anim).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let flip_x = lua.create_function(move |_, enabled: bool| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("flip_x", enabled)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("flip_x", flip_x).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let add_tag = lua.create_function(move |_, tag: String| {
+            let normalized = tag.trim().to_string();
+            if normalized.is_empty() {
+                return Ok(false);
+            }
+            let cmds: Table = tbl.get("_cmds")?;
+            let seq = cmds.get::<i64>("tag_seq").unwrap_or(0) + 1;
+            cmds.set("tag_seq", seq)?;
+            cmds.set(format!("tag:{}", seq), normalized)?;
+            Ok(true)
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("add_tag", add_tag).ok();
+    }
+    {
+        let tag_set: HashSet<String> = entity.tags.iter().map(|tag| tag.to_ascii_lowercase()).collect();
+        let has_tag = lua.create_function(move |_, tag: String| {
+            Ok(tag_set.contains(&tag.trim().to_ascii_lowercase()))
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("has_tag", has_tag).ok();
     }
     // entity.apply_impulse(ix, iy) — acumula impulso (somado à velocidade no apply)
     {
@@ -578,34 +685,126 @@ pub fn run_lua_script_with_vm(
             .map_err(|e| e.to_string())?;
         game_tbl.set("get_elapsed_time", get_elapsed_time).ok();
 
+        {
+            let tag_snapshot = tag_index.clone();
+            let find_by_tag = lua.create_function(move |lua_ctx, tag: String| {
+                let table = lua_ctx.create_table()?;
+                if let Some(entries) = tag_snapshot.get(&tag.trim().to_ascii_lowercase()) {
+                    for (index, (id, name)) in entries.iter().enumerate() {
+                        let entry = lua_ctx.create_table()?;
+                        entry.set("id", id.clone())?;
+                        entry.set("name", name.clone())?;
+                        table.set(index + 1, entry)?;
+                    }
+                }
+                Ok(table)
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("find_by_tag", find_by_tag).ok();
+        }
+
+        {
+            let tag_snapshot = tag_index.clone();
+            let find_one_by_tag = lua.create_function(move |lua_ctx, tag: String| {
+                if let Some(entries) = tag_snapshot.get(&tag.trim().to_ascii_lowercase()) {
+                    if let Some((id, name)) = entries.first() {
+                        let entry = lua_ctx.create_table()?;
+                        entry.set("id", id.clone())?;
+                        entry.set("name", name.clone())?;
+                        return Ok(Some(entry));
+                    }
+                }
+                Ok(None::<Table>)
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("find_one_by_tag", find_one_by_tag).ok();
+        }
+
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let spawn_entity = lua.create_function(move |_, (name, x, y): (String, f32, f32)| {
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                let seq = cmds.get::<i64>("spawn_entity_seq").unwrap_or(0) + 1;
+                cmds.set("spawn_entity_seq", seq)?;
+                cmds.set(format!("spawn_entity_name:{}", seq), name)?;
+                cmds.set(format!("spawn_entity_x:{}", seq), x)?;
+                cmds.set(format!("spawn_entity_y:{}", seq), y)?;
+                Ok(())
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("spawn_entity", spawn_entity).ok();
+        }
+
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let spawn_prefab = lua.create_function(move |_, (path, x, y): (String, f32, f32)| {
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                let seq = cmds.get::<i64>("spawn_prefab_seq").unwrap_or(0) + 1;
+                cmds.set("spawn_prefab_seq", seq)?;
+                cmds.set(format!("spawn_prefab_path:{}", seq), path)?;
+                cmds.set(format!("spawn_prefab_x:{}", seq), x)?;
+                cmds.set(format!("spawn_prefab_y:{}", seq), y)?;
+                Ok(())
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("spawn_prefab", spawn_prefab).ok();
+        }
+
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let spawn_particle = lua.create_function(move |_, args: Variadic<LuaValue>| {
+                let mut values = [0.0_f32; 9];
+                let defaults = [0.0_f32, 0.0, 0.0, 24.0, 1.0, 0.95, 0.85, 0.25, 1.0];
+                for (i, default) in defaults.iter().enumerate() { values[i] = *default; }
+                for (i, value) in args.iter().take(9).enumerate() {
+                    values[i] = match value {
+                        LuaValue::Integer(v) => *v as f32,
+                        LuaValue::Number(v) => *v as f32,
+                        _ => values[i],
+                    };
+                }
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                let seq = cmds.get::<i64>("spawn_particle_seq").unwrap_or(0) + 1;
+                cmds.set("spawn_particle_seq", seq)?;
+                for (i, value) in values.iter().enumerate() { cmds.set(format!("spawn_particle_{}:{}", i, seq), *value)?; }
+                Ok(())
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("spawn_particle", spawn_particle).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let camera_shake = lua.create_function(move |_, (intensity, duration): (f32, f32)| {
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                cmds.set("camera_shake_intensity", intensity.max(0.0))?;
+                cmds.set("camera_shake_duration", duration.max(0.0))?;
+                Ok(())
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("camera_shake", camera_shake).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let camera_zoom = lua.create_function(move |_, zoom: f32| {
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                cmds.set("camera_zoom", zoom)?;
+                Ok(())
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("camera_zoom", camera_zoom).ok();
+        }
         // game.log/msg + aliases de severidade
         let log_prefix = format_lua_context(entity, scene_label, script_path);
         let info_prefix = format!("{}[stage=log]", log_prefix);
         let log_fn = lua.create_function(move |_, msg: String| {
-            let key = format!("{}::{}", info_prefix, msg);
-            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
-                println!("{} {}", info_prefix, msg);
-            }
+            println!("{} {}", info_prefix, msg);
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("log", log_fn).ok();
 
         let warn_prefix = format!("{}[stage=log][level=warn]", log_prefix);
         let warn_fn = lua.create_function(move |_, msg: String| {
-            let key = format!("{}::{}", warn_prefix, msg);
-            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
-                eprintln!("{} {}", warn_prefix, msg);
-            }
+            eprintln!("{} {}", warn_prefix, msg);
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("warn", warn_fn).ok();
 
         let error_prefix = format!("{}[stage=log][level=error]", log_prefix);
         let error_fn = lua.create_function(move |_, msg: String| {
-            let key = format!("{}::{}", error_prefix, msg);
-            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
-                eprintln!("{} {}", error_prefix, msg);
-            }
+            eprintln!("{} {}", error_prefix, msg);
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("error", error_fn).ok();
@@ -1017,7 +1216,7 @@ pub fn run_lua_script_with_vm(
         event_tbl.set("listen", listen_fn).ok();
 
         let emit_cmds = event_cmds.clone();
-        let emit_fn = lua.create_function(move |lua_ctx, (name, data): (String, LuaValue)| {
+        let emit_fn = lua.create_function(move |_lua_ctx, (name, data): (String, LuaValue)| {
             let seq: i64 = emit_cmds.get("seq").unwrap_or(0) + 1;
             emit_cmds.set("seq", seq)?;
             emit_cmds.set(format!("name:{}", seq), name.clone())?;
@@ -1037,10 +1236,7 @@ pub fn run_lua_script_with_vm(
                 .map(lua_value_to_log_string)
                 .collect::<Vec<_>>()
                 .join("	");
-            let key = format!("{}::{}", print_prefix, joined);
-            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
-                println!("{} {}", print_prefix, joined);
-            }
+            println!("{} {}", print_prefix, joined);
             Ok(())
         }).map_err(|e| e.to_string())?;
         lua.globals().set("print", print_fn).map_err(|e| e.to_string())?;
@@ -1098,118 +1294,28 @@ pub fn run_lua_script_with_vm(
             if let Ok(text) = cmds.get::<String>("text") {
                 result.set_text = Some(text);
             }
+            if let Ok(value) = cmds.get::<f32>("set_hp") {
+                result.set_hp = Some(value);
+            }
+            if let Ok(value) = cmds.get::<f32>("damage") {
+                result.damage = Some(value);
+            }
+            if let Ok(value) = cmds.get::<f32>("heal") {
+                result.heal = Some(value);
+            }
+            if let Ok(value) = cmds.get::<bool>("flip_x") {
+                result.set_flip_x = Some(value);
+            }
+            if let (Ok(r), Ok(g), Ok(b), Ok(a)) = (
+                cmds.get::<f32>("color_r"),
+                cmds.get::<f32>("color_g"),
+                cmds.get::<f32>("color_b"),
+                cmds.get::<f32>("color_a"),
+            ) {
+                result.set_color = Some((r, g, b, a));
+            }
             if let (Ok(ix), Ok(iy)) = (cmds.get::<f32>("impulse_x"), cmds.get::<f32>("impulse_y")) {
                 result.apply_impulse = Some((ix, iy));
-            }
-        }
-    }
-
-    // ── coleta resultados de game._cmds ──────────────────────
-    if let Ok(game_tbl) = lua.globals().get::<Table>("game") {
-        if let Ok(cmds) = game_tbl.get::<Table>("_cmds") {
-            if let Ok(path) = cmds.get::<String>("change_scene") {
-                result.change_scene = Some(path);
-            }
-        }
-    }
-
-    // ── coleta resultados de save._cmds ──────────────────────
-    if let Ok(save_tbl) = lua.globals().get::<Table>("save") {
-        if let Ok(cmds) = save_tbl.get::<Table>("_cmds") {
-            for pair in cmds.pairs::<String, LuaValue>() {
-                let Ok((key, val)) = pair else { continue };
-                if let Some(real_key) = key.strip_prefix("rm:") {
-                    result.save_ops.push(SaveOp::Remove(real_key.to_string()));
-                } else if let Some(real_key) = key.strip_prefix("b:") {
-                    if let LuaValue::Boolean(b) = val {
-                        result.save_ops.push(SaveOp::Set(real_key.to_string(), b.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("i:") {
-                    if let LuaValue::Integer(i) = val {
-                        result.save_ops.push(SaveOp::Set(real_key.to_string(), i.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("f:") {
-                    if let LuaValue::Number(f) = val {
-                        result.save_ops.push(SaveOp::Set(real_key.to_string(), f.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("s:") {
-                    if let LuaValue::String(s) = val {
-                        result.save_ops.push(SaveOp::Set(
-                            real_key.to_string(),
-                            s.to_string_lossy().to_string().into(),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    // ── coleta resultados de session._cmds ───────────────────
-    if let Ok(session_tbl) = lua.globals().get::<Table>("session") {
-        if let Ok(cmds) = session_tbl.get::<Table>("_cmds") {
-            for pair in cmds.pairs::<String, LuaValue>() {
-                let Ok((key, val)) = pair else { continue };
-                if key == "clear" {
-                    if let LuaValue::Boolean(true) = val {
-                        result.session_ops.push(SessionOp::Clear);
-                    }
-                } else if let Some(real_key) = key.strip_prefix("rm:") {
-                    result.session_ops.push(SessionOp::Remove(real_key.to_string()));
-                } else if let Some(real_key) = key.strip_prefix("b:") {
-                    if let LuaValue::Boolean(b) = val {
-                        result.session_ops.push(SessionOp::Set(real_key.to_string(), b.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("i:") {
-                    if let LuaValue::Integer(i) = val {
-                        result.session_ops.push(SessionOp::Set(real_key.to_string(), i.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("f:") {
-                    if let LuaValue::Number(f) = val {
-                        result.session_ops.push(SessionOp::Set(real_key.to_string(), f.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("s:") {
-                    if let LuaValue::String(s) = val {
-                        result.session_ops.push(SessionOp::Set(
-                            real_key.to_string(),
-                            s.to_string_lossy().to_string().into(),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    // ── coleta resultados de state._cmds ─────────────────────
-    if let Ok(state_tbl) = lua.globals().get::<Table>("state") {
-        if let Ok(cmds) = state_tbl.get::<Table>("_cmds") {
-            for pair in cmds.pairs::<String, LuaValue>() {
-                let Ok((key, val)) = pair else { continue };
-                if key == "clear" {
-                    if let LuaValue::Boolean(true) = val {
-                        result.state_ops.push(StateOp::Clear);
-                    }
-                } else if let Some(real_key) = key.strip_prefix("rm:") {
-                    result.state_ops.push(StateOp::Remove(real_key.to_string()));
-                } else if let Some(real_key) = key.strip_prefix("b:") {
-                    if let LuaValue::Boolean(b) = val {
-                        result.state_ops.push(StateOp::Set(real_key.to_string(), b.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("i:") {
-                    if let LuaValue::Integer(i) = val {
-                        result.state_ops.push(StateOp::Set(real_key.to_string(), i.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("f:") {
-                    if let LuaValue::Number(f) = val {
-                        result.state_ops.push(StateOp::Set(real_key.to_string(), f.into()));
-                    }
-                } else if let Some(real_key) = key.strip_prefix("s:") {
-                    if let LuaValue::String(s) = val {
-                        result.state_ops.push(StateOp::Set(
-                            real_key.to_string(),
-                            s.to_string_lossy().to_string().into(),
-                        ));
-                    }
-                }
             }
         }
     }
@@ -1238,6 +1344,23 @@ pub fn run_lua_script_with_vm(
                 let _ = cmds.raw_remove(format!("s:{}:data", seq));
             }
             let _ = cmds.set("seq", 0);
+        }
+    }
+
+    if let Ok(game_tbl) = lua.globals().get::<Table>("game") {
+        if let Ok(gcmds) = game_tbl.get::<Table>("_cmds") {
+            if let Ok(path) = gcmds.get::<String>("change_scene") {
+                result.change_scene = Some(path);
+            }
+            if let (Ok(intensity), Ok(duration)) = (
+                gcmds.get::<f32>("camera_shake_intensity"),
+                gcmds.get::<f32>("camera_shake_duration"),
+            ) {
+                result.camera_shake = Some((intensity, duration));
+            }
+            if let Ok(zoom) = gcmds.get::<f32>("camera_zoom") {
+                result.camera_zoom = Some(zoom);
+            }
         }
     }
 
@@ -1289,6 +1412,38 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
                 break;
             }
         }
+    }
+    if let Some(set_hp) = r.set_hp {
+        entity.set_hp(set_hp);
+    }
+
+    if let Some(damage) = r.damage {
+        entity.damage(damage);
+    }
+
+    if let Some(heal) = r.heal {
+        entity.heal(heal);
+    }
+
+    if let Some(flip_x) = r.set_flip_x {
+        if let Some(transform) = entity.transform_mut() {
+            let sign = if flip_x { -1.0 } else { 1.0 };
+            transform.scale_x = transform.scale_x.abs().max(0.0001) * sign;
+        }
+    }
+
+    if let Some((r_val, g_val, b_val, a_val)) = r.set_color {
+        for c in &mut entity.components {
+            match c {
+                Component::Sprite(sprite) => { sprite.color_r = r_val; sprite.color_g = g_val; sprite.color_b = b_val; sprite.color_a = a_val; }
+                Component::TextLabel(label) => { label.color_r = r_val; label.color_g = g_val; label.color_b = b_val; label.color_a = a_val; }
+                Component::UIButton(button) => { button.color_r = r_val; button.color_g = g_val; button.color_b = b_val; button.color_a = a_val; }
+                _ => {}
+            }
+        }
+    }
+    for tag in &r.add_tags {
+        let _ = entity.add_tag(tag.clone());
     }
     if let Some((ix, iy)) = r.apply_impulse {
         for c in &mut entity.components {

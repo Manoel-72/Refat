@@ -40,10 +40,28 @@ const SAVE_KEY_PLAYER_VY: &str = "continue.player.vy";
 const SAVE_KEY_CHECKPOINT_SCENE: &str = "continue.checkpoint.scene";
 
 #[derive(Debug, Clone)]
+pub enum PendingSpawnKind {
+    Template(String),
+    PrefabPath(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct PendingSpawnRequest {
-    pub template: String,
+    pub kind: PendingSpawnKind,
     pub x: f32,
     pub y: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeParticle {
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub life: f32,
+    pub max_life: f32,
+    pub color: [f32; 4],
+    pub scale: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -110,33 +128,6 @@ pub struct RuntimeGameState {
     pub loading_label: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct RuntimePerfStats {
-    pub scripts_ms: f32,
-    pub collisions_ms: f32,
-    pub hud_ms: f32,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuntimeDebugSnapshot {
-    pub hud_summary: String,
-    pub controls_hint: String,
-    pub overlay_left: String,
-    pub overlay_right: String,
-    pub perf_summary: String,
-}
-
-impl Default for RuntimeDebugSnapshot {
-    fn default() -> Self {
-        Self {
-            hud_summary: "▶ Runtime Preview | Status: Edição".to_string(),
-            controls_hint: "WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state".to_string(),
-            overlay_left: "Entidades: 0  •  Scripts: 0  •  Delta: 0.000 ms".to_string(),
-            overlay_right: "HUD/UI  •  Cena: -  •  Score: 0  •  Flow: Editing".to_string(),
-            perf_summary: "Perf(ms) — scripts: 0.00 • colisão: 0.00 • HUD: 0.00".to_string(),
-        }
-    }
-}
 
 pub struct RuntimeState {
     pub active_scene: Option<Scene>,
@@ -155,6 +146,11 @@ pub struct RuntimeState {
     pub pending_spawns: Vec<PendingSpawnRequest>,
     pub pending_destroys: Vec<PendingDestroyRequest>,
     pub last_spawned_entity_id: Option<String>,
+    pub particles: Vec<RuntimeParticle>,
+    pub pending_particles: Vec<RuntimeParticle>,
+    pub camera_shake_time: f32,
+    pub camera_shake_intensity: f32,
+    pub camera_zoom_override: Option<f32>,
     /// Estado persistente do jogo (save/load em save/save.json).
     pub save_data: SaveData,
     /// Estado temporário da sessão atual (não persistido em arquivo por padrão).
@@ -184,10 +180,6 @@ pub struct RuntimeState {
     pub collision_enter_contact_ids: HashMap<String, Vec<String>>,
     pub collision_stay_contact_ids: HashMap<String, Vec<String>>,
     pub collision_exit_contact_ids: HashMap<String, Vec<String>>,
-    pub perf_stats: RuntimePerfStats,
-    pub debug_snapshot: RuntimeDebugSnapshot,
-    pub debug_text_accumulator: f32,
-    pub debug_detail_accumulator: f32,
 }
 
 impl RuntimeState {
@@ -209,6 +201,11 @@ impl RuntimeState {
             pending_spawns: Vec::new(),
             pending_destroys: Vec::new(),
             last_spawned_entity_id: None,
+            particles: Vec::new(),
+            pending_particles: Vec::new(),
+            camera_shake_time: 0.0,
+            camera_shake_intensity: 0.0,
+            camera_zoom_override: None,
             save_data: SaveData::new(),
             session_state: HashMap::new(),
             script_state: ScriptState::new(),
@@ -225,10 +222,6 @@ impl RuntimeState {
             collision_enter_contact_ids: HashMap::new(),
             collision_stay_contact_ids: HashMap::new(),
             collision_exit_contact_ids: HashMap::new(),
-            perf_stats: RuntimePerfStats::default(),
-            debug_snapshot: RuntimeDebugSnapshot::default(),
-            debug_text_accumulator: 0.0,
-            debug_detail_accumulator: 0.0,
         }
     }
 
@@ -384,10 +377,6 @@ impl RuntimeState {
         self.lua_vms.clear();
         self.clear_lua_runtime_events();
         self.clear_collision_tracking();
-        self.perf_stats = RuntimePerfStats::default();
-        self.debug_snapshot = RuntimeDebugSnapshot::default();
-        self.debug_text_accumulator = 0.0;
-        self.debug_detail_accumulator = 0.0;
     }
 
     /// Inicia uma nova sessão de jogo limpando apenas estados temporários.
@@ -599,10 +588,22 @@ impl RuntimeState {
 
     pub fn queue_spawn(&mut self, template: impl Into<String>, x: f32, y: f32) {
         self.pending_spawns.push(PendingSpawnRequest {
-            template: template.into(),
+            kind: PendingSpawnKind::Template(template.into()),
             x,
             y,
         });
+    }
+
+    pub fn queue_spawn_prefab(&mut self, prefab_path: impl Into<String>, x: f32, y: f32) {
+        self.pending_spawns.push(PendingSpawnRequest {
+            kind: PendingSpawnKind::PrefabPath(prefab_path.into()),
+            x,
+            y,
+        });
+    }
+
+    pub fn queue_particle(&mut self, particle: RuntimeParticle) {
+        self.pending_particles.push(particle);
     }
 
     pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
@@ -619,56 +620,6 @@ impl RuntimeState {
         };
         self.queue_destroy(id);
         true
-    }
-
-
-    pub fn update_debug_snapshot(&mut self, scene_name: &str, entity_count: usize, script_count: usize) {
-        self.debug_text_accumulator += self.delta_time;
-        self.debug_detail_accumulator += self.delta_time;
-
-        if self.debug_text_accumulator >= 0.12 || self.frame_count <= 1 {
-            self.debug_snapshot.hud_summary = format!(
-                "▶ Runtime Preview | 📌 {} | ⏱ {:.2}s | FPS ~ {:.0} | Status: {} | Flow: {:?} | Etapa: {:?}",
-                scene_name,
-                self.elapsed_time,
-                self.estimated_fps(),
-                match self.game_state.flow {
-                    RuntimeGameFlow::Playing => "Executando",
-                    RuntimeGameFlow::Paused => "Pausado",
-                    RuntimeGameFlow::Editing => "Edição",
-                    RuntimeGameFlow::GameOver => "Game Over",
-                    RuntimeGameFlow::Loading => "Loading",
-                },
-                self.game_state.flow,
-                self.last_stage,
-            );
-            self.debug_snapshot.controls_hint =
-                "WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state"
-                    .to_string();
-            self.debug_text_accumulator = 0.0;
-        }
-
-        if self.debug_detail_accumulator >= 0.20 || self.frame_count <= 1 {
-            self.debug_snapshot.overlay_left = format!(
-                "Entidades: {}  •  Scripts: {}  •  Delta: {:.3} ms",
-                entity_count,
-                script_count,
-                self.delta_time * 1000.0,
-            );
-            self.debug_snapshot.overlay_right = format!(
-                "HUD/UI  •  Cena: {}  •  Score: {}  •  Flow: {:?}",
-                scene_name,
-                self.game_state.score,
-                self.game_state.flow,
-            );
-            self.debug_snapshot.perf_summary = format!(
-                "Perf(ms) — scripts: {:.2} • colisão: {:.2} • HUD: {:.2}",
-                self.perf_stats.scripts_ms,
-                self.perf_stats.collisions_ms,
-                self.perf_stats.hud_ms,
-            );
-            self.debug_detail_accumulator = 0.0;
-        }
     }
 
     pub fn estimated_fps(&self) -> f32 {
@@ -768,14 +719,15 @@ impl RuntimeState {
         self.pending_spawns.clear();
         self.pending_destroys.clear();
         self.last_spawned_entity_id = None;
+        self.particles.clear();
+        self.pending_particles.clear();
+        self.camera_shake_time = 0.0;
+        self.camera_shake_intensity = 0.0;
+        self.camera_zoom_override = None;
         self.clear_script_state();
         self.lua_vms.clear();
         self.clear_lua_runtime_events();
         self.clear_collision_tracking();
-        self.perf_stats = RuntimePerfStats::default();
-        self.debug_snapshot = RuntimeDebugSnapshot::default();
-        self.debug_text_accumulator = 0.0;
-        self.debug_detail_accumulator = 0.0;
     }
 
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
@@ -790,6 +742,13 @@ impl RuntimeState {
         self.elapsed_time += dt;
         self.frame_count += 1;
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
+        self.update_particles(dt);
+        if self.camera_shake_time > 0.0 {
+            self.camera_shake_time = (self.camera_shake_time - dt).max(0.0);
+            if self.camera_shake_time <= f32::EPSILON {
+                self.camera_shake_intensity = 0.0;
+            }
+        }
 
         let player_input = systems::input_system::player_axis(&self.input);
 
@@ -823,6 +782,8 @@ impl RuntimeState {
             self.last_stage = RuntimeFrameStage::ApplyPhysics;
             self.last_stage = RuntimeFrameStage::ResolveCollisions;
             let elapsed = self.elapsed_time;
+            let mut frame_camera_shake = None;
+            let mut frame_camera_zoom = None;
             let input_snap = self.input.clone();
             let incoming_lua_events = self.current_runtime_events.clone();
             self.previous_collision_contacts = self.collision_contacts.clone();
@@ -830,7 +791,6 @@ impl RuntimeState {
             self.collision_contacts.clear();
             self.collision_contact_ids.clear();
             let scene_label = Some(scene.name.as_str());
-            let scripts_start = Instant::now();
             runtime_command = systems::update_entities_runtime(
                 &mut scene.entities,
                 dt,
@@ -850,12 +810,21 @@ impl RuntimeState {
                 &self.previous_collision_contacts,
                 &self.previous_collision_contact_ids,
                 &mut self.pending_destroys,
+                &mut self.pending_spawns,
+                &mut self.pending_particles,
                 &incoming_lua_events,
                 &mut self.pending_runtime_events,
+                &mut frame_camera_shake,
+                &mut frame_camera_zoom,
             );
-            self.perf_stats.scripts_ms = scripts_start.elapsed().as_secs_f32() * 1000.0;
-            self.perf_stats.collisions_ms = self.perf_stats.scripts_ms;
 
+            if let Some((intensity, duration)) = frame_camera_shake {
+                self.camera_shake_intensity = intensity;
+                self.camera_shake_time = duration;
+            }
+            if let Some(zoom) = frame_camera_zoom {
+                self.camera_zoom_override = Some(zoom.clamp(0.2, 4.0));
+            }
             self.last_stage = RuntimeFrameStage::UpdateCamera;
             if let Some((x, y)) = camera_follow_target {
                 camera::set_main_camera_position(&mut scene.entities, x, y);
@@ -871,11 +840,14 @@ impl RuntimeState {
             self.last_stage = RuntimeFrameStage::FinalizeFrame;
             let pending_destroys = std::mem::take(&mut self.pending_destroys);
             let pending_spawns = std::mem::take(&mut self.pending_spawns);
+            let pending_particles = std::mem::take(&mut self.pending_particles);
             if let Some(mut scene) = self.active_scene.take() {
                 self.apply_pending_entity_commands(
                     &mut scene,
+                    project_root,
                     pending_destroys,
                     pending_spawns,
+                    pending_particles,
                 );
                 self.scene_manager.current_scene = Some(scene.clone());
                 self.active_scene = Some(scene);
@@ -903,8 +875,10 @@ impl RuntimeState {
     fn apply_pending_entity_commands(
         &mut self,
         scene: &mut Scene,
+        project_root: &Path,
         pending_destroys: Vec<PendingDestroyRequest>,
         pending_spawns: Vec<PendingSpawnRequest>,
+        pending_particles: Vec<RuntimeParticle>,
     ) {
         for entity_id in pending_destroys.into_iter().map(|request| request.entity_id) {
             if scene.remove_entity_by_id(&entity_id) {
@@ -916,9 +890,18 @@ impl RuntimeState {
         }
 
         for request in pending_spawns {
-            let entity = Self::build_spawn_entity(&request.template, request.x, request.y);
+            let entity = match request.kind {
+                PendingSpawnKind::Template(template) => Self::build_spawn_entity(&template, request.x, request.y),
+                PendingSpawnKind::PrefabPath(prefab_path) => self
+                    .build_spawned_prefab_entity(project_root, &prefab_path, request.x, request.y)
+                    .unwrap_or_else(|| Self::build_spawn_entity(&prefab_path, request.x, request.y)),
+            };
             self.last_spawned_entity_id = Some(entity.id.clone());
             scene.add_entity(entity);
+        }
+
+        if !pending_particles.is_empty() {
+            self.particles.extend(pending_particles);
         }
     }
 
@@ -982,6 +965,11 @@ impl RuntimeState {
             transform.scale_y = 1.0;
         }
 
+        if template_name == "enemy" {
+            entity.add_tag("enemy");
+            entity.set_max_hp(25.0);
+            entity.set_hp(25.0);
+        }
         entity.add_component(Component::Velocity(Velocity::default()));
         entity.add_component(Component::RigidBody2D(RigidBody2D {
             gravity_scale: 1.0,
@@ -1004,8 +992,50 @@ impl RuntimeState {
             color_g: 0.25,
             color_b: 0.25,
             color_a: 1.0,
+            screen_space: false,
         }));
         entity
+    }
+
+
+    fn build_spawned_prefab_entity(&self, project_root: &Path, prefab_path: &str, x: f32, y: f32) -> Option<Entity> {
+        let normalized = prefab_path.trim().replace('\\', "/");
+        if normalized.is_empty() {
+            return None;
+        }
+
+        let mut candidates = vec![project_root.join(&normalized)];
+        if !normalized.starts_with("assets/") {
+            candidates.push(project_root.join("assets/prefabs").join(&normalized));
+        }
+        if !normalized.ends_with(".prefab.json") {
+            candidates.push(project_root.join(format!("{}.prefab.json", normalized)));
+            candidates.push(project_root.join("assets/prefabs").join(format!("{}.prefab.json", normalized)));
+        }
+
+        let path = candidates.into_iter().find(|candidate| candidate.exists())?;
+        let prefab = crate::serialization::prefab_serializer::load_prefab_from_path(&path)?;
+        let mut entity = prefab.root_entity.clone();
+        entity.regenerate_ids_recursive();
+        if let Some(transform) = entity.transform_mut() {
+            transform.x = x;
+            transform.y = y;
+        }
+        Some(entity)
+    }
+
+    fn update_particles(&mut self, dt: f32) {
+        if self.particles.is_empty() {
+            return;
+        }
+
+        for particle in &mut self.particles {
+            particle.x += particle.vx * dt;
+            particle.y += particle.vy * dt;
+            particle.life -= dt;
+        }
+
+        self.particles.retain(|particle| particle.life > 0.0 && particle.scale > 0.0);
     }
 }
 

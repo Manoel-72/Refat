@@ -121,6 +121,7 @@ pub fn draw_runtime_entity(
     }
 
     if let Some(sprite_comp) = sprite {
+        let sprite_pos = if sprite_comp.screen_space { screen_space_pos } else { world_screen_pos };
         let tint = egui::Color32::from_rgba_unmultiplied(
             (sprite_comp.color_r.clamp(0.0, 1.0) * 255.0) as u8,
             (sprite_comp.color_g.clamp(0.0, 1.0) * 255.0) as u8,
@@ -143,7 +144,7 @@ pub fn draw_runtime_entity(
                 paint_rotated_image(
                     painter,
                     texture.id(),
-                    world_screen_pos,
+                    sprite_pos,
                     draw_size,
                     rotation,
                     tint,
@@ -166,7 +167,7 @@ pub fn draw_runtime_entity(
             );
             paint_rotated_placeholder(
                 painter,
-                world_screen_pos,
+                sprite_pos,
                 draw_size,
                 rotation,
                 tint,
@@ -502,4 +503,28 @@ fn draw_ui_button(
     }
 
     None
+}
+
+
+pub fn draw_runtime_particles(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    camera: CameraView,
+    particles: &[crate::runtime::state::RuntimeParticle],
+) {
+    for particle in particles {
+        let t = if particle.max_life <= f32::EPSILON { 0.0 } else { (particle.life / particle.max_life).clamp(0.0, 1.0) };
+        let pos = egui::pos2(
+            center.x + ((particle.x - camera.x) * camera.zoom),
+            center.y - ((particle.y - camera.y) * camera.zoom),
+        );
+        let radius = (particle.scale.max(0.25) * 6.0 * camera.zoom.max(0.5)).clamp(2.0, 24.0);
+        let color = egui::Color32::from_rgba_unmultiplied(
+            (particle.color[0].clamp(0.0, 1.0) * 255.0) as u8,
+            (particle.color[1].clamp(0.0, 1.0) * 255.0) as u8,
+            (particle.color[2].clamp(0.0, 1.0) * 255.0) as u8,
+            ((particle.color[3].clamp(0.0, 1.0) * t) * 255.0) as u8,
+        );
+        painter.circle_filled(pos, radius, color);
+    }
 }

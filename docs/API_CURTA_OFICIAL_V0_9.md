@@ -170,3 +170,14 @@ Checklist de regressão: `docs/CHECKLIST_REGRESSAO_V0_9_1.md`.
 - `game.every(seconds, function() end)` executa repetidamente.
 - Timers vivem só na VM atual do script e são limpos ao trocar cena/reiniciar sessão.
 - Recomendação: registrar timers em `on_start()` para evitar agendamentos duplicados.
+
+
+## Adições V0.9.3
+- `game.spawn_entity(name, x, y)`
+- `game.spawn_prefab(path, x, y)`
+- `game.find_by_tag(tag)`
+- `game.find_one_by_tag(tag)`
+- `game.spawn_particle(x, y, vx, vy, life, r, g, b, scale)`
+- `entity.add_tag(tag)`
+- `entity.has_tag(tag)`
+- `entity.set_color(r, g, b, a)`

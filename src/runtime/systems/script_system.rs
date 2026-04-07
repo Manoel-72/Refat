@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, path::Path, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
+use std::{collections::HashSet, path::Path};
 
 use mlua;
 
@@ -28,23 +28,6 @@ fn lua_stage_log(
         kind,
         message,
     );
-}
-
-fn should_emit_log(key: &str, min_interval: Duration) -> bool {
-    static LOG_TIMES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
-    let now = Instant::now();
-    let store = LOG_TIMES.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = match store.lock() {
-        Ok(guard) => guard,
-        Err(_) => return true,
-    };
-    match guard.get(key) {
-        Some(last) if now.duration_since(*last) < min_interval => false,
-        _ => {
-            guard.insert(key.to_string(), now);
-            true
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -145,9 +128,14 @@ pub fn run_lua_scripts_for_entity(
     collision_exit_names: &[String],
     collision_exit_ids: &[String],
     colliders: &[crate::runtime::systems::collision_system::RuntimeCollider],
+    tag_index: &std::collections::HashMap<String, Vec<(String, String)>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
+    pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
+    camera_shake: &mut Option<(f32, f32)>,
+    camera_zoom: &mut Option<f32>,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -237,6 +225,7 @@ pub fn run_lua_scripts_for_entity(
             collision_exit_names,
             collision_exit_ids,
             colliders,
+            tag_index,
             current_runtime_events,
             scene_label,
             Some(&file_path),
@@ -249,6 +238,31 @@ pub fn run_lua_scripts_for_entity(
                 let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
+                for (name, x, y) in &result.spawn_entities {
+                    pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
+                        kind: crate::runtime::state::PendingSpawnKind::Template(name.clone()),
+                        x: *x,
+                        y: *y,
+                    });
+                }
+                for (path, x, y) in &result.spawn_prefabs {
+                    pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
+                        kind: crate::runtime::state::PendingSpawnKind::PrefabPath(path.clone()),
+                        x: *x,
+                        y: *y,
+                    });
+                }
+                for (x, y, vx, vy, life, r, g, b, scale) in &result.spawn_particles {
+                    pending_particles.push(crate::runtime::state::RuntimeParticle {
+                        x: *x, y: *y, vx: *vx, vy: *vy, life: *life, max_life: *life, color: [*r, *g, *b, 1.0], scale: *scale,
+                    });
+                }
+                if let Some((intensity, duration)) = result.camera_shake {
+                    *camera_shake = Some((intensity, duration));
+                }
+                if let Some(zoom) = result.camera_zoom {
+                    *camera_zoom = Some(zoom);
+                }
                 if result.destroy_entity {
                     pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
                         entity_id: entity.id.clone(),
@@ -281,10 +295,7 @@ fn execute_event_instruction(
     match instruction {
         ScriptEventInstruction::Print(text) => {
             let stage = if is_start { "on_start" } else { "on_update" };
-            let key = format!("{}::{}::{}::{}", stage, entity_name, script_path, text);
-            if is_start || should_emit_log(&key, Duration::from_millis(250)) {
-                println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
-            }
+            println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
         }
         ScriptEventInstruction::MoveX(value) => {
             result.move_x += value;

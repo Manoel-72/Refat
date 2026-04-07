@@ -1,127 +1,578 @@
 {
-  "name": "Demo Platformer",
-  "background_color": [0.08, 0.10, 0.18],
+  "name": "main",
+  "background_color": [
+    0.08,
+    0.09,
+    0.11
+  ],
   "entities": [
     {
-      "id": "ent-camera-001",
+      "id": "cam-001",
       "name": "Camera",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Camera2D": { "zoom": 1.0, "is_main": true } }
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
       ]
     },
     {
-      "id": "ent-player-001",
+      "id": "ui-canvas-001",
+      "name": "UICanvas",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 225.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.06,
+            "color_g": 0.07,
+            "color_b": 0.1,
+            "color_a": 0.94,
+            "screen_space": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 860.0,
+            "height": 140.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": false,
+            "layer": 0,
+            "mask": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui-title-001",
+      "name": "UITitle",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 252.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "RS2BR UI Canvas (prefab base)",
+            "font_size": 20.0,
+            "color_r": 0.95,
+            "color_g": 0.95,
+            "color_b": 0.98,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "hud-001",
+      "name": "HUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -300.0,
+            "y": 240.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "HUD",
+            "font_size": 16.0,
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/hud_status.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "btn-reset",
+      "name": "ResetButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -220.0,
+            "y": 188.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "text": "Reset Test Scene",
+            "width": 220.0,
+            "height": 48.0,
+            "font_size": 18.0,
+            "target_scene": "assets/scenes/main.scene.json",
+            "close_runtime": false,
+            "color_r": 0.18,
+            "color_g": 0.48,
+            "color_b": 0.85,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "btn-exit",
+      "name": "ExitButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 220.0,
+            "y": 188.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "text": "Exit Runtime",
+            "width": 220.0,
+            "height": 48.0,
+            "font_size": 18.0,
+            "target_scene": "",
+            "close_runtime": true,
+            "color_r": 0.72,
+            "color_g": 0.18,
+            "color_b": 0.18,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "player-001",
       "name": "Player",
       "visible": true,
       "children": [],
+      "tags": [
+        "player"
+      ],
       "components": [
-        { "Transform": { "x": -200.0, "y": -100.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 0.20, "color_g": 0.60, "color_b": 1.00, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 1.0, "is_static": false, "grounded": false } },
-        { "Velocity": { "x": 0.0, "y": 0.0 } },
-        { "BoxCollider": { "width": 32.0, "height": 48.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 1, "mask": 2 } },
-        { "LuaScript": { "file_path": "assets/scripts/player_platformer.lua" } },
-        { "TextLabel": { "text": "WASD/Setas: mover | Espaço: pular", "font_size": 16.0, "color_r": 1.0, "color_g": 1.0, "color_b": 1.0, "color_a": 0.7, "screen_space": true } }
+        {
+          "Transform": {
+            "x": -250.0,
+            "y": -238.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.2,
+            "color_g": 0.6,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 34.0,
+            "height": 48.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 1,
+            "mask": 6
+          }
+        },
+        {
+          "Animator": {
+            "clips": {
+              "idle": {
+                "frames": [
+                  ""
+                ],
+                "fps": 4.0
+              },
+              "run": {
+                "frames": [
+                  "",
+                  ""
+                ],
+                "fps": 8.0
+              },
+              "jump": {
+                "frames": [
+                  ""
+                ],
+                "fps": 4.0
+              }
+            },
+            "current": "idle",
+            "timer": 0.0,
+            "playing": true,
+            "looped": true,
+            "prev_clip": ""
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/movimentacao_basica.lua"
+          }
+        }
       ]
     },
     {
-      "id": "ent-ground-001",
-      "name": "Chao",
+      "id": "ground-001",
+      "name": "Ground",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 0.0, "y": -280.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 0.35, "color_g": 0.55, "color_b": 0.30, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
-        { "BoxCollider": { "width": 800.0, "height": 32.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -280.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.25,
+            "color_g": 0.42,
+            "color_b": 0.28,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 920.0,
+            "height": 34.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 2,
+            "mask": 1
+          }
+        }
       ]
     },
     {
-      "id": "ent-plat-001",
-      "name": "Plataforma A",
+      "id": "platform-001",
+      "name": "Platform",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": -120.0, "y": -160.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
-        { "BoxCollider": { "width": 160.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -175.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.35,
+            "color_g": 0.35,
+            "color_b": 0.55,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": true,
+            "grounded": true
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 220.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 2,
+            "mask": 1
+          }
+        }
       ]
     },
     {
-      "id": "ent-plat-002",
-      "name": "Plataforma B",
+      "id": "enemy-001",
+      "name": "Enemy",
       "visible": true,
       "children": [],
+      "tags": [
+        "enemy"
+      ],
       "components": [
-        { "Transform": { "x": 140.0, "y": -80.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
-        { "BoxCollider": { "width": 160.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+        {
+          "Transform": {
+            "x": 90.0,
+            "y": -238.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.85,
+            "color_g": 0.25,
+            "color_b": 0.25,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 0.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 38.0,
+            "height": 44.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 2,
+            "mask": 1
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy_patrol.lua"
+          }
+        }
       ]
     },
     {
-      "id": "ent-plat-003",
-      "name": "Plataforma C",
+      "id": "coin-001",
+      "name": "Coin",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 320.0, "y": 40.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 0.55, "color_g": 0.40, "color_b": 0.25, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
-        { "BoxCollider": { "width": 120.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 1 } }
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -142.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 1.0,
+            "color_g": 0.85,
+            "color_b": 0.18,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 24.0,
+            "height": 24.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 4,
+            "mask": 1
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/coin_pickup.lua"
+          }
+        }
       ]
     },
     {
-      "id": "ent-moeda-001",
-      "name": "Moeda",
+      "id": "emitter-001",
+      "name": "ParticleSourceBasic",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 140.0, "y": -40.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.85, "color_b": 0.10, "color_a": 1.0 } },
-        { "BoxCollider": { "width": 24.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": true, "layer": 4, "mask": 1 } },
-        { "LuaScript": { "file_path": "assets/scripts/coin_collector.lua" } }
+        {
+          "Transform": {
+            "x": -120.0,
+            "y": -246.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 0.3,
+            "color_g": 0.95,
+            "color_b": 1.0,
+            "color_a": 0.65,
+            "screen_space": false
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/particle_emitter.lua"
+          }
+        }
       ]
     },
     {
-      "id": "ent-moeda-002",
-      "name": "Moeda",
+      "id": "particle-hint-001",
+      "name": "ParticleHint",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 320.0, "y": 80.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.85, "color_b": 0.10, "color_a": 1.0 } },
-        { "BoxCollider": { "width": 24.0, "height": 24.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": true, "layer": 4, "mask": 1 } },
-        { "LuaScript": { "file_path": "assets/scripts/coin_collector.lua" } }
+        {
+          "Transform": {
+            "x": -110.0,
+            "y": -212.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Prefab pronto: particle_source_basic",
+            "font_size": 14.0,
+            "color_r": 0.7,
+            "color_g": 0.95,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": false
+          }
+        }
       ]
     },
     {
-      "id": "ent-enemy-001",
-      "name": "Inimigo",
+      "id": "ui-howto-001",
+      "name": "HowToText",
       "visible": true,
       "children": [],
       "components": [
-        { "Transform": { "x": 80.0, "y": -240.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "Sprite": { "texture_path": "", "color_r": 1.0, "color_g": 0.25, "color_b": 0.25, "color_a": 1.0 } },
-        { "RigidBody2D": { "gravity_scale": 1.0, "is_static": false, "grounded": false } },
-        { "Velocity": { "x": 0.0, "y": 0.0 } },
-        { "BoxCollider": { "width": 32.0, "height": 40.0, "offset_x": 0.0, "offset_y": 0.0, "is_trigger": false, "layer": 2, "mask": 2 } },
-        { "LuaScript": { "file_path": "assets/scripts/enemy_patrol.lua" } }
-      ]
-    },
-    {
-      "id": "ent-score-001",
-      "name": "ScoreHUD",
-      "visible": true,
-      "children": [],
-      "components": [
-        { "Transform": { "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
-        { "TextLabel": { "text": "Score: 0", "font_size": 22.0, "color_r": 1.0, "color_g": 0.90, "color_b": 0.30, "color_a": 1.0, "screen_space": true } },
-        { "LuaScript": { "file_path": "assets/scripts/score_hud.lua" } }
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 154.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Para criar UI use o prefab ui_canvas_basic. Para partículas use particle_source_basic.",
+            "font_size": 15.0,
+            "color_r": 0.75,
+            "color_g": 0.88,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
       ]
     }
   ]

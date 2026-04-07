@@ -220,3 +220,14 @@ Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e ofic
 
 
 - `player_probe_state.lua` pode ser usado na cena de validação para provar isolamento de `state.*` entre scripts da mesma entidade.
+
+
+## Adições V0.9.3
+- `game.spawn_entity(name, x, y)`
+- `game.spawn_prefab(path, x, y)`
+- `game.find_by_tag(tag)`
+- `game.find_one_by_tag(tag)`
+- `game.spawn_particle(x, y, vx, vy, life, r, g, b, scale)`
+- `entity.add_tag(tag)`
+- `entity.has_tag(tag)`
+- `entity.set_color(r, g, b, a)`

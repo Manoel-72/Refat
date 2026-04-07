@@ -332,6 +332,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     color_g: cg,
                                     color_b: cb,
                                     color_a: ca,
+                                    screen_space: false,
                                 }),
                             ));
                         }

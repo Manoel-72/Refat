@@ -69,6 +69,8 @@ pub struct Sprite {
     pub color_g: f32,
     pub color_b: f32,
     pub color_a: f32,
+    #[serde(default)]
+    pub screen_space: bool,
 }
 
 impl Default for Sprite {
@@ -79,6 +81,7 @@ impl Default for Sprite {
             color_g: 1.0,
             color_b: 1.0,
             color_a: 1.0,
+            screen_space: false,
         }
     }
 }

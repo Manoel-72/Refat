@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use super::component::{BoxCollider, Component, Transform, Velocity};
 
+fn default_entity_hp() -> f32 { 100.0 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub id: String,
@@ -16,7 +18,15 @@ pub struct Entity {
     pub children: Vec<Entity>,
     pub components: Vec<Component>,
     #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
     pub matr_source: Option<String>,
+    #[serde(default = "default_entity_hp")]
+    pub hp: f32,
+    #[serde(default = "default_entity_hp")]
+    pub max_hp: f32,
+    #[serde(default)]
+    pub is_dead: bool,
 }
 
 #[allow(dead_code)]
@@ -28,8 +38,84 @@ impl Entity {
             visible: true,
             children: Vec::new(),
             components: vec![Component::transform_default()],
+            tags: Vec::new(),
             matr_source: None,
+            hp: default_entity_hp(),
+            max_hp: default_entity_hp(),
+            is_dead: false,
         }
+    }
+
+
+
+    pub fn add_tag(&mut self, tag: impl Into<String>) -> bool {
+        let normalized = tag.into().trim().to_string();
+        if normalized.is_empty() {
+            return false;
+        }
+        if self.tags.iter().any(|existing| existing.eq_ignore_ascii_case(&normalized)) {
+            return false;
+        }
+        self.tags.push(normalized);
+        true
+    }
+
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|existing| existing.eq_ignore_ascii_case(tag))
+    }
+
+    pub fn remove_tag(&mut self, tag: &str) -> bool {
+        if let Some(index) = self.tags.iter().position(|existing| existing.eq_ignore_ascii_case(tag)) {
+            self.tags.remove(index);
+            return true;
+        }
+        false
+    }
+
+
+
+    pub fn hp(&self) -> f32 {
+        self.hp
+    }
+
+    pub fn set_hp(&mut self, value: f32) {
+        let clamped = value.max(0.0);
+        self.hp = clamped;
+        if self.max_hp < clamped {
+            self.max_hp = clamped;
+        }
+        self.is_dead = self.hp <= 0.0;
+    }
+
+    pub fn max_hp(&self) -> f32 {
+        self.max_hp
+    }
+
+    pub fn set_max_hp(&mut self, value: f32) {
+        self.max_hp = value.max(0.0);
+        if self.hp > self.max_hp && self.max_hp > 0.0 {
+            self.hp = self.max_hp;
+        }
+        self.is_dead = self.hp <= 0.0;
+    }
+
+    pub fn damage(&mut self, amount: f32) -> f32 {
+        let amount = amount.max(0.0);
+        self.hp = (self.hp - amount).max(0.0);
+        self.is_dead = self.hp <= 0.0;
+        self.hp
+    }
+
+    pub fn heal(&mut self, amount: f32) -> f32 {
+        let amount = amount.max(0.0);
+        let limit = if self.max_hp <= 0.0 { default_entity_hp() } else { self.max_hp };
+        self.hp = (self.hp + amount).min(limit);
+        self.is_dead = self.hp <= 0.0;
+        self.hp
+    }
+
+    pub fn is_alive(&self) -> bool {
+        !self.is_dead && self.hp > 0.0
     }
 
     pub fn add_component(&mut self, component: Component) {

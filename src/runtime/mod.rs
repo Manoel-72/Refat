@@ -168,19 +168,28 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         ui.ctx().request_repaint();
     }
 
-    let hud_start = std::time::Instant::now();
-    let entity_count = renderer::count_entities(&runtime_scene.entities);
-    let script_count = renderer::count_scripts(&runtime_scene.entities);
-    runtime.update_debug_snapshot(&runtime_scene.name, entity_count, script_count);
-
     // ── HUD de debug ─────────────────────────────────────────
     ui.horizontal_wrapped(|ui| {
         ui.heading("▶ Runtime Preview");
         ui.separator();
-        ui.label(&runtime.debug_snapshot.hud_summary);
+        ui.label(format!("📌 {}", runtime_scene.name));
+        ui.separator();
+        ui.label(format!("⏱ {:.2}s", runtime.elapsed_time));
+        ui.separator();
+        ui.label(format!("FPS ~ {:.0}", runtime.estimated_fps()));
+        ui.separator();
+        ui.label(match play_state {
+            RuntimePlayState::Playing => "Status: Executando",
+            RuntimePlayState::Paused  => "Status: Pausado",
+            RuntimePlayState::Edit    => "Status: Edição",
+        });
+        ui.separator();
+        ui.label(format!("Flow: {:?}", runtime.game_state.flow));
+        ui.separator();
+        ui.label(format!("Etapa: {:?}", runtime.last_stage));
     });
 
-    ui.label(&runtime.debug_snapshot.controls_hint);
+    ui.label("WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state");
     ui.separator();
 
     ui.horizontal_wrapped(|ui| {
@@ -246,10 +255,21 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     );
 
     let center = available.center();
-    let camera = camera::find_main_camera(&runtime_scene.entities);
+    let mut camera = camera::find_main_camera(&runtime_scene.entities);
+    if let Some(zoom) = runtime.camera_zoom_override {
+        camera.zoom = zoom.clamp(0.2, 4.0);
+    }
+    if runtime.camera_shake_time > f32::EPSILON && runtime.camera_shake_intensity > f32::EPSILON {
+        let phase = runtime.elapsed_time * 40.0;
+        let shake = runtime.camera_shake_intensity * runtime.camera_shake_time.clamp(0.0, 1.0);
+        camera.x += phase.sin() * shake;
+        camera.y += (phase * 1.37).cos() * shake;
+    }
 
     let current_scene_path = runtime.scene_manager.current_path.clone();
     let mut pending_ui_action = None;
+
+    renderer::draw_runtime_particles(&painter, center, camera, &runtime.particles);
 
     for entity in &runtime_scene.entities {
         if let Some(action) = renderer::draw_runtime_entity(
@@ -303,13 +323,15 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         );
     }
 
-    runtime.perf_stats.hud_ms = hud_start.elapsed().as_secs_f32() * 1000.0;
-    runtime.update_debug_snapshot(&runtime_scene.name, entity_count, script_count);
-
     painter.text(
         egui::pos2(available.left() + 8.0, available.top() + 8.0),
         egui::Align2::LEFT_TOP,
-        runtime.debug_snapshot.overlay_left.clone(),
+        format!(
+            "Entidades: {}  •  Scripts: {}  •  Delta: {:.3} ms",
+            renderer::count_entities(&runtime_scene.entities),
+            renderer::count_scripts(&runtime_scene.entities),
+            runtime.delta_time * 1000.0,
+        ),
         egui::FontId::proportional(11.0),
         egui::Color32::from_rgb(220, 220, 220),
     );
@@ -317,17 +339,15 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     painter.text(
         egui::pos2(available.right() - 8.0, available.top() + 8.0),
         egui::Align2::RIGHT_TOP,
-        runtime.debug_snapshot.overlay_right.clone(),
+        format!(
+            "HUD/UI  •  Cena: {}  •  Score: {}  •  Flow: {:?}  •  Partículas: {}",
+            runtime_scene.name,
+            runtime.game_state.score,
+            runtime.game_state.flow,
+            runtime.particles.len(),
+        ),
         egui::FontId::proportional(11.0),
         egui::Color32::from_rgb(180, 235, 180),
-    );
-
-    painter.text(
-        egui::pos2(available.right() - 8.0, available.bottom() - 8.0),
-        egui::Align2::RIGHT_BOTTOM,
-        runtime.debug_snapshot.perf_summary.clone(),
-        egui::FontId::proportional(10.0),
-        egui::Color32::from_rgb(160, 200, 235),
     );
 }
 

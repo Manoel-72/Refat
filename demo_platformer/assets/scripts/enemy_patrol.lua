@@ -1,52 +1,34 @@
--- =============================================================
--- enemy_patrol.lua — patrulha horizontal estável para a demo V0.9.1
---
--- Demo oficial:
--- - estado temporário do inimigo vive em state.*
--- - não usa save.* para direção/origem
--- =============================================================
-
-local SPEED       = 90.0
-local PATROL_DIST = 140.0
-local TURN_MARGIN = 8.0
+-- Variáveis locais persistem entre frames na VM cacheada
+local base_x   = nil   -- definido no primeiro on_update
+local base_y   = nil
+local dir      = 1.0   -- 1 = direita, -1 = esquerda
+local HALF     = 90.0  -- alcance em px de cada lado
+local SPEED    = 50.0  -- px/s
 
 function on_start()
-    state.set("origin_x", entity.x)
-    state.set("dir", 1.0)
-    game.log("Inimigo: patrulha inicializada em x=" .. tostring(entity.x))
+    entity.add_tag("enemy")
+    entity.set_hp(25)
 end
 
 function on_update(dt)
-    local origin_x = state.get("origin_x", entity.x)
-    local dir = state.get("dir", 1.0)
+    -- captura posição inicial apenas uma vez
+    if base_x == nil then
+        base_x = entity.x
+        base_y = entity.y
+    end
 
-    if dir >= 0 then
-        dir = 1.0
-    else
+    local new_x = entity.x + dir * SPEED * dt
+
+    if new_x >= base_x + HALF then
+        new_x = base_x + HALF
         dir = -1.0
-    end
-
-    local min_x = origin_x - PATROL_DIST
-    local max_x = origin_x + PATROL_DIST
-    local next_x = entity.x + (SPEED * dir * dt)
-
-    if dir > 0 and next_x >= (max_x - TURN_MARGIN) then
-        next_x = max_x - TURN_MARGIN
-        dir = -1.0
-    elseif dir < 0 and next_x <= (min_x + TURN_MARGIN) then
-        next_x = min_x + TURN_MARGIN
+        entity.flip_x(true)
+    elseif new_x <= base_x - HALF then
+        new_x = base_x - HALF
         dir = 1.0
+        entity.flip_x(false)
     end
 
-    entity.set_position(next_x, entity.y)
-    entity.set_velocity(0.0, entity.vy)
-    state.set("dir", dir)
-
-    local cols = game.get_collisions()
-    for _, name in ipairs(cols) do
-        if name == "Player" then
-            game.log("Inimigo tocou o Player!")
-            break
-        end
-    end
+    entity.set_position(new_x, base_y)
+    entity.set_velocity(0.0, 0.0)
 end

@@ -15,7 +15,7 @@ pub mod script_system;
 #[path = "systems/ui_system.rs"]
 pub mod ui_system;
 
-use std::{collections::HashSet, path::Path};
+use std::{collections::{HashMap, HashSet}, path::Path};
 
 use crate::core::{component::Component, entity::Entity};
 use crate::runtime::script::ScriptAction;
@@ -45,11 +45,17 @@ pub fn update_entities_runtime(
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
+    pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
+    camera_shake: &mut Option<(f32, f32)>,
+    camera_zoom: &mut Option<f32>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
+    let mut tag_index: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    collect_tag_index(entities, &mut tag_index);
 
     update_entities_runtime_recursive(
         entities,
@@ -61,6 +67,7 @@ pub fn update_entities_runtime(
         camera_follow_target,
         ground_y,
         &colliders,
+        &tag_index,
         save_data,
         session_state,
         script_state,
@@ -71,8 +78,12 @@ pub fn update_entities_runtime(
         previous_collision_contacts,
         previous_collision_contact_ids,
         pending_destroys,
+        pending_spawns,
+        pending_particles,
         current_runtime_events,
         pending_runtime_events,
+        camera_shake,
+        camera_zoom,
     )
 }
 
@@ -86,6 +97,7 @@ fn update_entities_runtime_recursive(
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
     colliders: &[collision_system::RuntimeCollider],
+    tag_index: &HashMap<String, Vec<(String, String)>>,
     save_data: &mut crate::runtime::save::SaveData,
     session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
     script_state: &mut crate::runtime::state::ScriptState,
@@ -96,8 +108,12 @@ fn update_entities_runtime_recursive(
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
+    pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
+    pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
+    camera_shake: &mut Option<(f32, f32)>,
+    camera_zoom: &mut Option<f32>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -187,9 +203,14 @@ fn update_entities_runtime_recursive(
             &collision_exit_names,
             &collision_exit_ids,
             colliders,
+            tag_index,
             pending_destroys,
+            pending_spawns,
+            pending_particles,
             current_runtime_events,
             pending_runtime_events,
+            camera_shake,
+            camera_zoom,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -227,6 +248,7 @@ fn update_entities_runtime_recursive(
             camera_follow_target,
             ground_y,
             colliders,
+            tag_index,
             save_data,
             session_state,
             script_state,
@@ -237,8 +259,12 @@ fn update_entities_runtime_recursive(
             previous_collision_contacts,
             previous_collision_contact_ids,
             pending_destroys,
+            pending_spawns,
+            pending_particles,
             current_runtime_events,
             pending_runtime_events,
+            camera_shake,
+            camera_zoom,
         ) {
             return Some(command);
         }
@@ -311,14 +337,6 @@ fn handle_entity_collisions(
         }
 
         if !collision_system::layers_interact(&my_col, other) {
-            continue;
-        }
-        if collision_system::definitely_separated(
-            (my_col.center_x, my_col.center_y),
-            (my_col.width, my_col.height),
-            (other.center_x, other.center_y),
-            (other.width, other.height),
-        ) {
             continue;
         }
 
@@ -440,12 +458,6 @@ fn collect_collision_entries(
     for other in colliders {
         if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
         if !collision_system::layers_interact(&my_col, other) { continue; }
-        if collision_system::definitely_separated(
-            (my_col.center_x, my_col.center_y),
-            (my_col.width, my_col.height),
-            (other.center_x, other.center_y),
-            (other.width, other.height),
-        ) { continue; }
         let other_rect = (other.center_x - other.width * 0.5, other.center_y - other.height * 0.5, other.width, other.height);
         if !collision_system::aabb_mtv(my_rect, other_rect).is_zero() {
             entries.push(CollisionEntry {
@@ -457,6 +469,20 @@ fn collect_collision_entries(
     entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
     entries.dedup_by(|a, b| a.id == b.id);
     entries
+}
+
+
+fn collect_tag_index(entities: &[Entity], tag_index: &mut HashMap<String, Vec<(String, String)>>) {
+    for entity in entities {
+        for tag in &entity.tags {
+            let normalized = tag.trim().to_ascii_lowercase();
+            if normalized.is_empty() {
+                continue;
+            }
+            tag_index.entry(normalized).or_default().push((entity.id.clone(), entity.name.clone()));
+        }
+        collect_tag_index(&entity.children, tag_index);
+    }
 }
 
 
@@ -507,10 +533,10 @@ pub fn apply_audio_autoplay(
 
                 if let Some(audio_path) = audio_system::resolve_audio_path(project_root, &audio.file_path) {
                     if let Err(error) = audio_runtime.play_once(&key, &audio_path, audio.looped, audio.volume) {
-                        eprintln!("Audio error: {}", error);
+                        println!("Audio error: {}", error);
                     }
                 } else {
-                    eprintln!("Audio error: file not found {}", audio.file_path);
+                    println!("Audio error: file not found {}", audio.file_path);
                 }
             }
         }
