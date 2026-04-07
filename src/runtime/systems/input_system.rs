@@ -48,6 +48,7 @@ pub fn capture_runtime_input(ctx: &egui::Context, previous: &RuntimeInput) -> Ru
             mouse_right:  i.pointer.button_down(egui::PointerButton::Secondary),
             mouse_middle: i.pointer.button_down(egui::PointerButton::Middle),
             mouse_pos:    i.pointer.hover_pos().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0)),
+            gamepad_buttons: std::collections::HashSet::new(),
         }
     })
 }

@@ -52,6 +52,7 @@ pub fn update_entities_runtime(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    audio_runtime: &mut audio_system::AudioRuntime,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -86,6 +87,7 @@ pub fn update_entities_runtime(
         pending_runtime_events,
         camera_shake,
         camera_zoom,
+        audio_runtime,
     )
 }
 
@@ -117,6 +119,7 @@ fn update_entities_runtime_recursive(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    audio_runtime: &mut audio_system::AudioRuntime,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
@@ -215,6 +218,7 @@ fn update_entities_runtime_recursive(
             pending_runtime_events,
             camera_shake,
             camera_zoom,
+            audio_runtime,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -270,6 +274,7 @@ fn update_entities_runtime_recursive(
             pending_runtime_events,
             camera_shake,
             camera_zoom,
+            audio_runtime,
         ) {
             return Some(command);
         }

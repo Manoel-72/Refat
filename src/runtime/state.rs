@@ -54,6 +54,9 @@ pub struct PendingSpawnRequest {
     pub tags: Vec<String>,
     pub hp: Option<f32>,
     pub anim: Option<String>,
+    /// Sequência do pedido de spawn vinda do Lua. Quando presente,
+    /// o runtime devolve um evento spawn_result:<seq> com o id criado.
+    pub request_seq: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +103,10 @@ pub struct RuntimeInput {
     pub mouse_right: bool,
     pub mouse_middle: bool,
     pub mouse_pos: (f32, f32),
+    /// Snapshot simples dos botões de gamepad ativos no frame.
+    /// O backend atual do runtime ainda não alimenta isso; a API Lua
+    /// já fica pronta para evolução sem quebrar scripts.
+    pub gamepad_buttons: HashSet<u32>,
 }
 
 impl RuntimeInput {
@@ -113,6 +120,10 @@ impl RuntimeInput {
 
     pub fn is_key_released(&self, key: KeyCode) -> bool {
         self.keyboard.is_released(key)
+    }
+
+    pub fn is_gamepad_button_held(&self, button: u32) -> bool {
+        self.gamepad_buttons.contains(&button)
     }
 }
 
@@ -615,6 +626,7 @@ impl RuntimeState {
             tags: Vec::new(),
             hp: None,
             anim: None,
+            request_seq: None,
         });
     }
 
@@ -627,6 +639,7 @@ impl RuntimeState {
             tags: Vec::new(),
             hp: None,
             anim: None,
+            request_seq: None,
         });
     }
 
@@ -847,6 +860,7 @@ impl RuntimeState {
                 &mut self.pending_runtime_events,
                 &mut frame_camera_shake,
                 &mut frame_camera_zoom,
+                &mut self.audio_runtime,
             );
 
             if let Some((intensity, duration)) = frame_camera_shake {
@@ -873,13 +887,16 @@ impl RuntimeState {
             let pending_spawns = std::mem::take(&mut self.pending_spawns);
             let pending_particles = std::mem::take(&mut self.pending_particles);
             if let Some(mut scene) = self.active_scene.take() {
+                let mut pending_runtime_events = std::mem::take(&mut self.pending_runtime_events);
                 self.apply_pending_entity_commands(
                     &mut scene,
                     project_root,
                     pending_destroys,
                     pending_spawns,
                     pending_particles,
+                    &mut pending_runtime_events,
                 );
+                self.pending_runtime_events = pending_runtime_events;
                 self.scene_manager.current_scene = Some(scene.clone());
                 self.active_scene = Some(scene);
             } else if let Some(scene) = scene_snapshot {
@@ -910,6 +927,7 @@ impl RuntimeState {
         pending_destroys: Vec<PendingDestroyRequest>,
         pending_spawns: Vec<PendingSpawnRequest>,
         pending_particles: Vec<RuntimeParticle>,
+        pending_runtime_events: &mut Vec<RuntimeEvent>,
     ) {
         for entity_id in pending_destroys.into_iter().map(|request| request.entity_id) {
             if scene.remove_entity_by_id(&entity_id) {
@@ -928,8 +946,19 @@ impl RuntimeState {
                     .unwrap_or_else(|| Self::build_spawn_entity(prefab_path, request.x, request.y)),
             };
             Self::apply_spawn_init_to_entity(&mut entity, request.velocity, &request.tags, request.hp, request.anim.as_deref());
-            self.last_spawned_entity_id = Some(entity.id.clone());
+            let spawned_id = entity.id.clone();
+            self.last_spawned_entity_id = Some(spawned_id.clone());
             scene.add_entity(entity);
+            if let Some(seq) = request.request_seq {
+                pending_runtime_events.push(RuntimeEvent {
+                    name: format!("spawn_result:{}", seq),
+                    data: Some(SaveValue::Text(spawned_id.clone())),
+                });
+                pending_runtime_events.push(RuntimeEvent {
+                    name: format!("rs2_spawn_done:{}", seq),
+                    data: Some(SaveValue::Text(spawned_id)),
+                });
+            }
         }
 
         if !pending_particles.is_empty() {

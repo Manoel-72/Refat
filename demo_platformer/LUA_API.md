@@ -223,8 +223,8 @@ Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e ofic
 
 
 ## Adições V0.9.3
-- `game.spawn_entity(name, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `add_tag`, `set_hp`, `set_anim`)
-- `game.spawn_prefab(path, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `add_tag`, `set_hp`, `set_anim`)
+- `game.spawn_entity(name, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `set_position`, `add_tag`, `set_hp`, `set_anim`)
+- `game.spawn_prefab(path, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `set_position`, `add_tag`, `set_hp`, `set_anim`)
 - `game.find_by_tag(tag)`
 - `game.find_one_by_tag(tag)`
 - `game.spawn_particle(x, y, vx, vy, life, r, g, b, scale)`
@@ -243,3 +243,17 @@ Além de WASD, setas, Space, Enter e Escape, o snapshot Lua agora expõe:
 - números `0` a `9`
 
 Observação: gamepad ainda não é exposto ao Lua neste runtime embutido.
+
+
+## Audio Lua
+
+- `audio.play_sound(key, path)`
+- `audio.play_ex(key, path, looped?, volume?)`
+- `audio.stop_sound(key)`
+- `audio.set_volume(key, volume)`
+- aliases: `audio.play`, `audio.stop`
+
+## Eventos de spawn
+
+- `spawn_result:<seq>`
+- `rs2_spawn_done:<seq>`

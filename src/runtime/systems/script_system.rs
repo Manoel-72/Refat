@@ -4,8 +4,11 @@ use mlua;
 
 use crate::{
     core::{component::{Component, Animator}, entity::Entity},
-    runtime::script::{
-        load_script_behavior_checked, parse_event_instruction, ScriptAction, ScriptEventInstruction,
+    runtime::{
+        script::{
+            load_script_behavior_checked, parse_event_instruction, ScriptAction, ScriptEventInstruction,
+        },
+        systems::audio_system,
     },
 };
 
@@ -137,6 +140,7 @@ pub fn run_lua_scripts_for_entity(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    audio_runtime: &mut audio_system::AudioRuntime,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -239,6 +243,25 @@ pub fn run_lua_scripts_for_entity(
                 let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
+                for audio_op in &result.audio_ops {
+                    match audio_op {
+                        lua_runtime::AudioOp::Play { key, path, looped, volume } => {
+                            if let Some(audio_path) = audio_system::resolve_audio_path(project_root, path) {
+                                if let Err(error) = audio_runtime.play_once(key, &audio_path, *looped, *volume) {
+                                    lua_stage_log(scene_label, entity, &file_path, "audio_play", "runtime_error", error);
+                                }
+                            } else {
+                                lua_stage_log(scene_label, entity, &file_path, "audio_play", "file_not_found", path);
+                            }
+                        }
+                        lua_runtime::AudioOp::Stop { key } => {
+                            let _ = audio_runtime.stop_by_name(key);
+                        }
+                        lua_runtime::AudioOp::SetVolume { key, volume } => {
+                            let _ = audio_runtime.set_volume_by_name(key, *volume);
+                        }
+                    }
+                }
                 for spawn in &result.spawn_entities {
                     pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
                         kind: crate::runtime::state::PendingSpawnKind::Template(spawn.name.clone()),
@@ -248,6 +271,7 @@ pub fn run_lua_scripts_for_entity(
                         tags: spawn.init.tags.clone(),
                         hp: spawn.init.hp,
                         anim: spawn.init.anim.clone(),
+                        request_seq: Some(spawn.request_seq),
                     });
                 }
                 for spawn in &result.spawn_prefabs {
@@ -259,6 +283,7 @@ pub fn run_lua_scripts_for_entity(
                         tags: spawn.init.tags.clone(),
                         hp: spawn.init.hp,
                         anim: spawn.init.anim.clone(),
+                        request_seq: Some(spawn.request_seq),
                     });
                 }
                 for (x, y, vx, vy, life, r, g, b, scale) in &result.spawn_particles {

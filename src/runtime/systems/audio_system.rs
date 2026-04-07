@@ -85,6 +85,23 @@ impl AudioRuntime {
         self.active.clear();
     }
 
+    pub fn set_volume_by_name(&mut self, name: &str, volume: f32) -> usize {
+        let query = name.trim().to_ascii_lowercase();
+        if query.is_empty() {
+            return 0;
+        }
+
+        let mut changed = 0usize;
+        let volume = volume.clamp(0.0, 1.5);
+        for audio in &self.active {
+            if audio.key.to_ascii_lowercase().contains(&query) {
+                audio.sink.set_volume(volume);
+                changed += 1;
+            }
+        }
+        changed
+    }
+
     pub fn stop_by_name(&mut self, name: &str) -> usize {
         let query = name.trim().to_ascii_lowercase();
         if query.is_empty() {

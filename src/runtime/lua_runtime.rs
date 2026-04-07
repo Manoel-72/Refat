@@ -64,6 +64,7 @@ pub struct SpawnInit {
 
 #[derive(Debug, Clone)]
 pub struct PendingLuaSpawnEntity {
+    pub request_seq: i64,
     pub name: String,
     pub x: f32,
     pub y: f32,
@@ -72,6 +73,7 @@ pub struct PendingLuaSpawnEntity {
 
 #[derive(Debug, Clone)]
 pub struct PendingLuaSpawnPrefab {
+    pub request_seq: i64,
     pub path: String,
     pub x: f32,
     pub y: f32,
@@ -120,6 +122,7 @@ pub struct LuaScriptResult {
     pub session_ops: Vec<SessionOp>,
     pub state_ops: Vec<StateOp>,
     pub event_ops: Vec<EventOp>,
+    pub audio_ops: Vec<AudioOp>,
 }
 
 #[derive(Debug)]
@@ -148,6 +151,13 @@ pub enum EventOp {
         name: String,
         data: Option<crate::runtime::save::SaveValue>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum AudioOp {
+    Play { key: String, path: String, looped: bool, volume: f32 },
+    Stop { key: String },
+    SetVolume { key: String, volume: f32 },
 }
 
 // ── execução ─────────────────────────────────────────────────
@@ -375,7 +385,9 @@ pub fn run_lua_script_with_vm(
                     let next_remaining = if interval <= f32::EPSILON {
                         0.0
                     } else {
-                        interval - ((-remaining) % interval)
+                        let overshoot = (-remaining) / interval;
+                        let ticks = 1 + overshoot.floor() as u32;
+                        remaining + interval * ticks as f32
                     };
                     timer.set("remaining", next_remaining).map_err(|e| e.to_string())?;
                 } else {
@@ -723,7 +735,68 @@ pub fn run_lua_script_with_vm(
         input_tbl.set("mouse_right",  input.mouse_right).ok();
         input_tbl.set("mouse_middle", input.mouse_middle).ok();
 
+        let gamepad_buttons = input.gamepad_buttons.clone();
+        let gamepad_button = lua.create_function(move |_, button: u32| {
+            Ok(gamepad_buttons.contains(&button))
+        }).map_err(|e| e.to_string())?;
+        input_tbl.set("gamepad_button", gamepad_button).ok();
+
         lua.globals().set("input", input_tbl).map_err(|e| e.to_string())?;
+    }
+
+    // ── tabela `audio` ───────────────────────────────────────
+    {
+        let audio_tbl = lua.create_table().map_err(|e| e.to_string())?;
+        let audio_cmds: Table = lua.create_table().map_err(|e| e.to_string())?;
+        audio_tbl.set("_cmds", audio_cmds.clone()).ok();
+
+        let play_cmds = audio_cmds.clone();
+        let play_sound = lua.create_function(move |_, (key, path): (String, String)| {
+            let seq = play_cmds.get::<i64>("play_seq").unwrap_or(0) + 1;
+            play_cmds.set("play_seq", seq)?;
+            play_cmds.set(format!("play_key:{}", seq), key)?;
+            play_cmds.set(format!("play_path:{}", seq), path)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        audio_tbl.set("play_sound", play_sound).ok();
+
+        let play_ex_cmds = audio_cmds.clone();
+        let play_ex = lua.create_function(move |_, (key, path, looped, volume): (String, String, Option<bool>, Option<f32>)| {
+            let seq = play_ex_cmds.get::<i64>("play_seq").unwrap_or(0) + 1;
+            play_ex_cmds.set("play_seq", seq)?;
+            play_ex_cmds.set(format!("play_key:{}", seq), key)?;
+            play_ex_cmds.set(format!("play_path:{}", seq), path)?;
+            play_ex_cmds.set(format!("play_loop:{}", seq), looped.unwrap_or(false))?;
+            play_ex_cmds.set(format!("play_volume:{}", seq), volume.unwrap_or(1.0))?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        audio_tbl.set("play_ex", play_ex).ok();
+
+        let stop_cmds = audio_cmds.clone();
+        let stop_sound = lua.create_function(move |_, key: String| {
+            let seq = stop_cmds.get::<i64>("stop_seq").unwrap_or(0) + 1;
+            stop_cmds.set("stop_seq", seq)?;
+            stop_cmds.set(format!("stop_key:{}", seq), key)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        audio_tbl.set("stop_sound", stop_sound).ok();
+
+        let volume_cmds = audio_cmds.clone();
+        let set_volume = lua.create_function(move |_, (key, volume): (String, f32)| {
+            let seq = volume_cmds.get::<i64>("volume_seq").unwrap_or(0) + 1;
+            volume_cmds.set("volume_seq", seq)?;
+            volume_cmds.set(format!("volume_key:{}", seq), key)?;
+            volume_cmds.set(format!("volume_value:{}", seq), volume)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        audio_tbl.set("set_volume", set_volume).ok();
+
+        let play_alias: LuaValue = audio_tbl.get("play_sound").map_err(|e| e.to_string())?;
+        audio_tbl.set("play", play_alias).ok();
+        let stop_alias: LuaValue = audio_tbl.get("stop_sound").map_err(|e| e.to_string())?;
+        audio_tbl.set("stop", stop_alias).ok();
+
+        lua.globals().set("audio", audio_tbl).map_err(|e| e.to_string())?;
     }
 
     // ── tabela `game` ────────────────────────────────────────
@@ -1478,14 +1551,21 @@ pub fn run_lua_script_with_vm(
             let entity_seq = gcmds.get::<i64>("spawn_entity_seq").unwrap_or(0);
             for seq in 1..=entity_seq {
                 let Ok(name) = gcmds.get::<String>(format!("spawn_entity_name:{}", seq)) else { continue };
-                let x = gcmds.get::<f32>(format!("spawn_entity_x:{}", seq)).unwrap_or(0.0);
-                let y = gcmds.get::<f32>(format!("spawn_entity_y:{}", seq)).unwrap_or(0.0);
+                let mut x = gcmds.get::<f32>(format!("spawn_entity_x:{}", seq)).unwrap_or(0.0);
+                let mut y = gcmds.get::<f32>(format!("spawn_entity_y:{}", seq)).unwrap_or(0.0);
                 let mut init = SpawnInit::default();
                 if let (Ok(vx), Ok(vy)) = (
                     gcmds.get::<f32>(format!("spawn_init_entity_vx:{}", seq)),
                     gcmds.get::<f32>(format!("spawn_init_entity_vy:{}", seq)),
                 ) {
                     init.velocity = Some((vx, vy));
+                }
+                if let (Ok(px), Ok(py)) = (
+                    gcmds.get::<f32>(format!("spawn_init_entity_px:{}", seq)),
+                    gcmds.get::<f32>(format!("spawn_init_entity_py:{}", seq)),
+                ) {
+                    x = px;
+                    y = py;
                 }
                 if let Ok(hp) = gcmds.get::<f32>(format!("spawn_init_entity_hp:{}", seq)) {
                     init.hp = Some(hp);
@@ -1501,12 +1581,14 @@ pub fn run_lua_script_with_vm(
                     let _ = gcmds.raw_remove(format!("spawn_tag_entity:{}:{}", seq, tag_index));
                 }
                 let _ = gcmds.raw_remove(format!("spawn_tag_entity_seq:{}", seq));
-                result.spawn_entities.push(PendingLuaSpawnEntity { name, x, y, init });
+                result.spawn_entities.push(PendingLuaSpawnEntity { request_seq: seq, name, x, y, init });
                 let _ = gcmds.raw_remove(format!("spawn_entity_name:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_entity_x:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_entity_y:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_entity_vx:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_entity_vy:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_px:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_py:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_entity_hp:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_entity_anim:{}", seq));
             }
@@ -1514,14 +1596,21 @@ pub fn run_lua_script_with_vm(
             let prefab_seq = gcmds.get::<i64>("spawn_prefab_seq").unwrap_or(0);
             for seq in 1..=prefab_seq {
                 let Ok(path) = gcmds.get::<String>(format!("spawn_prefab_path:{}", seq)) else { continue };
-                let x = gcmds.get::<f32>(format!("spawn_prefab_x:{}", seq)).unwrap_or(0.0);
-                let y = gcmds.get::<f32>(format!("spawn_prefab_y:{}", seq)).unwrap_or(0.0);
+                let mut x = gcmds.get::<f32>(format!("spawn_prefab_x:{}", seq)).unwrap_or(0.0);
+                let mut y = gcmds.get::<f32>(format!("spawn_prefab_y:{}", seq)).unwrap_or(0.0);
                 let mut init = SpawnInit::default();
                 if let (Ok(vx), Ok(vy)) = (
                     gcmds.get::<f32>(format!("spawn_init_prefab_vx:{}", seq)),
                     gcmds.get::<f32>(format!("spawn_init_prefab_vy:{}", seq)),
                 ) {
                     init.velocity = Some((vx, vy));
+                }
+                if let (Ok(px), Ok(py)) = (
+                    gcmds.get::<f32>(format!("spawn_init_prefab_px:{}", seq)),
+                    gcmds.get::<f32>(format!("spawn_init_prefab_py:{}", seq)),
+                ) {
+                    x = px;
+                    y = py;
                 }
                 if let Ok(hp) = gcmds.get::<f32>(format!("spawn_init_prefab_hp:{}", seq)) {
                     init.hp = Some(hp);
@@ -1537,12 +1626,14 @@ pub fn run_lua_script_with_vm(
                     let _ = gcmds.raw_remove(format!("spawn_tag_prefab:{}:{}", seq, tag_index));
                 }
                 let _ = gcmds.raw_remove(format!("spawn_tag_prefab_seq:{}", seq));
-                result.spawn_prefabs.push(PendingLuaSpawnPrefab { path, x, y, init });
+                result.spawn_prefabs.push(PendingLuaSpawnPrefab { request_seq: seq, path, x, y, init });
                 let _ = gcmds.raw_remove(format!("spawn_prefab_path:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_prefab_x:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_prefab_y:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_prefab_vx:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_prefab_vy:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_px:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_py:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_prefab_hp:{}", seq));
                 let _ = gcmds.raw_remove(format!("spawn_init_prefab_anim:{}", seq));
             }
@@ -1588,6 +1679,44 @@ pub fn run_lua_script_with_vm(
             let _ = gcmds.raw_remove("camera_zoom");
         }
     }
+    // ── coleta audio._cmds ───────────────────────────────────
+    if let Ok(audio_tbl) = lua.globals().get::<Table>("audio") {
+        if let Ok(cmds) = audio_tbl.get::<Table>("_cmds") {
+            let play_seq = cmds.get::<i64>("play_seq").unwrap_or(0);
+            for seq in 1..=play_seq {
+                let Ok(key) = cmds.get::<String>(format!("play_key:{}", seq)) else { continue };
+                let Ok(path) = cmds.get::<String>(format!("play_path:{}", seq)) else { continue };
+                let looped = cmds.get::<bool>(format!("play_loop:{}", seq)).unwrap_or(false);
+                let volume = cmds.get::<f32>(format!("play_volume:{}", seq)).unwrap_or(1.0);
+                result.audio_ops.push(AudioOp::Play { key, path, looped, volume });
+                let _ = cmds.raw_remove(format!("play_key:{}", seq));
+                let _ = cmds.raw_remove(format!("play_path:{}", seq));
+                let _ = cmds.raw_remove(format!("play_loop:{}", seq));
+                let _ = cmds.raw_remove(format!("play_volume:{}", seq));
+            }
+            let _ = cmds.set("play_seq", 0);
+
+            let stop_seq = cmds.get::<i64>("stop_seq").unwrap_or(0);
+            for seq in 1..=stop_seq {
+                if let Ok(key) = cmds.get::<String>(format!("stop_key:{}", seq)) {
+                    result.audio_ops.push(AudioOp::Stop { key });
+                }
+                let _ = cmds.raw_remove(format!("stop_key:{}", seq));
+            }
+            let _ = cmds.set("stop_seq", 0);
+
+            let volume_seq = cmds.get::<i64>("volume_seq").unwrap_or(0);
+            for seq in 1..=volume_seq {
+                let Ok(key) = cmds.get::<String>(format!("volume_key:{}", seq)) else { continue };
+                let volume = cmds.get::<f32>(format!("volume_value:{}", seq)).unwrap_or(1.0);
+                result.audio_ops.push(AudioOp::SetVolume { key, volume });
+                let _ = cmds.raw_remove(format!("volume_key:{}", seq));
+                let _ = cmds.raw_remove(format!("volume_value:{}", seq));
+            }
+            let _ = cmds.set("volume_seq", 0);
+        }
+    }
+
     // ── coleta session._cmds ──────────────────────────────────
     if let Ok(session_tbl) = lua.globals().get::<Table>("session") {
         if let Ok(cmds) = session_tbl.get::<Table>("_cmds") {
@@ -1797,6 +1926,16 @@ fn build_spawn_handle(lua: &Lua, game_tbl: &Table, kind: &str, seq: i64) -> Resu
         Ok(())
     }).map_err(|e| e.to_string())?;
     handle.set("add_tag", add_tag).map_err(|e| e.to_string())?;
+
+    let kind_position = kind.to_string();
+    let cmds_tbl = game_tbl.clone();
+    let set_position = lua.create_function(move |_, (x, y): (f32, f32)| {
+        let cmds: Table = cmds_tbl.get("_cmds")?;
+        cmds.set(format!("spawn_init_{}_px:{}", kind_position, seq), x)?;
+        cmds.set(format!("spawn_init_{}_py:{}", kind_position, seq), y)?;
+        Ok(())
+    }).map_err(|e| e.to_string())?;
+    handle.set("set_position", set_position).map_err(|e| e.to_string())?;
 
     let kind_hp = kind.to_string();
     let cmds_tbl = game_tbl.clone();

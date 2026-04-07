@@ -1,10 +1,5 @@
 {
   "name": "main",
-  "background_color": [
-    0.08,
-    0.09,
-    0.11
-  ],
   "entities": [
     {
       "id": "cam-001",
@@ -27,7 +22,12 @@
             "is_main": true
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "ui-canvas-001",
@@ -66,7 +66,12 @@
             "mask": 0
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "ui-title-001",
@@ -94,7 +99,12 @@
             "screen_space": true
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "hud-001",
@@ -127,7 +137,12 @@
             "file_path": "assets/scripts/hud_status.lua"
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "btn-reset",
@@ -163,7 +178,12 @@
             "screen_space": true
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "btn-exit",
@@ -199,16 +219,18 @@
             "screen_space": true
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "player-001",
       "name": "Player",
       "visible": true,
       "children": [],
-      "tags": [
-        "player"
-      ],
       "components": [
         {
           "Transform": {
@@ -263,18 +285,18 @@
                 ],
                 "fps": 4.0
               },
+              "jump": {
+                "frames": [
+                  ""
+                ],
+                "fps": 4.0
+              },
               "run": {
                 "frames": [
                   "",
                   ""
                 ],
                 "fps": 8.0
-              },
-              "jump": {
-                "frames": [
-                  ""
-                ],
-                "fps": 4.0
               }
             },
             "current": "idle",
@@ -289,7 +311,14 @@
             "file_path": "assets/scripts/movimentacao_basica.lua"
           }
         }
-      ]
+      ],
+      "tags": [
+        "player"
+      ],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "ground-001",
@@ -335,7 +364,12 @@
             "mask": 1
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "platform-001",
@@ -381,21 +415,23 @@
             "mask": 1
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "enemy-001",
       "name": "Enemy",
       "visible": true,
       "children": [],
-      "tags": [
-        "enemy"
-      ],
       "components": [
         {
           "Transform": {
-            "x": 90.0,
-            "y": -238.0,
+            "x": 91.69351,
+            "y": -214.29083,
             "rotation": 0.0,
             "scale_x": 1.0,
             "scale_y": 1.0
@@ -441,7 +477,14 @@
             "file_path": "assets/scripts/enemy_patrol.lua"
           }
         }
-      ]
+      ],
+      "tags": [
+        "enemy"
+      ],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "coin-001",
@@ -485,7 +528,12 @@
             "file_path": "assets/scripts/coin_pickup.lua"
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "emitter-001",
@@ -517,7 +565,12 @@
             "file_path": "assets/scripts/particle_emitter.lua"
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "particle-hint-001",
@@ -545,7 +598,12 @@
             "screen_space": false
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
       "id": "ui-howto-001",
@@ -573,7 +631,17 @@
             "screen_space": true
           }
         }
-      ]
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     }
+  ],
+  "background_color": [
+    0.08,
+    0.09,
+    0.11
   ]
 }

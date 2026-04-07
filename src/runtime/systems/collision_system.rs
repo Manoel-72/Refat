@@ -148,8 +148,9 @@ pub fn layers_interact(a: &RuntimeCollider, b: &RuntimeCollider) -> bool {
 /// até `max_dist`. Retorna o primeiro collider atingido que pertença
 /// a `layer_mask` (0 = qualquer layer).
 ///
-/// Algoritmo: amostragem por passos de meio-largura mínima para manter
-/// simplicidade sem depender de hit-parametric, adequado para V0.9.
+/// Algoritmo paramétrico raio vs AABB (slab test).
+/// Retorna o menor `t_min` positivo entre todos os colliders,
+/// evitando tunelamento e dependência de passo fixo.
 pub fn raycast(
     origin: (f32, f32),
     dir: (f32, f32),
@@ -159,58 +160,58 @@ pub fn raycast(
 ) -> Option<RaycastHit> {
     let (ox, oy) = origin;
     let len = (dir.0 * dir.0 + dir.1 * dir.1).sqrt();
-    if len < f32::EPSILON {
+    if len < f32::EPSILON || max_dist <= 0.0 {
         return None;
     }
-    let (dx, dy) = (dir.0 / len, dir.1 / len);
 
-    // passo = metade do menor collider presente (min 2 px)
-    let step = colliders
-        .iter()
-        .map(|c| c.width.min(c.height))
-        .fold(f32::MAX, f32::min)
-        * 0.5;
-    let step = step.max(2.0).min(16.0);
-
-    // Coleta TODOS os hits e retorna o de menor distância.
-    // Isso corrige o bug onde dois colliders sobrepostos na mesma amostra
-    // retornavam o da posição 0 da lista em vez do geometricamente mais próximo.
+    let inv_dx = if dir.0.abs() > f32::EPSILON { Some(1.0 / dir.0) } else { None };
+    let inv_dy = if dir.1.abs() > f32::EPSILON { Some(1.0 / dir.1) } else { None };
     let mut best: Option<RaycastHit> = None;
 
-    let mut dist = 0.0_f32;
-    while dist <= max_dist {
-        let px = ox + dx * dist;
-        let py = oy + dy * dist;
-
-        for col in colliders {
-            if layer_mask != 0 && (col.layer & layer_mask) == 0 {
-                continue;
-            }
-            let half_w = col.width * 0.5;
-            let half_h = col.height * 0.5;
-            if (px - col.center_x).abs() <= half_w && (py - col.center_y).abs() <= half_h {
-                let hit = RaycastHit {
-                    hit_x: px,
-                    hit_y: py,
-                    distance: dist,
-                    entity_ptr: col.entity_ptr,
-                };
-                // Guarda apenas o hit de menor distância
-                match &best {
-                    None => best = Some(hit),
-                    Some(prev) if dist < prev.distance => best = Some(hit),
-                    _ => {}
-                }
-            }
+    for col in colliders {
+        if layer_mask != 0 && (col.layer & layer_mask) == 0 {
+            continue;
         }
 
-        // Se já encontrou um hit neste passo e o próximo passo estaria além,
-        // podemos retornar imediatamente — não haverá hit mais próximo adiante.
-        if best.is_some() {
-            return best;
+        let min_x = col.center_x - col.width * 0.5;
+        let max_x = col.center_x + col.width * 0.5;
+        let min_y = col.center_y - col.height * 0.5;
+        let max_y = col.center_y + col.height * 0.5;
+
+        let (tx1, tx2) = match inv_dx {
+            Some(inv) => ((min_x - ox) * inv, (max_x - ox) * inv),
+            None if ox >= min_x && ox <= max_x => (f32::NEG_INFINITY, f32::INFINITY),
+            None => continue,
+        };
+        let (ty1, ty2) = match inv_dy {
+            Some(inv) => ((min_y - oy) * inv, (max_y - oy) * inv),
+            None if oy >= min_y && oy <= max_y => (f32::NEG_INFINITY, f32::INFINITY),
+            None => continue,
+        };
+
+        let t_min = tx1.min(tx2).max(ty1.min(ty2)).max(0.0);
+        let t_max = tx1.max(tx2).min(ty1.max(ty2));
+        if t_max < t_min {
+            continue;
         }
 
-        dist += step;
+        let distance = t_min * len;
+        if distance > max_dist {
+            continue;
+        }
+
+        let hit = RaycastHit {
+            hit_x: ox + dir.0 * t_min,
+            hit_y: oy + dir.1 * t_min,
+            distance,
+            entity_ptr: col.entity_ptr,
+        };
+
+        match &best {
+            None => best = Some(hit),
+            Some(prev) if hit.distance < prev.distance => best = Some(hit),
+            _ => {}
+        }
     }
 
     best
