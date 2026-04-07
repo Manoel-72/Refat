@@ -142,6 +142,13 @@ pub fn layers_interact(a: &RuntimeCollider, b: &RuntimeCollider) -> bool {
     a_hits_b || b_hits_a
 }
 
+#[inline]
+pub fn definitely_separated(center_a: (f32, f32), size_a: (f32, f32), center_b: (f32, f32), size_b: (f32, f32)) -> bool {
+    let max_dx = (size_a.0 + size_b.0) * 0.5;
+    let max_dy = (size_a.1 + size_b.1) * 0.5;
+    (center_a.0 - center_b.0).abs() > max_dx || (center_a.1 - center_b.1).abs() > max_dy
+}
+
 // ── raycast ──────────────────────────────────────────────────
 
 /// Lança um raio a partir de `origin` na direção `dir` (normalizado)

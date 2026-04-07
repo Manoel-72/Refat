@@ -313,6 +313,14 @@ fn handle_entity_collisions(
         if !collision_system::layers_interact(&my_col, other) {
             continue;
         }
+        if collision_system::definitely_separated(
+            (my_col.center_x, my_col.center_y),
+            (my_col.width, my_col.height),
+            (other.center_x, other.center_y),
+            (other.width, other.height),
+        ) {
+            continue;
+        }
 
         let other_rect = (
             other.center_x - other.width * 0.5,
@@ -432,6 +440,12 @@ fn collect_collision_entries(
     for other in colliders {
         if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
         if !collision_system::layers_interact(&my_col, other) { continue; }
+        if collision_system::definitely_separated(
+            (my_col.center_x, my_col.center_y),
+            (my_col.width, my_col.height),
+            (other.center_x, other.center_y),
+            (other.width, other.height),
+        ) { continue; }
         let other_rect = (other.center_x - other.width * 0.5, other.center_y - other.height * 0.5, other.width, other.height);
         if !collision_system::aabb_mtv(my_rect, other_rect).is_zero() {
             entries.push(CollisionEntry {
@@ -493,10 +507,10 @@ pub fn apply_audio_autoplay(
 
                 if let Some(audio_path) = audio_system::resolve_audio_path(project_root, &audio.file_path) {
                     if let Err(error) = audio_runtime.play_once(&key, &audio_path, audio.looped, audio.volume) {
-                        println!("Audio error: {}", error);
+                        eprintln!("Audio error: {}", error);
                     }
                 } else {
-                    println!("Audio error: file not found {}", audio.file_path);
+                    eprintln!("Audio error: file not found {}", audio.file_path);
                 }
             }
         }

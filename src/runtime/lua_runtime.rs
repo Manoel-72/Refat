@@ -28,6 +28,7 @@
 use std::collections::HashSet;
 
 use mlua::{Function, Lua, Table, Value as LuaValue, Variadic};
+use std::{collections::HashMap, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
 
 use crate::{
     core::{component::Component, entity::Entity},
@@ -39,6 +40,23 @@ use crate::{
 };
 
 // ── contexto que o script pode modificar ─────────────────────
+
+fn should_emit_runtime_log(key: &str, min_interval: Duration) -> bool {
+    static LOG_TIMES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    let now = Instant::now();
+    let store = LOG_TIMES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(_) => return true,
+    };
+    match guard.get(key) {
+        Some(last) if now.duration_since(*last) < min_interval => false,
+        _ => {
+            guard.insert(key.to_string(), now);
+            true
+        }
+    }
+}
 
 /// Resultado de executar um script Lua num frame.
 #[derive(Debug, Default)]
@@ -564,21 +582,30 @@ pub fn run_lua_script_with_vm(
         let log_prefix = format_lua_context(entity, scene_label, script_path);
         let info_prefix = format!("{}[stage=log]", log_prefix);
         let log_fn = lua.create_function(move |_, msg: String| {
-            println!("{} {}", info_prefix, msg);
+            let key = format!("{}::{}", info_prefix, msg);
+            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
+                println!("{} {}", info_prefix, msg);
+            }
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("log", log_fn).ok();
 
         let warn_prefix = format!("{}[stage=log][level=warn]", log_prefix);
         let warn_fn = lua.create_function(move |_, msg: String| {
-            eprintln!("{} {}", warn_prefix, msg);
+            let key = format!("{}::{}", warn_prefix, msg);
+            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
+                eprintln!("{} {}", warn_prefix, msg);
+            }
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("warn", warn_fn).ok();
 
         let error_prefix = format!("{}[stage=log][level=error]", log_prefix);
         let error_fn = lua.create_function(move |_, msg: String| {
-            eprintln!("{} {}", error_prefix, msg);
+            let key = format!("{}::{}", error_prefix, msg);
+            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
+                eprintln!("{} {}", error_prefix, msg);
+            }
             Ok(())
         }).map_err(|e| e.to_string())?;
         game_tbl.set("error", error_fn).ok();
@@ -1010,7 +1037,10 @@ pub fn run_lua_script_with_vm(
                 .map(lua_value_to_log_string)
                 .collect::<Vec<_>>()
                 .join("	");
-            println!("{} {}", print_prefix, joined);
+            let key = format!("{}::{}", print_prefix, joined);
+            if should_emit_runtime_log(&key, Duration::from_millis(250)) {
+                println!("{} {}", print_prefix, joined);
+            }
             Ok(())
         }).map_err(|e| e.to_string())?;
         lua.globals().set("print", print_fn).map_err(|e| e.to_string())?;

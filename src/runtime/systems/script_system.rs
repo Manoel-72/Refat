@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::Path};
+use std::{collections::{HashMap, HashSet}, path::Path, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
 
 use mlua;
 
@@ -28,6 +28,23 @@ fn lua_stage_log(
         kind,
         message,
     );
+}
+
+fn should_emit_log(key: &str, min_interval: Duration) -> bool {
+    static LOG_TIMES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    let now = Instant::now();
+    let store = LOG_TIMES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(_) => return true,
+    };
+    match guard.get(key) {
+        Some(last) if now.duration_since(*last) < min_interval => false,
+        _ => {
+            guard.insert(key.to_string(), now);
+            true
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -264,7 +281,10 @@ fn execute_event_instruction(
     match instruction {
         ScriptEventInstruction::Print(text) => {
             let stage = if is_start { "on_start" } else { "on_update" };
-            println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
+            let key = format!("{}::{}::{}::{}", stage, entity_name, script_path, text);
+            if is_start || should_emit_log(&key, Duration::from_millis(250)) {
+                println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
+            }
         }
         ScriptEventInstruction::MoveX(value) => {
             result.move_x += value;

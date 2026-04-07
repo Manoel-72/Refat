@@ -110,6 +110,33 @@ pub struct RuntimeGameState {
     pub loading_label: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct RuntimePerfStats {
+    pub scripts_ms: f32,
+    pub collisions_ms: f32,
+    pub hud_ms: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeDebugSnapshot {
+    pub hud_summary: String,
+    pub controls_hint: String,
+    pub overlay_left: String,
+    pub overlay_right: String,
+    pub perf_summary: String,
+}
+
+impl Default for RuntimeDebugSnapshot {
+    fn default() -> Self {
+        Self {
+            hud_summary: "▶ Runtime Preview | Status: Edição".to_string(),
+            controls_hint: "WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state".to_string(),
+            overlay_left: "Entidades: 0  •  Scripts: 0  •  Delta: 0.000 ms".to_string(),
+            overlay_right: "HUD/UI  •  Cena: -  •  Score: 0  •  Flow: Editing".to_string(),
+            perf_summary: "Perf(ms) — scripts: 0.00 • colisão: 0.00 • HUD: 0.00".to_string(),
+        }
+    }
+}
 
 pub struct RuntimeState {
     pub active_scene: Option<Scene>,
@@ -157,6 +184,10 @@ pub struct RuntimeState {
     pub collision_enter_contact_ids: HashMap<String, Vec<String>>,
     pub collision_stay_contact_ids: HashMap<String, Vec<String>>,
     pub collision_exit_contact_ids: HashMap<String, Vec<String>>,
+    pub perf_stats: RuntimePerfStats,
+    pub debug_snapshot: RuntimeDebugSnapshot,
+    pub debug_text_accumulator: f32,
+    pub debug_detail_accumulator: f32,
 }
 
 impl RuntimeState {
@@ -194,6 +225,10 @@ impl RuntimeState {
             collision_enter_contact_ids: HashMap::new(),
             collision_stay_contact_ids: HashMap::new(),
             collision_exit_contact_ids: HashMap::new(),
+            perf_stats: RuntimePerfStats::default(),
+            debug_snapshot: RuntimeDebugSnapshot::default(),
+            debug_text_accumulator: 0.0,
+            debug_detail_accumulator: 0.0,
         }
     }
 
@@ -349,6 +384,10 @@ impl RuntimeState {
         self.lua_vms.clear();
         self.clear_lua_runtime_events();
         self.clear_collision_tracking();
+        self.perf_stats = RuntimePerfStats::default();
+        self.debug_snapshot = RuntimeDebugSnapshot::default();
+        self.debug_text_accumulator = 0.0;
+        self.debug_detail_accumulator = 0.0;
     }
 
     /// Inicia uma nova sessão de jogo limpando apenas estados temporários.
@@ -582,6 +621,56 @@ impl RuntimeState {
         true
     }
 
+
+    pub fn update_debug_snapshot(&mut self, scene_name: &str, entity_count: usize, script_count: usize) {
+        self.debug_text_accumulator += self.delta_time;
+        self.debug_detail_accumulator += self.delta_time;
+
+        if self.debug_text_accumulator >= 0.12 || self.frame_count <= 1 {
+            self.debug_snapshot.hud_summary = format!(
+                "▶ Runtime Preview | 📌 {} | ⏱ {:.2}s | FPS ~ {:.0} | Status: {} | Flow: {:?} | Etapa: {:?}",
+                scene_name,
+                self.elapsed_time,
+                self.estimated_fps(),
+                match self.game_state.flow {
+                    RuntimeGameFlow::Playing => "Executando",
+                    RuntimeGameFlow::Paused => "Pausado",
+                    RuntimeGameFlow::Editing => "Edição",
+                    RuntimeGameFlow::GameOver => "Game Over",
+                    RuntimeGameFlow::Loading => "Loading",
+                },
+                self.game_state.flow,
+                self.last_stage,
+            );
+            self.debug_snapshot.controls_hint =
+                "WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state"
+                    .to_string();
+            self.debug_text_accumulator = 0.0;
+        }
+
+        if self.debug_detail_accumulator >= 0.20 || self.frame_count <= 1 {
+            self.debug_snapshot.overlay_left = format!(
+                "Entidades: {}  •  Scripts: {}  •  Delta: {:.3} ms",
+                entity_count,
+                script_count,
+                self.delta_time * 1000.0,
+            );
+            self.debug_snapshot.overlay_right = format!(
+                "HUD/UI  •  Cena: {}  •  Score: {}  •  Flow: {:?}",
+                scene_name,
+                self.game_state.score,
+                self.game_state.flow,
+            );
+            self.debug_snapshot.perf_summary = format!(
+                "Perf(ms) — scripts: {:.2} • colisão: {:.2} • HUD: {:.2}",
+                self.perf_stats.scripts_ms,
+                self.perf_stats.collisions_ms,
+                self.perf_stats.hud_ms,
+            );
+            self.debug_detail_accumulator = 0.0;
+        }
+    }
+
     pub fn estimated_fps(&self) -> f32 {
         if self.delta_time <= f32::EPSILON {
             0.0
@@ -683,6 +772,10 @@ impl RuntimeState {
         self.lua_vms.clear();
         self.clear_lua_runtime_events();
         self.clear_collision_tracking();
+        self.perf_stats = RuntimePerfStats::default();
+        self.debug_snapshot = RuntimeDebugSnapshot::default();
+        self.debug_text_accumulator = 0.0;
+        self.debug_detail_accumulator = 0.0;
     }
 
     fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
@@ -737,6 +830,7 @@ impl RuntimeState {
             self.collision_contacts.clear();
             self.collision_contact_ids.clear();
             let scene_label = Some(scene.name.as_str());
+            let scripts_start = Instant::now();
             runtime_command = systems::update_entities_runtime(
                 &mut scene.entities,
                 dt,
@@ -759,6 +853,8 @@ impl RuntimeState {
                 &incoming_lua_events,
                 &mut self.pending_runtime_events,
             );
+            self.perf_stats.scripts_ms = scripts_start.elapsed().as_secs_f32() * 1000.0;
+            self.perf_stats.collisions_ms = self.perf_stats.scripts_ms;
 
             self.last_stage = RuntimeFrameStage::UpdateCamera;
             if let Some((x, y)) = camera_follow_target {
