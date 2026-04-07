@@ -1364,6 +1364,98 @@ pub fn run_lua_script_with_vm(
         }
     }
 
+    // ── coleta session._cmds ──────────────────────────────────
+    if let Ok(session_tbl) = lua.globals().get::<Table>("session") {
+        if let Ok(cmds) = session_tbl.get::<Table>("_cmds") {
+            if let Ok(LuaValue::Boolean(true)) = cmds.get::<LuaValue>("clear") {
+                result.session_ops.push(SessionOp::Clear);
+            }
+            for pair in cmds.clone().pairs::<String, LuaValue>() {
+                let Ok((raw_key, val)) = pair else { continue };
+                if raw_key == "clear" { continue }
+                if let Some(key) = raw_key.strip_prefix("rm:") {
+                    result.session_ops.push(SessionOp::Remove(key.to_string()));
+                } else if let Some(key) = raw_key.strip_prefix("b:") {
+                    if let LuaValue::Boolean(b) = val {
+                        result.session_ops.push(SessionOp::Set(key.to_string(), SaveValue::Bool(b)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("i:") {
+                    if let LuaValue::Integer(i) = val {
+                        result.session_ops.push(SessionOp::Set(key.to_string(), SaveValue::Int(i)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("f:") {
+                    if let LuaValue::Number(f) = val {
+                        result.session_ops.push(SessionOp::Set(key.to_string(), SaveValue::Float(f)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("s:") {
+                    if let LuaValue::String(s) = val {
+                        result.session_ops.push(SessionOp::Set(key.to_string(), SaveValue::Text(s.to_string_lossy().to_string())));
+                    }
+                }
+            }
+        }
+    }
+
+    // ── coleta state._cmds ────────────────────────────────────
+    if let Ok(state_tbl) = lua.globals().get::<Table>("state") {
+        if let Ok(cmds) = state_tbl.get::<Table>("_cmds") {
+            if let Ok(LuaValue::Boolean(true)) = cmds.get::<LuaValue>("clear") {
+                result.state_ops.push(StateOp::Clear);
+            }
+            for pair in cmds.clone().pairs::<String, LuaValue>() {
+                let Ok((raw_key, val)) = pair else { continue };
+                if raw_key == "clear" { continue }
+                if let Some(key) = raw_key.strip_prefix("rm:") {
+                    result.state_ops.push(StateOp::Remove(key.to_string()));
+                } else if let Some(key) = raw_key.strip_prefix("b:") {
+                    if let LuaValue::Boolean(b) = val {
+                        result.state_ops.push(StateOp::Set(key.to_string(), SaveValue::Bool(b)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("i:") {
+                    if let LuaValue::Integer(i) = val {
+                        result.state_ops.push(StateOp::Set(key.to_string(), SaveValue::Int(i)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("f:") {
+                    if let LuaValue::Number(f) = val {
+                        result.state_ops.push(StateOp::Set(key.to_string(), SaveValue::Float(f)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("s:") {
+                    if let LuaValue::String(s) = val {
+                        result.state_ops.push(StateOp::Set(key.to_string(), SaveValue::Text(s.to_string_lossy().to_string())));
+                    }
+                }
+            }
+        }
+    }
+
+    // ── coleta save._cmds ─────────────────────────────────────
+    if let Ok(save_tbl) = lua.globals().get::<Table>("save") {
+        if let Ok(cmds) = save_tbl.get::<Table>("_cmds") {
+            for pair in cmds.clone().pairs::<String, LuaValue>() {
+                let Ok((raw_key, val)) = pair else { continue };
+                if let Some(key) = raw_key.strip_prefix("rm:") {
+                    result.save_ops.push(SaveOp::Remove(key.to_string()));
+                } else if let Some(key) = raw_key.strip_prefix("b:") {
+                    if let LuaValue::Boolean(b) = val {
+                        result.save_ops.push(SaveOp::Set(key.to_string(), SaveValue::Bool(b)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("i:") {
+                    if let LuaValue::Integer(i) = val {
+                        result.save_ops.push(SaveOp::Set(key.to_string(), SaveValue::Int(i)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("f:") {
+                    if let LuaValue::Number(f) = val {
+                        result.save_ops.push(SaveOp::Set(key.to_string(), SaveValue::Float(f)));
+                    }
+                } else if let Some(key) = raw_key.strip_prefix("s:") {
+                    if let LuaValue::String(s) = val {
+                        result.save_ops.push(SaveOp::Set(key.to_string(), SaveValue::Text(s.to_string_lossy().to_string())));
+                    }
+                }
+            }
+        }
+    }
+
     Ok(result)
 }
 
