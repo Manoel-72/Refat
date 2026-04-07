@@ -25,7 +25,7 @@
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
 // ============================================================
 
-use std::collections::{HashMap, HashSet};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}};
 
 use mlua::{Function, Lua, Table, Value as LuaValue, Variadic};
 
@@ -39,6 +39,19 @@ use crate::{
 };
 
 // ── contexto que o script pode modificar ─────────────────────
+
+thread_local! {
+    static DIRECT_LUA_VM_CACHE: RefCell<HashMap<String, Lua>> = RefCell::new(HashMap::new());
+}
+
+fn build_direct_vm_cache_key(lua_source: &str, entity: &Entity, script_path: Option<&str>) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    lua_source.hash(&mut hasher);
+    entity.id.hash(&mut hasher);
+    script_path.unwrap_or("<script_lua>").hash(&mut hasher);
+    format!("{}::{}", entity.id, hasher.finish())
+}
+
 
 /// Resultado de executar um script Lua num frame.
 #[derive(Debug, Default)]
@@ -131,35 +144,39 @@ pub fn run_lua_script(
     scene_label: Option<&str>,
     script_path: Option<&str>,
 ) -> Result<LuaScriptResult, String> {
-    let lua = Lua::new();
-    run_lua_script_with_vm(
-        &lua,
-        lua_source,
-        entity,
-        input,
-        save_data,
-        session_data,
-        script_data,
-        delta_time,
-        elapsed_time,
-        started,
-        collision_entries,
-        collision_names,
-        collision_ids,
-        previous_collision_names,
-        previous_collision_ids,
-        collision_enter_names,
-        collision_enter_ids,
-        collision_stay_names,
-        collision_stay_ids,
-        collision_exit_names,
-        collision_exit_ids,
-        &[],
-        &HashMap::new(),
-        current_runtime_events,
-        scene_label,
-        script_path,
-    )
+    let cache_key = build_direct_vm_cache_key(lua_source, entity, script_path);
+    DIRECT_LUA_VM_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let lua = cache.entry(cache_key).or_insert_with(Lua::new);
+        run_lua_script_with_vm(
+            lua,
+            lua_source,
+            entity,
+            input,
+            save_data,
+            session_data,
+            script_data,
+            delta_time,
+            elapsed_time,
+            started,
+            collision_entries,
+            collision_names,
+            collision_ids,
+            previous_collision_names,
+            previous_collision_ids,
+            collision_enter_names,
+            collision_enter_ids,
+            collision_stay_names,
+            collision_stay_ids,
+            collision_exit_names,
+            collision_exit_ids,
+            &[],
+            &HashMap::new(),
+            current_runtime_events,
+            scene_label,
+            script_path,
+        )
+    })
 }
 
 /// Versão interna que recebe uma VM Lua já existente (reutilizada do cache).
@@ -317,7 +334,12 @@ pub fn run_lua_script_with_vm(
                     due_callbacks.push((repeating, interval, callback));
                 }
                 if repeating {
-                    timer.set("remaining", (remaining + interval).max(0.0)).map_err(|e| e.to_string())?;
+                    let next_remaining = if interval <= f32::EPSILON {
+                        0.0
+                    } else {
+                        interval - ((-remaining) % interval)
+                    };
+                    timer.set("remaining", next_remaining).map_err(|e| e.to_string())?;
                 } else {
                     to_remove.push(timer_id);
                 }
@@ -985,30 +1007,55 @@ pub fn run_lua_script_with_vm(
 
         let raycast_fn = lua.create_function(move |lua_ctx, (ox, oy, dx, dy, max_dist): (f32,f32,f32,f32,f32)| {
             let t = lua_ctx.create_table()?;
-            // Raycast AABB manual sobre o snapshot de dados seguros
             let len = (dx * dx + dy * dy).sqrt();
-            if len < f32::EPSILON {
+            if len < f32::EPSILON || max_dist <= 0.0 {
                 t.set("hit", false)?;
                 return Ok(t);
             }
-            let (ndx, ndy) = (dx / len, dy / len);
-            let min_dim = ray_snap.iter().map(|c| c.2.min(c.3)).fold(f32::MAX, f32::min);
-            let step = (min_dim * 0.5).max(2.0).min(16.0);
-            let mut best: Option<(f32, f32, f32, String, String)> = None; // (hit_x, hit_y, dist, name, id)
-            let mut d = 0.0_f32;
-            while d <= max_dist {
-                let px = ox + ndx * d;
-                let py = oy + ndy * d;
-                for (cx, cy, w, h, _layer, name, id) in &ray_snap {
-                    if (px - cx).abs() <= w * 0.5 && (py - cy).abs() <= h * 0.5 {
-                        if best.is_none() {
-                            best = Some((px, py, d, name.clone(), id.clone()));
-                        }
-                    }
+
+            let inv_dx = if dx.abs() > f32::EPSILON { Some(1.0 / dx) } else { None };
+            let inv_dy = if dy.abs() > f32::EPSILON { Some(1.0 / dy) } else { None };
+            let mut best: Option<(f32, f32, f32, String, String)> = None;
+
+            for (cx, cy, w, h, _layer, name, id) in &ray_snap {
+                let min_x = cx - w * 0.5;
+                let max_x = cx + w * 0.5;
+                let min_y = cy - h * 0.5;
+                let max_y = cy + h * 0.5;
+
+                let (tx1, tx2) = match inv_dx {
+                    Some(inv) => ((min_x - ox) * inv, (max_x - ox) * inv),
+                    None if ox >= min_x && ox <= max_x => (f32::NEG_INFINITY, f32::INFINITY),
+                    None => continue,
+                };
+                let (ty1, ty2) = match inv_dy {
+                    Some(inv) => ((min_y - oy) * inv, (max_y - oy) * inv),
+                    None if oy >= min_y && oy <= max_y => (f32::NEG_INFINITY, f32::INFINITY),
+                    None => continue,
+                };
+
+                let tmin = tx1.min(tx2).max(ty1.min(ty2)).max(0.0);
+                let tmax = tx1.max(tx2).min(ty1.max(ty2));
+                if tmax < tmin {
+                    continue;
                 }
-                if best.is_some() { break; }
-                d += step;
+
+                let dist = tmin * len;
+                if dist > max_dist {
+                    continue;
+                }
+
+                let px = ox + dx * tmin;
+                let py = oy + dy * tmin;
+                let replace = match &best {
+                    Some((_, _, best_dist, _, _)) => dist < *best_dist,
+                    None => true,
+                };
+                if replace {
+                    best = Some((px, py, dist, name.clone(), id.clone()));
+                }
             }
+
             match best {
                 None => { t.set("hit", false)?; }
                 Some((hx, hy, hd, hname, hid)) => {
@@ -1303,7 +1350,7 @@ pub fn run_lua_script_with_vm(
             if let Ok(value) = cmds.get::<f32>("heal") {
                 result.heal = Some(value);
             }
-            if let Ok(value) = cmds.get::<bool>("flip_x") {
+            if let Ok(LuaValue::Boolean(value)) = cmds.get::<LuaValue>("flip_x") {
                 result.set_flip_x = Some(value);
             }
             if let (Ok(r), Ok(g), Ok(b), Ok(a)) = (
