@@ -132,6 +132,7 @@ pub fn run_lua_scripts_for_entity(
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
     pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
     pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
+    emitters: &mut Vec<crate::runtime::state::RuntimeParticleEmitter>,
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
@@ -238,23 +239,45 @@ pub fn run_lua_scripts_for_entity(
                 let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
-                for (name, x, y) in &result.spawn_entities {
+                for spawn in &result.spawn_entities {
                     pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
-                        kind: crate::runtime::state::PendingSpawnKind::Template(name.clone()),
-                        x: *x,
-                        y: *y,
+                        kind: crate::runtime::state::PendingSpawnKind::Template(spawn.name.clone()),
+                        x: spawn.x,
+                        y: spawn.y,
+                        velocity: spawn.init.velocity,
+                        tags: spawn.init.tags.clone(),
+                        hp: spawn.init.hp,
+                        anim: spawn.init.anim.clone(),
                     });
                 }
-                for (path, x, y) in &result.spawn_prefabs {
+                for spawn in &result.spawn_prefabs {
                     pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
-                        kind: crate::runtime::state::PendingSpawnKind::PrefabPath(path.clone()),
-                        x: *x,
-                        y: *y,
+                        kind: crate::runtime::state::PendingSpawnKind::PrefabPath(spawn.path.clone()),
+                        x: spawn.x,
+                        y: spawn.y,
+                        velocity: spawn.init.velocity,
+                        tags: spawn.init.tags.clone(),
+                        hp: spawn.init.hp,
+                        anim: spawn.init.anim.clone(),
                     });
                 }
                 for (x, y, vx, vy, life, r, g, b, scale) in &result.spawn_particles {
                     pending_particles.push(crate::runtime::state::RuntimeParticle {
                         x: *x, y: *y, vx: *vx, vy: *vy, life: *life, max_life: *life, color: [*r, *g, *b, 1.0], scale: *scale,
+                    });
+                }
+                for emitter in &result.spawn_emitters {
+                    emitters.push(crate::runtime::state::RuntimeParticleEmitter {
+                        x: emitter.x,
+                        y: emitter.y,
+                        rate: emitter.rate,
+                        particle_life: emitter.particle_life,
+                        speed_min: emitter.speed_min,
+                        speed_max: emitter.speed_max,
+                        color: [emitter.color.0, emitter.color.1, emitter.color.2, 1.0],
+                        scale: emitter.scale,
+                        duration: emitter.duration,
+                        accumulator: 0.0,
                     });
                 }
                 if let Some((intensity, duration)) = result.camera_shake {

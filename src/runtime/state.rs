@@ -50,6 +50,24 @@ pub struct PendingSpawnRequest {
     pub kind: PendingSpawnKind,
     pub x: f32,
     pub y: f32,
+    pub velocity: Option<(f32, f32)>,
+    pub tags: Vec<String>,
+    pub hp: Option<f32>,
+    pub anim: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeParticleEmitter {
+    pub x: f32,
+    pub y: f32,
+    pub rate: f32,
+    pub particle_life: f32,
+    pub speed_min: f32,
+    pub speed_max: f32,
+    pub color: [f32; 4],
+    pub scale: f32,
+    pub duration: f32,
+    pub accumulator: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +166,7 @@ pub struct RuntimeState {
     pub last_spawned_entity_id: Option<String>,
     pub particles: Vec<RuntimeParticle>,
     pub pending_particles: Vec<RuntimeParticle>,
+    pub emitters: Vec<RuntimeParticleEmitter>,
     pub camera_shake_time: f32,
     pub camera_shake_intensity: f32,
     pub camera_zoom_override: Option<f32>,
@@ -203,6 +222,7 @@ impl RuntimeState {
             last_spawned_entity_id: None,
             particles: Vec::new(),
             pending_particles: Vec::new(),
+            emitters: Vec::new(),
             camera_shake_time: 0.0,
             camera_shake_intensity: 0.0,
             camera_zoom_override: None,
@@ -591,6 +611,10 @@ impl RuntimeState {
             kind: PendingSpawnKind::Template(template.into()),
             x,
             y,
+            velocity: None,
+            tags: Vec::new(),
+            hp: None,
+            anim: None,
         });
     }
 
@@ -599,6 +623,10 @@ impl RuntimeState {
             kind: PendingSpawnKind::PrefabPath(prefab_path.into()),
             x,
             y,
+            velocity: None,
+            tags: Vec::new(),
+            hp: None,
+            anim: None,
         });
     }
 
@@ -721,6 +749,7 @@ impl RuntimeState {
         self.last_spawned_entity_id = None;
         self.particles.clear();
         self.pending_particles.clear();
+        self.emitters.clear();
         self.camera_shake_time = 0.0;
         self.camera_shake_intensity = 0.0;
         self.camera_zoom_override = None;
@@ -742,6 +771,7 @@ impl RuntimeState {
         self.elapsed_time += dt;
         self.frame_count += 1;
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
+        self.update_emitters(dt);
         self.update_particles(dt);
         if self.camera_shake_time > 0.0 {
             self.camera_shake_time = (self.camera_shake_time - dt).max(0.0);
@@ -812,6 +842,7 @@ impl RuntimeState {
                 &mut self.pending_destroys,
                 &mut self.pending_spawns,
                 &mut self.pending_particles,
+                &mut self.emitters,
                 &incoming_lua_events,
                 &mut self.pending_runtime_events,
                 &mut frame_camera_shake,
@@ -890,12 +921,13 @@ impl RuntimeState {
         }
 
         for request in pending_spawns {
-            let entity = match request.kind {
-                PendingSpawnKind::Template(template) => Self::build_spawn_entity(&template, request.x, request.y),
+            let mut entity = match &request.kind {
+                PendingSpawnKind::Template(template) => Self::build_spawn_entity(template, request.x, request.y),
                 PendingSpawnKind::PrefabPath(prefab_path) => self
-                    .build_spawned_prefab_entity(project_root, &prefab_path, request.x, request.y)
-                    .unwrap_or_else(|| Self::build_spawn_entity(&prefab_path, request.x, request.y)),
+                    .build_spawned_prefab_entity(project_root, prefab_path, request.x, request.y)
+                    .unwrap_or_else(|| Self::build_spawn_entity(prefab_path, request.x, request.y)),
             };
+            Self::apply_spawn_init_to_entity(&mut entity, request.velocity, &request.tags, request.hp, request.anim.as_deref());
             self.last_spawned_entity_id = Some(entity.id.clone());
             scene.add_entity(entity);
         }
@@ -1022,6 +1054,67 @@ impl RuntimeState {
             transform.y = y;
         }
         Some(entity)
+    }
+
+    fn apply_spawn_init_to_entity(entity: &mut Entity, velocity: Option<(f32, f32)>, tags: &[String], hp: Option<f32>, anim: Option<&str>) {
+        if let Some((vx, vy)) = velocity {
+            if let Some(existing) = entity.velocity_mut() {
+                existing.x = vx;
+                existing.y = vy;
+            } else {
+                entity.add_component(Component::Velocity(Velocity { x: vx, y: vy }));
+            }
+        }
+        for tag in tags {
+            let _ = entity.add_tag(tag.clone());
+        }
+        if let Some(hp) = hp {
+            entity.set_hp(hp);
+        }
+        if let Some(anim_name) = anim {
+            for component in &mut entity.components {
+                if let Component::Animator(animator) = component {
+                    animator.current = anim_name.to_string();
+                    animator.prev_clip.clear();
+                    animator.timer = 0.0;
+                    break;
+                }
+            }
+        }
+    }
+
+    fn update_emitters(&mut self, dt: f32) {
+        if self.emitters.is_empty() {
+            return;
+        }
+        let mut spawned = Vec::new();
+        for emitter in &mut self.emitters {
+            emitter.duration = (emitter.duration - dt).max(0.0);
+            emitter.accumulator += emitter.rate.max(0.0) * dt;
+            let count = emitter.accumulator.floor() as i32;
+            if count > 0 {
+                emitter.accumulator -= count as f32;
+            }
+            let speed_mid = (emitter.speed_min + emitter.speed_max) * 0.5;
+            for idx in 0..count.max(0) {
+                let dir = if idx % 2 == 0 { -1.0 } else { 1.0 };
+                let spread = 0.35 + (idx as f32 * 0.11).sin().abs() * 0.65;
+                spawned.push(RuntimeParticle {
+                    x: emitter.x,
+                    y: emitter.y,
+                    vx: dir * speed_mid * spread,
+                    vy: -emitter.speed_max.max(1.0) * (0.6 + spread * 0.4),
+                    life: emitter.particle_life,
+                    max_life: emitter.particle_life,
+                    color: emitter.color,
+                    scale: emitter.scale,
+                });
+            }
+        }
+        self.emitters.retain(|emitter| emitter.duration > 0.0 && emitter.rate > 0.0);
+        if !spawned.is_empty() {
+            self.particles.extend(spawned);
+        }
     }
 
     fn update_particles(&mut self, dt: f32) {

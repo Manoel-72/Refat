@@ -19,6 +19,9 @@ pub fn capture_runtime_input(ctx: &egui::Context, previous: &RuntimeInput) -> Ru
         keyboard.set_key_down(KeyCode::A,     i.key_down(egui::Key::A));
         keyboard.set_key_down(KeyCode::S,     i.key_down(egui::Key::S));
         keyboard.set_key_down(KeyCode::D,     i.key_down(egui::Key::D));
+        keyboard.set_key_down(KeyCode::Q,     i.key_down(egui::Key::Q));
+        keyboard.set_key_down(KeyCode::E,     i.key_down(egui::Key::E));
+        keyboard.set_key_down(KeyCode::F,     i.key_down(egui::Key::F));
         keyboard.set_key_down(KeyCode::Up,    i.key_down(egui::Key::ArrowUp));
         keyboard.set_key_down(KeyCode::Down,  i.key_down(egui::Key::ArrowDown));
         keyboard.set_key_down(KeyCode::Left,  i.key_down(egui::Key::ArrowLeft));
@@ -26,6 +29,18 @@ pub fn capture_runtime_input(ctx: &egui::Context, previous: &RuntimeInput) -> Ru
         keyboard.set_key_down(KeyCode::Space, i.key_down(egui::Key::Space));
         keyboard.set_key_down(KeyCode::Enter, i.key_down(egui::Key::Enter));
         keyboard.set_key_down(KeyCode::Escape,i.key_down(egui::Key::Escape));
+        keyboard.set_key_down(KeyCode::Shift, i.modifiers.shift);
+        keyboard.set_key_down(KeyCode::Ctrl,  i.modifiers.ctrl || i.modifiers.command);
+        keyboard.set_key_down(KeyCode::Num0,  i.key_down(egui::Key::Num0));
+        keyboard.set_key_down(KeyCode::Num1,  i.key_down(egui::Key::Num1));
+        keyboard.set_key_down(KeyCode::Num2,  i.key_down(egui::Key::Num2));
+        keyboard.set_key_down(KeyCode::Num3,  i.key_down(egui::Key::Num3));
+        keyboard.set_key_down(KeyCode::Num4,  i.key_down(egui::Key::Num4));
+        keyboard.set_key_down(KeyCode::Num5,  i.key_down(egui::Key::Num5));
+        keyboard.set_key_down(KeyCode::Num6,  i.key_down(egui::Key::Num6));
+        keyboard.set_key_down(KeyCode::Num7,  i.key_down(egui::Key::Num7));
+        keyboard.set_key_down(KeyCode::Num8,  i.key_down(egui::Key::Num8));
+        keyboard.set_key_down(KeyCode::Num9,  i.key_down(egui::Key::Num9));
 
         RuntimeInput {
             keyboard,

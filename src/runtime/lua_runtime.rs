@@ -54,6 +54,43 @@ fn build_direct_vm_cache_key(lua_source: &str, entity: &Entity, script_path: Opt
 
 
 /// Resultado de executar um script Lua num frame.
+#[derive(Debug, Clone, Default)]
+pub struct SpawnInit {
+    pub velocity: Option<(f32, f32)>,
+    pub tags: Vec<String>,
+    pub hp: Option<f32>,
+    pub anim: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingLuaSpawnEntity {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub init: SpawnInit,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingLuaSpawnPrefab {
+    pub path: String,
+    pub x: f32,
+    pub y: f32,
+    pub init: SpawnInit,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingLuaEmitter {
+    pub x: f32,
+    pub y: f32,
+    pub rate: f32,
+    pub particle_life: f32,
+    pub speed_min: f32,
+    pub speed_max: f32,
+    pub color: (f32, f32, f32),
+    pub scale: f32,
+    pub duration: f32,
+}
+
 #[derive(Debug, Default)]
 pub struct LuaScriptResult {
     /// Posição alvo (se o script chamou entity.set_position).
@@ -70,9 +107,10 @@ pub struct LuaScriptResult {
     pub heal: Option<f32>,
     pub set_flip_x: Option<bool>,
     pub add_tags: Vec<String>,
-    pub spawn_entities: Vec<(String, f32, f32)>,
-    pub spawn_prefabs: Vec<(String, f32, f32)>,
+    pub spawn_entities: Vec<PendingLuaSpawnEntity>,
+    pub spawn_prefabs: Vec<PendingLuaSpawnPrefab>,
     pub spawn_particles: Vec<(f32, f32, f32, f32, f32, f32, f32, f32, f32)>,
+    pub spawn_emitters: Vec<PendingLuaEmitter>,
     pub camera_shake: Option<(f32, f32)>,
     pub camera_zoom: Option<f32>,
     pub change_scene: Option<String>,
@@ -742,28 +780,28 @@ pub fn run_lua_script_with_vm(
 
         {
             let game_tbl_clone = game_tbl.clone();
-            let spawn_entity = lua.create_function(move |_, (name, x, y): (String, f32, f32)| {
+            let spawn_entity = lua.create_function(move |lua_ctx, (name, x, y): (String, f32, f32)| {
                 let cmds: Table = game_tbl_clone.get("_cmds")?;
                 let seq = cmds.get::<i64>("spawn_entity_seq").unwrap_or(0) + 1;
                 cmds.set("spawn_entity_seq", seq)?;
                 cmds.set(format!("spawn_entity_name:{}", seq), name)?;
                 cmds.set(format!("spawn_entity_x:{}", seq), x)?;
                 cmds.set(format!("spawn_entity_y:{}", seq), y)?;
-                Ok(())
+                build_spawn_handle(lua_ctx, &game_tbl_clone, "entity", seq).map_err(mlua::Error::external)
             }).map_err(|e| e.to_string())?;
             game_tbl.set("spawn_entity", spawn_entity).ok();
         }
 
         {
             let game_tbl_clone = game_tbl.clone();
-            let spawn_prefab = lua.create_function(move |_, (path, x, y): (String, f32, f32)| {
+            let spawn_prefab = lua.create_function(move |lua_ctx, (path, x, y): (String, f32, f32)| {
                 let cmds: Table = game_tbl_clone.get("_cmds")?;
                 let seq = cmds.get::<i64>("spawn_prefab_seq").unwrap_or(0) + 1;
                 cmds.set("spawn_prefab_seq", seq)?;
                 cmds.set(format!("spawn_prefab_path:{}", seq), path)?;
                 cmds.set(format!("spawn_prefab_x:{}", seq), x)?;
                 cmds.set(format!("spawn_prefab_y:{}", seq), y)?;
-                Ok(())
+                build_spawn_handle(lua_ctx, &game_tbl_clone, "prefab", seq).map_err(mlua::Error::external)
             }).map_err(|e| e.to_string())?;
             game_tbl.set("spawn_prefab", spawn_prefab).ok();
         }
@@ -788,6 +826,34 @@ pub fn run_lua_script_with_vm(
                 Ok(())
             }).map_err(|e| e.to_string())?;
             game_tbl.set("spawn_particle", spawn_particle).ok();
+        }
+
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let spawn_emitter = lua.create_function(move |_, args: Variadic<LuaValue>| {
+                let mut values = [0.0_f32; 10];
+                let defaults = [0.0_f32, 0.0, 8.0, 0.45, 8.0, 24.0, 0.95, 0.85, 0.25, 1.0];
+                for (i, default) in defaults.iter().enumerate() { values[i] = *default; }
+                for (i, value) in args.iter().take(10).enumerate() {
+                    values[i] = match value {
+                        LuaValue::Integer(v) => *v as f32,
+                        LuaValue::Number(v) => *v as f32,
+                        _ => values[i],
+                    };
+                }
+                let duration = match args.get(10) {
+                    Some(LuaValue::Integer(v)) => *v as f32,
+                    Some(LuaValue::Number(v)) => *v as f32,
+                    _ => 1.0,
+                };
+                let cmds: Table = game_tbl_clone.get("_cmds")?;
+                let seq = cmds.get::<i64>("spawn_emitter_seq").unwrap_or(0) + 1;
+                cmds.set("spawn_emitter_seq", seq)?;
+                for (i, value) in values.iter().enumerate() { cmds.set(format!("spawn_emitter_{}:{}", i, seq), *value)?; }
+                cmds.set(format!("spawn_emitter_duration:{}", seq), duration)?;
+                Ok(seq)
+            }).map_err(|e| e.to_string())?;
+            game_tbl.set("spawn_emitter", spawn_emitter).ok();
         }
         {
             let game_tbl_clone = game_tbl.clone();
@@ -1408,9 +1474,120 @@ pub fn run_lua_script_with_vm(
             if let Ok(zoom) = gcmds.get::<f32>("camera_zoom") {
                 result.camera_zoom = Some(zoom);
             }
+
+            let entity_seq = gcmds.get::<i64>("spawn_entity_seq").unwrap_or(0);
+            for seq in 1..=entity_seq {
+                let Ok(name) = gcmds.get::<String>(format!("spawn_entity_name:{}", seq)) else { continue };
+                let x = gcmds.get::<f32>(format!("spawn_entity_x:{}", seq)).unwrap_or(0.0);
+                let y = gcmds.get::<f32>(format!("spawn_entity_y:{}", seq)).unwrap_or(0.0);
+                let mut init = SpawnInit::default();
+                if let (Ok(vx), Ok(vy)) = (
+                    gcmds.get::<f32>(format!("spawn_init_entity_vx:{}", seq)),
+                    gcmds.get::<f32>(format!("spawn_init_entity_vy:{}", seq)),
+                ) {
+                    init.velocity = Some((vx, vy));
+                }
+                if let Ok(hp) = gcmds.get::<f32>(format!("spawn_init_entity_hp:{}", seq)) {
+                    init.hp = Some(hp);
+                }
+                if let Ok(anim) = gcmds.get::<String>(format!("spawn_init_entity_anim:{}", seq)) {
+                    init.anim = Some(anim);
+                }
+                let tag_seq = gcmds.get::<i64>(format!("spawn_tag_entity_seq:{}", seq)).unwrap_or(0);
+                for tag_index in 1..=tag_seq {
+                    if let Ok(tag) = gcmds.get::<String>(format!("spawn_tag_entity:{}:{}", seq, tag_index)) {
+                        init.tags.push(tag);
+                    }
+                    let _ = gcmds.raw_remove(format!("spawn_tag_entity:{}:{}", seq, tag_index));
+                }
+                let _ = gcmds.raw_remove(format!("spawn_tag_entity_seq:{}", seq));
+                result.spawn_entities.push(PendingLuaSpawnEntity { name, x, y, init });
+                let _ = gcmds.raw_remove(format!("spawn_entity_name:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_entity_x:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_entity_y:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_vx:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_vy:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_hp:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_entity_anim:{}", seq));
+            }
+
+            let prefab_seq = gcmds.get::<i64>("spawn_prefab_seq").unwrap_or(0);
+            for seq in 1..=prefab_seq {
+                let Ok(path) = gcmds.get::<String>(format!("spawn_prefab_path:{}", seq)) else { continue };
+                let x = gcmds.get::<f32>(format!("spawn_prefab_x:{}", seq)).unwrap_or(0.0);
+                let y = gcmds.get::<f32>(format!("spawn_prefab_y:{}", seq)).unwrap_or(0.0);
+                let mut init = SpawnInit::default();
+                if let (Ok(vx), Ok(vy)) = (
+                    gcmds.get::<f32>(format!("spawn_init_prefab_vx:{}", seq)),
+                    gcmds.get::<f32>(format!("spawn_init_prefab_vy:{}", seq)),
+                ) {
+                    init.velocity = Some((vx, vy));
+                }
+                if let Ok(hp) = gcmds.get::<f32>(format!("spawn_init_prefab_hp:{}", seq)) {
+                    init.hp = Some(hp);
+                }
+                if let Ok(anim) = gcmds.get::<String>(format!("spawn_init_prefab_anim:{}", seq)) {
+                    init.anim = Some(anim);
+                }
+                let tag_seq = gcmds.get::<i64>(format!("spawn_tag_prefab_seq:{}", seq)).unwrap_or(0);
+                for tag_index in 1..=tag_seq {
+                    if let Ok(tag) = gcmds.get::<String>(format!("spawn_tag_prefab:{}:{}", seq, tag_index)) {
+                        init.tags.push(tag);
+                    }
+                    let _ = gcmds.raw_remove(format!("spawn_tag_prefab:{}:{}", seq, tag_index));
+                }
+                let _ = gcmds.raw_remove(format!("spawn_tag_prefab_seq:{}", seq));
+                result.spawn_prefabs.push(PendingLuaSpawnPrefab { path, x, y, init });
+                let _ = gcmds.raw_remove(format!("spawn_prefab_path:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_prefab_x:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_prefab_y:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_vx:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_vy:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_hp:{}", seq));
+                let _ = gcmds.raw_remove(format!("spawn_init_prefab_anim:{}", seq));
+            }
+
+            let particle_seq = gcmds.get::<i64>("spawn_particle_seq").unwrap_or(0);
+            for seq in 1..=particle_seq {
+                let mut values = [0.0_f32; 9];
+                for idx in 0..9 {
+                    values[idx] = gcmds.get::<f32>(format!("spawn_particle_{}:{}", idx, seq)).unwrap_or(0.0);
+                    let _ = gcmds.raw_remove(format!("spawn_particle_{}:{}", idx, seq));
+                }
+                result.spawn_particles.push((values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8]));
+            }
+
+            let emitter_seq = gcmds.get::<i64>("spawn_emitter_seq").unwrap_or(0);
+            for seq in 1..=emitter_seq {
+                result.spawn_emitters.push(PendingLuaEmitter {
+                    x: gcmds.get::<f32>(format!("spawn_emitter_0:{}", seq)).unwrap_or(0.0),
+                    y: gcmds.get::<f32>(format!("spawn_emitter_1:{}", seq)).unwrap_or(0.0),
+                    rate: gcmds.get::<f32>(format!("spawn_emitter_2:{}", seq)).unwrap_or(8.0),
+                    particle_life: gcmds.get::<f32>(format!("spawn_emitter_3:{}", seq)).unwrap_or(0.45),
+                    speed_min: gcmds.get::<f32>(format!("spawn_emitter_4:{}", seq)).unwrap_or(8.0),
+                    speed_max: gcmds.get::<f32>(format!("spawn_emitter_5:{}", seq)).unwrap_or(24.0),
+                    color: (
+                        gcmds.get::<f32>(format!("spawn_emitter_6:{}", seq)).unwrap_or(0.95),
+                        gcmds.get::<f32>(format!("spawn_emitter_7:{}", seq)).unwrap_or(0.85),
+                        gcmds.get::<f32>(format!("spawn_emitter_8:{}", seq)).unwrap_or(0.25),
+                    ),
+                    scale: gcmds.get::<f32>(format!("spawn_emitter_9:{}", seq)).unwrap_or(1.0),
+                    duration: gcmds.get::<f32>(format!("spawn_emitter_duration:{}", seq)).unwrap_or(1.0),
+                });
+                for idx in 0..10 { let _ = gcmds.raw_remove(format!("spawn_emitter_{}:{}", idx, seq)); }
+                let _ = gcmds.raw_remove(format!("spawn_emitter_duration:{}", seq));
+            }
+
+            let _ = gcmds.set("spawn_entity_seq", 0);
+            let _ = gcmds.set("spawn_prefab_seq", 0);
+            let _ = gcmds.set("spawn_particle_seq", 0);
+            let _ = gcmds.set("spawn_emitter_seq", 0);
+            let _ = gcmds.raw_remove("change_scene");
+            let _ = gcmds.raw_remove("camera_shake_intensity");
+            let _ = gcmds.raw_remove("camera_shake_duration");
+            let _ = gcmds.raw_remove("camera_zoom");
         }
     }
-
     // ── coleta session._cmds ──────────────────────────────────
     if let Ok(session_tbl) = lua.globals().get::<Table>("session") {
         if let Ok(cmds) = session_tbl.get::<Table>("_cmds") {
@@ -1595,6 +1772,53 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
     }
 }
 
+fn build_spawn_handle(lua: &Lua, game_tbl: &Table, kind: &str, seq: i64) -> Result<Table, String> {
+    let handle = lua.create_table().map_err(|e| e.to_string())?;
+    handle.set("request_id", seq).map_err(|e| e.to_string())?;
+    handle.set("kind", kind).map_err(|e| e.to_string())?;
+
+    let kind_velocity = kind.to_string();
+    let cmds_tbl = game_tbl.clone();
+    let set_velocity = lua.create_function(move |_, (vx, vy): (f32, f32)| {
+        let cmds: Table = cmds_tbl.get("_cmds")?;
+        cmds.set(format!("spawn_init_{}_vx:{}", kind_velocity, seq), vx)?;
+        cmds.set(format!("spawn_init_{}_vy:{}", kind_velocity, seq), vy)?;
+        Ok(())
+    }).map_err(|e| e.to_string())?;
+    handle.set("set_velocity", set_velocity).map_err(|e| e.to_string())?;
+
+    let kind_tags = kind.to_string();
+    let cmds_tbl = game_tbl.clone();
+    let add_tag = lua.create_function(move |_, tag: String| {
+        let cmds: Table = cmds_tbl.get("_cmds")?;
+        let count = cmds.get::<i64>(format!("spawn_tag_{}_seq:{}", kind_tags, seq)).unwrap_or(0) + 1;
+        cmds.set(format!("spawn_tag_{}_seq:{}", kind_tags, seq), count)?;
+        cmds.set(format!("spawn_tag_{}:{}:{}", kind_tags, seq, count), tag)?;
+        Ok(())
+    }).map_err(|e| e.to_string())?;
+    handle.set("add_tag", add_tag).map_err(|e| e.to_string())?;
+
+    let kind_hp = kind.to_string();
+    let cmds_tbl = game_tbl.clone();
+    let set_hp = lua.create_function(move |_, hp: f32| {
+        let cmds: Table = cmds_tbl.get("_cmds")?;
+        cmds.set(format!("spawn_init_{}_hp:{}", kind_hp, seq), hp)?;
+        Ok(())
+    }).map_err(|e| e.to_string())?;
+    handle.set("set_hp", set_hp).map_err(|e| e.to_string())?;
+
+    let kind_anim = kind.to_string();
+    let cmds_tbl = game_tbl.clone();
+    let set_anim = lua.create_function(move |_, anim: String| {
+        let cmds: Table = cmds_tbl.get("_cmds")?;
+        cmds.set(format!("spawn_init_{}_anim:{}", kind_anim, seq), anim)?;
+        Ok(())
+    }).map_err(|e| e.to_string())?;
+    handle.set("set_anim", set_anim).map_err(|e| e.to_string())?;
+
+    Ok(handle)
+}
+
 /// Aplica as operações de save coletadas pelo script.
 pub fn apply_save_ops(save_data: &mut SaveData, ops: &[SaveOp]) {
     for op in ops {
@@ -1621,12 +1845,13 @@ impl InputSnapshot {
 impl From<&RuntimeInput> for InputSnapshot {
     fn from(input: &RuntimeInput) -> Self {
         let all_keys = [
-            ("W",      KeyCode::W),     ("A", KeyCode::A),
-            ("S",      KeyCode::S),     ("D", KeyCode::D),
-            ("Up",     KeyCode::Up),    ("Down",  KeyCode::Down),
-            ("Left",   KeyCode::Left),  ("Right", KeyCode::Right),
-            ("Space",  KeyCode::Space), ("Enter", KeyCode::Enter),
-            ("Escape", KeyCode::Escape),
+            ("W", KeyCode::W), ("A", KeyCode::A), ("S", KeyCode::S), ("D", KeyCode::D),
+            ("Q", KeyCode::Q), ("E", KeyCode::E), ("F", KeyCode::F),
+            ("Up", KeyCode::Up), ("Down", KeyCode::Down), ("Left", KeyCode::Left), ("Right", KeyCode::Right),
+            ("Space", KeyCode::Space), ("Enter", KeyCode::Enter), ("Escape", KeyCode::Escape),
+            ("Shift", KeyCode::Shift), ("Ctrl", KeyCode::Ctrl),
+            ("0", KeyCode::Num0), ("1", KeyCode::Num1), ("2", KeyCode::Num2), ("3", KeyCode::Num3), ("4", KeyCode::Num4),
+            ("5", KeyCode::Num5), ("6", KeyCode::Num6), ("7", KeyCode::Num7), ("8", KeyCode::Num8), ("9", KeyCode::Num9),
         ];
         let mut held    = Vec::new();
         let mut pressed = Vec::new();

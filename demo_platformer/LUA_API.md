@@ -223,11 +223,23 @@ Consulte também `docs/API_CURTA_OFICIAL_V0_9.md` para a versão resumida e ofic
 
 
 ## Adições V0.9.3
-- `game.spawn_entity(name, x, y)`
-- `game.spawn_prefab(path, x, y)`
+- `game.spawn_entity(name, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `add_tag`, `set_hp`, `set_anim`)
+- `game.spawn_prefab(path, x, y)` → retorna handle opcional (`request_id`, `set_velocity`, `add_tag`, `set_hp`, `set_anim`)
 - `game.find_by_tag(tag)`
 - `game.find_one_by_tag(tag)`
 - `game.spawn_particle(x, y, vx, vy, life, r, g, b, scale)`
+- `game.spawn_emitter(x, y, rate, particle_life, speed_min, speed_max, r, g, b, scale, duration)`
 - `entity.add_tag(tag)`
 - `entity.has_tag(tag)`
 - `entity.set_color(r, g, b, a)`
+
+
+## Teclas adicionais suportadas
+
+Além de WASD, setas, Space, Enter e Escape, o snapshot Lua agora expõe:
+
+- `Q`, `E`, `F`
+- `Shift`, `Ctrl`
+- números `0` a `9`
+
+Observação: gamepad ainda não é exposto ao Lua neste runtime embutido.
