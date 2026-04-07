@@ -1,6 +1,6 @@
 {
-  "name": "V0.9.1 Regression Scene",
-  "_comment": "Cena técnica única de validação da V0.9.1. Exercita tempo/API, colisão por ID, eventos e timers.",
+  "name": "V0.9.1 Test - Collision",
+  "_comment": "Teste isolado de collision_enter/stay/exit por ID.",
   "background_color": [
     0.06,
     0.08,
@@ -8,7 +8,7 @@
   ],
   "entities": [
     {
-      "id": "ent-reg-camera",
+      "id": "ent-camera",
       "name": "Camera",
       "visible": true,
       "children": [],
@@ -38,7 +38,7 @@
       "components": [
         {
           "Transform": {
-            "x": -320.0,
+            "x": -300.0,
             "y": -220.0,
             "rotation": 0.0,
             "scale_x": 1.0,
@@ -86,7 +86,18 @@
         },
         {
           "LuaScript": {
-            "file_path": "assets/scripts/validation_collision_id.lua"
+            "file_path": "assets/scripts/validation_collision_only.lua"
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "[COLLISION] aguardando...",
+            "font_size": 10.0,
+            "color_r": 1.0,
+            "color_g": 0.88,
+            "color_b": 0.25,
+            "color_a": 1.0,
+            "screen_space": false
           }
         }
       ]
@@ -189,7 +200,7 @@
       "components": [
         {
           "Transform": {
-            "x": -40.0,
+            "x": -50.0,
             "y": -250.0,
             "rotation": 0.0,
             "scale_x": 1.0,
@@ -227,7 +238,7 @@
       "components": [
         {
           "Transform": {
-            "x": 220.0,
+            "x": 210.0,
             "y": -250.0,
             "rotation": 0.0,
             "scale_x": 1.0,
@@ -258,8 +269,8 @@
       ]
     },
     {
-      "id": "ent-reg-time-hud",
-      "name": "TimeHUD",
+      "id": "ent-collision-hud",
+      "name": "CollisionHUD",
       "visible": true,
       "children": [],
       "components": [
@@ -274,134 +285,7 @@
         },
         {
           "TextLabel": {
-            "text": "[TIME] aguardando...",
-            "font_size": 14.0,
-            "color_r": 0.95,
-            "color_g": 0.95,
-            "color_b": 0.95,
-            "color_a": 1.0,
-            "screen_space": true
-          }
-        },
-        {
-          "LuaScript": {
-            "file_path": "assets/scripts/validation_time_api.lua"
-          }
-        }
-      ]
-    },
-    {
-      "id": "ent-reg-event-hub",
-      "name": "EventHub",
-      "visible": true,
-      "children": [],
-      "components": [
-        {
-          "Transform": {
-            "x": -360.0,
-            "y": 205.0,
-            "rotation": 0.0,
-            "scale_x": 1.0,
-            "scale_y": 1.0
-          }
-        },
-        {
-          "TextLabel": {
-            "text": "[EVENT] veja logs no console",
-            "font_size": 12.0,
-            "color_r": 0.7,
-            "color_g": 0.9,
-            "color_b": 1.0,
-            "color_a": 1.0,
-            "screen_space": true
-          }
-        },
-        {
-          "LuaScript": {
-            "file_path": "assets/scripts/validation_events.lua"
-          }
-        }
-      ]
-    },
-    {
-      "id": "ent-reg-timer-hub",
-      "name": "TimerHub",
-      "visible": true,
-      "children": [],
-      "components": [
-        {
-          "Transform": {
-            "x": -360.0,
-            "y": 165.0,
-            "rotation": 0.0,
-            "scale_x": 1.0,
-            "scale_y": 1.0
-          }
-        },
-        {
-          "TextLabel": {
-            "text": "[TIMER] every_count=0",
-            "font_size": 12.0,
-            "color_r": 0.65,
-            "color_g": 1.0,
-            "color_b": 0.75,
-            "color_a": 1.0,
-            "screen_space": true
-          }
-        },
-        {
-          "LuaScript": {
-            "file_path": "assets/scripts/validation_timers.lua"
-          }
-        }
-      ]
-    },
-    {
-      "id": "ent-reg-legend",
-      "name": "LegendHUD",
-      "visible": true,
-      "children": [],
-      "components": [
-        {
-          "Transform": {
-            "x": 0.0,
-            "y": 0.0,
-            "rotation": 0.0,
-            "scale_x": 1.0,
-            "scale_y": 1.0
-          }
-        },
-        {
-          "TextLabel": {
-            "text": "Cena única resumida. Para ler melhor, use as cenas separadas: v0_9_1_test_time, v0_9_1_test_events, v0_9_1_test_timers e v0_9_1_test_collision.",
-            "font_size": 10.0,
-            "color_r": 0.78,
-            "color_g": 0.84,
-            "color_b": 1.0,
-            "color_a": 0.9,
-            "screen_space": true
-          }
-        }
-      ]
-    },
-    {
-      "id": "ent-reg-collision-hud",
-      "name": "CollisionHUD",
-      "visible": true,
-      "children": [],
-      "components": [
-        {
-          "Transform": {
-            "x": -360.0,
-            "y": 125.0,
-            "rotation": 0.0,
-            "scale_x": 1.0,
-            "scale_y": 1.0
-          }
-        },
-        {
-          "TextLabel": {
-            "text": "[COLLISION] aguardando...",
+            "text": "[COLLISION] use o Player para tocar os blocos.\nLeitura agora sai no próprio Player.",
             "font_size": 12.0,
             "color_r": 1.0,
             "color_g": 0.88,
@@ -409,10 +293,33 @@
             "color_a": 1.0,
             "screen_space": true
           }
+        }
+      ]
+    },
+    {
+      "id": "ent-collision-legend",
+      "name": "LegendHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -360.0,
+            "y": 185.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
         },
         {
-          "LuaScript": {
-            "file_path": "assets/scripts/validation_collision_only.lua"
+          "TextLabel": {
+            "text": "Teste COLLISION. Use A/D ou setas. Encoste nos 2 blocos amarelos. Esperado: ids atuais, enter/stay/exit por ID.",
+            "font_size": 11.0,
+            "color_r": 0.78,
+            "color_g": 0.84,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
           }
         }
       ]

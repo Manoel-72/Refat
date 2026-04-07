@@ -130,7 +130,7 @@ fn update_entities_runtime_recursive(
 
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
-        let collision_entries = collect_collision_entries(entity_ptr, &my_collider_data, colliders);
+        let collision_entries = collect_collision_entries(entity, entity_ptr, &my_collider_data, colliders);
         let collision_names: Vec<String> = collision_entries.iter().map(|entry| entry.name.clone()).collect();
         let collision_ids: Vec<String> = collision_entries.iter().map(|entry| entry.id.clone()).collect();
         let previous_collision_names = previous_collision_contacts.get(&entity.id).cloned().unwrap_or_default();
@@ -401,20 +401,23 @@ pub struct CollisionEntry {
 }
 
 fn collect_collision_entries(
+    entity: &Entity,
     entity_ptr: *const Entity,
     my_collider_data: &Option<(f32, f32, f32, f32, bool, bool, u8, u8)>,
     colliders: &[collision_system::RuntimeCollider],
 ) -> Vec<CollisionEntry> {
-    let Some((_, _, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = *my_collider_data else {
+    let Some((off_x, off_y, width, height, is_my_trigger, my_collision_enabled, my_layer, my_mask)) = *my_collider_data else {
         return Vec::new();
     };
-    let Some(me) = colliders.iter().find(|c| std::ptr::eq(entity_ptr, c.entity_ptr)) else {
+    let Some((x, y)) = entity.transform().map(|t| (t.x, t.y)) else {
         return Vec::new();
     };
-    let my_rect = (me.center_x - width * 0.5, me.center_y - height * 0.5, width, height);
+    let center_x = x + off_x;
+    let center_y = y + off_y;
+    let my_rect = (center_x - width * 0.5, center_y - height * 0.5, width, height);
     let my_col = collision_system::RuntimeCollider {
-        center_x: me.center_x,
-        center_y: me.center_y,
+        center_x,
+        center_y,
         width,
         height,
         is_trigger: is_my_trigger,
@@ -422,8 +425,8 @@ fn collect_collision_entries(
         layer: my_layer,
         mask: my_mask,
         entity_ptr,
-        entity_id: me.entity_id.clone(),
-        entity_name: me.entity_name.clone(),
+        entity_id: entity.id.clone(),
+        entity_name: entity.name.clone(),
     };
     let mut entries = Vec::new();
     for other in colliders {
