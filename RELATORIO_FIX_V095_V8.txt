@@ -1,0 +1,14 @@
+Correção v8
+
+Erro corrigido:
+- E0499 em src/runtime/state.rs ao tentar usar `self.clear_script_state_for_entity(...)`
+  enquanto `self.active_scene` estava emprestado como `&mut`.
+
+Ajuste aplicado:
+- a remoção de entidades agora coleta os IDs removidos primeiro
+- o borrow mutável de `scene` termina
+- só depois chamamos `self.clear_script_state_for_entity(...)`
+
+Resultado:
+- elimina o conflito de empréstimo mutável
+- preserva a lógica de destruir entidade + limpar estado de script

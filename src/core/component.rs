@@ -103,12 +103,29 @@ pub struct RigidBody2D {
     pub gravity_scale: f32,
     pub is_static: bool,
     #[serde(default)]
+    
     pub grounded: bool,
+    #[serde(default)]
+    
+    pub hit_ceiling: bool,
+    #[serde(default)]
+    
+    pub hit_left: bool,
+    #[serde(default)]
+    
+    pub hit_right: bool,
 }
 
 impl Default for RigidBody2D {
     fn default() -> Self {
-        Self { gravity_scale: 1.0, is_static: false, grounded: false }
+        Self {
+            gravity_scale: 1.0,
+            is_static: false,
+            grounded: false,
+            hit_ceiling: false,
+            hit_left: false,
+            hit_right: false,
+        }
     }
 }
 

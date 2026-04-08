@@ -386,6 +386,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     gravity_scale: gravity,
                                     is_static,
                                     grounded,
+                                    hit_ceiling: false,
+                                    hit_left: false,
+                                    hit_right: false,
                                 }),
                             ));
                         }

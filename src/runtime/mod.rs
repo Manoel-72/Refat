@@ -154,7 +154,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     let scene_snap = host.active_scene_snapshot().clone();
     let project_root = host.project_root().to_path_buf();
 
-    runtime.sync_with_mode(play_state, &scene_snap, &project_root, GROUND_Y);
+    runtime.sync_with_mode(&play_state, &scene_snap, &project_root, GROUND_Y);
 
     // captura input egui → RuntimeInput
     apply_egui_inputs(runtime, ui.ctx());

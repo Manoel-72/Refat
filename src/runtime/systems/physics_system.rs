@@ -82,3 +82,39 @@ pub fn set_grounded(entity: &mut Entity, grounded: bool) {
         }
     }
 }
+
+
+pub fn reset_contact_flags(entity: &mut Entity) {
+    for component in &mut entity.components {
+        if let Component::RigidBody2D(rb) = component {
+            rb.grounded = false;
+            rb.hit_ceiling = false;
+            rb.hit_left = false;
+            rb.hit_right = false;
+        }
+    }
+}
+
+pub fn set_hit_ceiling(entity: &mut Entity, value: bool) {
+    for component in &mut entity.components {
+        if let Component::RigidBody2D(rb) = component {
+            rb.hit_ceiling = value;
+        }
+    }
+}
+
+pub fn set_hit_left(entity: &mut Entity, value: bool) {
+    for component in &mut entity.components {
+        if let Component::RigidBody2D(rb) = component {
+            rb.hit_left = value;
+        }
+    }
+}
+
+pub fn set_hit_right(entity: &mut Entity, value: bool) {
+    for component in &mut entity.components {
+        if let Component::RigidBody2D(rb) = component {
+            rb.hit_right = value;
+        }
+    }
+}

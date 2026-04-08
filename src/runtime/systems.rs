@@ -42,8 +42,12 @@ pub fn update_entities_runtime(
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
     collision_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
+    trigger_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    trigger_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
+    previous_trigger_contacts: &std::collections::HashMap<String, Vec<String>>,
+    previous_trigger_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
     pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
     pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
@@ -79,8 +83,12 @@ pub fn update_entities_runtime(
         lua_vms,
         collision_contacts,
         collision_contact_ids,
+        trigger_contacts,
+        trigger_contact_ids,
         previous_collision_contacts,
         previous_collision_contact_ids,
+        previous_trigger_contacts,
+        previous_trigger_contact_ids,
         pending_destroys,
         pending_spawns,
         pending_particles,
@@ -112,8 +120,12 @@ fn update_entities_runtime_recursive(
     lua_vms: &mut std::collections::HashMap<String, (mlua::Lua, std::time::SystemTime)>,
     collision_contacts: &mut std::collections::HashMap<String, Vec<String>>,
     collision_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
+    trigger_contacts: &mut std::collections::HashMap<String, Vec<String>>,
+    trigger_contact_ids: &mut std::collections::HashMap<String, Vec<String>>,
     previous_collision_contacts: &std::collections::HashMap<String, Vec<String>>,
     previous_collision_contact_ids: &std::collections::HashMap<String, Vec<String>>,
+    previous_trigger_contacts: &std::collections::HashMap<String, Vec<String>>,
+    previous_trigger_contact_ids: &std::collections::HashMap<String, Vec<String>>,
     pending_destroys: &mut Vec<crate::runtime::state::PendingDestroyRequest>,
     pending_spawns: &mut Vec<crate::runtime::state::PendingSpawnRequest>,
     pending_particles: &mut Vec<crate::runtime::state::RuntimeParticle>,
@@ -231,6 +243,13 @@ fn update_entities_runtime_recursive(
         let collision_state =
             handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
         physics_system::clamp_to_ground(entity, ground_y, script_data.collider_half_height);
+
+        let final_contacts = collect_contact_frame(entity, entity_ptr, colliders);
+        collision_contacts.insert(entity.id.clone(), final_contacts.solid_names());
+        collision_contact_ids.insert(entity.id.clone(), final_contacts.solid_ids());
+        trigger_contacts.insert(entity.id.clone(), final_contacts.trigger_names());
+        trigger_contact_ids.insert(entity.id.clone(), final_contacts.trigger_ids());
+
         apply_camera_follow(entity, script_data.should_follow_camera, camera_follow_target);
 
         if collision_state.collided {
@@ -269,8 +288,12 @@ fn update_entities_runtime_recursive(
             lua_vms,
             collision_contacts,
             collision_contact_ids,
+            trigger_contacts,
+            trigger_contact_ids,
             previous_collision_contacts,
             previous_collision_contact_ids,
+            previous_trigger_contacts,
+            previous_trigger_contact_ids,
             pending_destroys,
             pending_spawns,
             pending_particles,
@@ -289,6 +312,7 @@ fn update_entities_runtime_recursive(
     None
 }
 
+
 #[derive(Debug, Default)]
 struct CollisionState {
     collided: bool,
@@ -302,119 +326,169 @@ fn handle_entity_collisions(
     old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
 ) -> CollisionState {
-    const GROUND_EPSILON: f32 = 0.001;
+    const CONTACT_EPSILON: f32 = 0.001;
 
-    let Some(mut current_col) = my_collider_data else {
+    let Some(_) = my_collider_data else {
         return CollisionState::default();
     };
-    if !current_col.collision_enabled {
-        return CollisionState::default();
+
+    physics_system::reset_contact_flags(entity);
+    let mut state = CollisionState::default();
+
+    let body_type = find_entity_collider(entity).map(|c| c.body_type).unwrap_or(BodyType::Static);
+    if matches!(body_type, BodyType::Static | BodyType::Trigger) {
+        return state;
     }
 
-    let falling_or_idle = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
-    let mut state = CollisionState::default();
-    let mut total_mtv_x = 0.0_f32;
-    let mut total_mtv_y = 0.0_f32;
-    let mut touched_ground = false;
-    let mut hit_ceiling = false;
+    // Passo X
+    if let Some(mut current_col) = find_entity_collider(entity) {
+        for other in colliders {
+            if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
+            if !collision_system::can_collide(&current_col, other) { continue; }
+            if !collision_system::intersects(&current_col, other) { continue; }
 
-    for other in colliders {
-        if std::ptr::eq(entity_ptr, other.entity_ptr) {
-            continue;
-        }
-        if !collision_system::can_collide(&current_col, other) {
-            continue;
-        }
-        if !collision_system::intersects(&current_col, other) {
-            continue;
-        }
-
-        println!(
-            "[COLLISION] {} <-> {} | trigger_a={} trigger_b={} | body_a={:?} body_b={:?} | layer_a={} mask_a={} | layer_b={} mask_b={}",
-            if entity.name.trim().is_empty() { &entity.id } else { &entity.name },
-            if other.entity_name.trim().is_empty() { &other.entity_id } else { &other.entity_name },
-            current_col.is_trigger,
-            other.is_trigger,
-            current_col.body_type,
-            other.body_type,
-            current_col.layer,
-            current_col.mask,
-            other.layer,
-            other.mask
-        );
-
-        let either_trigger = current_col.is_trigger
-            || other.is_trigger
-            || matches!(current_col.body_type, BodyType::Trigger)
-            || matches!(other.body_type, BodyType::Trigger);
-        if either_trigger {
-            state.triggered = true;
-            continue;
-        }
-
-        state.collided = true;
-
-        if other.one_way && !matches!(other.body_type, BodyType::Trigger) {
-            let old_bottom = old_position.1 + current_col.height * 0.5;
-            let other_top = other.center_y - other.height * 0.5;
-            let moving_down = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
-            let approached_from_above = old_bottom >= other_top - other.one_way_margin;
-            let allow_block = moving_down && approached_from_above && current_col.center_y >= other.center_y;
-            if !allow_block {
+            let either_trigger = current_col.is_trigger
+                || other.is_trigger
+                || matches!(current_col.body_type, BodyType::Trigger)
+                || matches!(other.body_type, BodyType::Trigger);
+            if either_trigger {
+                state.triggered = true;
                 continue;
             }
-        }
 
-        let movable = !matches!(current_col.body_type, BodyType::Static | BodyType::Trigger);
-        if !movable {
-            continue;
-        }
+            if !matches!(other.body_type, BodyType::Static) {
+                continue;
+            }
 
-        let mtv = collision_system::mtv(&current_col, other);
-        if mtv.is_zero() {
-            continue;
-        }
+            let mtv = collision_system::mtv(&current_col, other);
+            if mtv.x.abs() <= CONTACT_EPSILON {
+                continue;
+            }
 
-        if mtv.y > GROUND_EPSILON && falling_or_idle {
-            touched_ground = true;
-        } else if mtv.y < -GROUND_EPSILON {
-            hit_ceiling = true;
-        }
+            if let Some(transform) = entity.transform_mut() {
+                transform.x += mtv.x;
+            }
+            if let Some(vel) = entity.velocity_mut() {
+                vel.x = 0.0;
+            }
 
-        total_mtv_x += mtv.x;
-        total_mtv_y += mtv.y;
-        current_col.center_x += mtv.x;
-        current_col.center_y += mtv.y;
+            if mtv.x > CONTACT_EPSILON {
+                physics_system::set_hit_left(entity, true);
+            } else if mtv.x < -CONTACT_EPSILON {
+                physics_system::set_hit_right(entity, true);
+            }
+
+            state.collided = true;
+
+            if let Some(updated) = find_entity_collider(entity) {
+                current_col = updated;
+            }
+        }
     }
 
-    if total_mtv_x != 0.0 || total_mtv_y != 0.0 {
-        if let Some(transform) = entity.transform_mut() {
-            transform.x += total_mtv_x;
-            transform.y += total_mtv_y;
-        }
+    // Passo Y
+    if let Some(mut current_col) = find_entity_collider(entity) {
+        let falling_or_idle = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
 
-        if touched_ground {
-            if let Some(vel) = entity.velocity_mut() {
-                if vel.y < 0.0 { vel.y = 0.0; }
+        for other in colliders {
+            if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
+            if !collision_system::can_collide(&current_col, other) { continue; }
+            if !collision_system::intersects(&current_col, other) { continue; }
+
+            let either_trigger = current_col.is_trigger
+                || other.is_trigger
+                || matches!(current_col.body_type, BodyType::Trigger)
+                || matches!(other.body_type, BodyType::Trigger);
+            if either_trigger {
+                state.triggered = true;
+                continue;
             }
-            physics_system::set_grounded(entity, true);
-        } else {
-            physics_system::set_grounded(entity, false);
-            if hit_ceiling {
+
+            if !matches!(other.body_type, BodyType::Static) {
+                continue;
+            }
+
+            if other.one_way {
+                let old_bottom = old_position.1 - current_col.height * 0.5;
+                let other_top = other.center_y + other.height * 0.5;
+                let new_bottom = current_col.center_y - current_col.height * 0.5;
+                let moving_down = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
+                let crossed_top = old_bottom >= other_top - other.one_way_margin && new_bottom <= other_top + other.one_way_margin;
+                if !(moving_down && crossed_top) {
+                    continue;
+                }
+            }
+
+            let mtv = collision_system::mtv(&current_col, other);
+            if mtv.y.abs() <= CONTACT_EPSILON {
+                continue;
+            }
+
+            if let Some(transform) = entity.transform_mut() {
+                transform.y += mtv.y;
+            }
+
+            if mtv.y > CONTACT_EPSILON {
+                if let Some(vel) = entity.velocity_mut() {
+                    if vel.y < 0.0 { vel.y = 0.0; }
+                }
+                if falling_or_idle {
+                    physics_system::set_grounded(entity, true);
+                }
+            } else if mtv.y < -CONTACT_EPSILON {
                 if let Some(vel) = entity.velocity_mut() {
                     if vel.y > 0.0 { vel.y = 0.0; }
                 }
+                physics_system::set_hit_ceiling(entity, true);
             }
-        }
 
-        if total_mtv_x.abs() > GROUND_EPSILON {
-            if let Some(vel) = entity.velocity_mut() {
-                vel.x = 0.0;
+            state.collided = true;
+
+            if let Some(updated) = find_entity_collider(entity) {
+                current_col = updated;
             }
         }
     }
 
     state
+}
+
+fn collect_contact_frame(
+    entity: &Entity,
+    entity_ptr: *const Entity,
+    colliders: &[collision_system::RuntimeCollider],
+) -> ContactFrame {
+    let Some(my_col) = find_entity_collider(entity) else {
+        return ContactFrame::default();
+    };
+
+    let mut frame = ContactFrame::default();
+    for other in colliders {
+        if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
+        if !collision_system::can_collide(&my_col, other) { continue; }
+        if !collision_system::intersects(&my_col, other) { continue; }
+
+        let entry = CollisionEntry {
+            id: other.entity_id.clone(),
+            name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
+        };
+        let either_trigger = my_col.is_trigger
+            || other.is_trigger
+            || matches!(my_col.body_type, BodyType::Trigger)
+            || matches!(other.body_type, BodyType::Trigger);
+
+        if either_trigger {
+            frame.trigger_entries.push(entry);
+        } else {
+            frame.solid_entries.push(entry);
+        }
+    }
+
+    frame.solid_entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
+    frame.solid_entries.dedup_by(|a, b| a.id == b.id);
+    frame.trigger_entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
+    frame.trigger_entries.dedup_by(|a, b| a.id == b.id);
+    frame
 }
 
 fn apply_camera_follow(
@@ -474,6 +548,18 @@ pub struct CollisionEntry {
     pub name: String,
 }
 
+#[derive(Debug, Default, Clone)]
+struct ContactFrame {
+    solid_entries: Vec<CollisionEntry>,
+    trigger_entries: Vec<CollisionEntry>,
+}
+
+impl ContactFrame {
+    fn solid_names(&self) -> Vec<String> { self.solid_entries.iter().map(|e| e.name.clone()).collect() }
+    fn solid_ids(&self) -> Vec<String> { self.solid_entries.iter().map(|e| e.id.clone()).collect() }
+    fn trigger_names(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.name.clone()).collect() }
+    fn trigger_ids(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.id.clone()).collect() }
+}
 fn collect_collision_entries(
     entity: &Entity,
     entity_ptr: *const Entity,

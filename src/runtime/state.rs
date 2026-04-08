@@ -218,6 +218,18 @@ pub struct RuntimeState {
     pub collision_enter_contact_ids: HashMap<String, Vec<String>>,
     pub collision_stay_contact_ids: HashMap<String, Vec<String>>,
     pub collision_exit_contact_ids: HashMap<String, Vec<String>>,
+    /// Contatos de trigger do frame atual: entity_id -> nomes.
+    pub trigger_contacts: HashMap<String, Vec<String>>,
+    /// Contatos de trigger do frame anterior: entity_id -> nomes.
+    pub previous_trigger_contacts: HashMap<String, Vec<String>>,
+    pub trigger_contact_ids: HashMap<String, Vec<String>>,
+    pub previous_trigger_contact_ids: HashMap<String, Vec<String>>,
+    pub trigger_enter_contacts: HashMap<String, Vec<String>>,
+    pub trigger_stay_contacts: HashMap<String, Vec<String>>,
+    pub trigger_exit_contacts: HashMap<String, Vec<String>>,
+    pub trigger_enter_contact_ids: HashMap<String, Vec<String>>,
+    pub trigger_stay_contact_ids: HashMap<String, Vec<String>>,
+    pub trigger_exit_contact_ids: HashMap<String, Vec<String>>,
 }
 
 impl RuntimeState {
@@ -261,6 +273,16 @@ impl RuntimeState {
             collision_enter_contact_ids: HashMap::new(),
             collision_stay_contact_ids: HashMap::new(),
             collision_exit_contact_ids: HashMap::new(),
+            trigger_contacts: HashMap::new(),
+            previous_trigger_contacts: HashMap::new(),
+            trigger_contact_ids: HashMap::new(),
+            previous_trigger_contact_ids: HashMap::new(),
+            trigger_enter_contacts: HashMap::new(),
+            trigger_stay_contacts: HashMap::new(),
+            trigger_exit_contacts: HashMap::new(),
+            trigger_enter_contact_ids: HashMap::new(),
+            trigger_stay_contact_ids: HashMap::new(),
+            trigger_exit_contact_ids: HashMap::new(),
         }
     }
 
@@ -530,617 +552,111 @@ impl RuntimeState {
         self.collision_exit_contact_ids.clear();
     }
 
-    fn rebuild_collision_events(&mut self) {
+    
+fn rebuild_collision_events(&mut self) {
         self.collision_enter_contacts.clear();
         self.collision_stay_contacts.clear();
         self.collision_exit_contacts.clear();
         self.collision_enter_contact_ids.clear();
         self.collision_stay_contact_ids.clear();
         self.collision_exit_contact_ids.clear();
+        self.trigger_enter_contacts.clear();
+        self.trigger_stay_contacts.clear();
+        self.trigger_exit_contacts.clear();
+        self.trigger_enter_contact_ids.clear();
+        self.trigger_stay_contact_ids.clear();
+        self.trigger_exit_contact_ids.clear();
 
-        let mut entity_ids: HashSet<String> = HashSet::new();
-        entity_ids.extend(self.collision_contacts.keys().cloned());
-        entity_ids.extend(self.previous_collision_contacts.keys().cloned());
-        entity_ids.extend(self.collision_contact_ids.keys().cloned());
-        entity_ids.extend(self.previous_collision_contact_ids.keys().cloned());
+        fn diff_maps(
+            current_names_map: &HashMap<String, Vec<String>>,
+            previous_names_map: &HashMap<String, Vec<String>>,
+            current_ids_map: &HashMap<String, Vec<String>>,
+            previous_ids_map: &HashMap<String, Vec<String>>,
+            enter_names_out: &mut HashMap<String, Vec<String>>,
+            stay_names_out: &mut HashMap<String, Vec<String>>,
+            exit_names_out: &mut HashMap<String, Vec<String>>,
+            enter_ids_out: &mut HashMap<String, Vec<String>>,
+            stay_ids_out: &mut HashMap<String, Vec<String>>,
+            exit_ids_out: &mut HashMap<String, Vec<String>>,
+        ) {
+            let mut entity_ids: HashSet<String> = HashSet::new();
+            entity_ids.extend(current_names_map.keys().cloned());
+            entity_ids.extend(previous_names_map.keys().cloned());
+            entity_ids.extend(current_ids_map.keys().cloned());
+            entity_ids.extend(previous_ids_map.keys().cloned());
 
-        for entity_id in entity_ids {
-            let current_names: HashSet<String> = self.collision_contacts.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-            let previous_names: HashSet<String> = self.previous_collision_contacts.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+            for entity_id in entity_ids {
+                let current_names: HashSet<String> = current_names_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+                let previous_names: HashSet<String> = previous_names_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
 
-            let mut enter_names: Vec<String> = current_names.difference(&previous_names).cloned().collect();
-            let mut stay_names: Vec<String> = current_names.intersection(&previous_names).cloned().collect();
-            let mut exit_names: Vec<String> = previous_names.difference(&current_names).cloned().collect();
-            enter_names.sort();
-            stay_names.sort();
-            exit_names.sort();
-            if !enter_names.is_empty() { self.collision_enter_contacts.insert(entity_id.clone(), enter_names); }
-            if !stay_names.is_empty() { self.collision_stay_contacts.insert(entity_id.clone(), stay_names); }
-            if !exit_names.is_empty() { self.collision_exit_contacts.insert(entity_id.clone(), exit_names); }
+                let mut enter_names: Vec<String> = current_names.difference(&previous_names).cloned().collect();
+                let mut stay_names: Vec<String> = current_names.intersection(&previous_names).cloned().collect();
+                let mut exit_names: Vec<String> = previous_names.difference(&current_names).cloned().collect();
+                enter_names.sort();
+                stay_names.sort();
+                exit_names.sort();
+                if !enter_names.is_empty() { enter_names_out.insert(entity_id.clone(), enter_names); }
+                if !stay_names.is_empty() { stay_names_out.insert(entity_id.clone(), stay_names); }
+                if !exit_names.is_empty() { exit_names_out.insert(entity_id.clone(), exit_names); }
 
-            let current_ids: HashSet<String> = self.collision_contact_ids.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-            let previous_ids: HashSet<String> = self.previous_collision_contact_ids.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+                let current_ids: HashSet<String> = current_ids_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
+                let previous_ids: HashSet<String> = previous_ids_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
 
-            let mut enter_ids: Vec<String> = current_ids.difference(&previous_ids).cloned().collect();
-            let mut stay_ids: Vec<String> = current_ids.intersection(&previous_ids).cloned().collect();
-            let mut exit_ids: Vec<String> = previous_ids.difference(&current_ids).cloned().collect();
-            enter_ids.sort();
-            stay_ids.sort();
-            exit_ids.sort();
-            if !enter_ids.is_empty() { self.collision_enter_contact_ids.insert(entity_id.clone(), enter_ids); }
-            if !stay_ids.is_empty() { self.collision_stay_contact_ids.insert(entity_id.clone(), stay_ids); }
-            if !exit_ids.is_empty() { self.collision_exit_contact_ids.insert(entity_id.clone(), exit_ids); }
-
-            for other_name in self.collision_enter_contacts.get(&entity_id).cloned().unwrap_or_default() {
-                self.pending_runtime_events.push(RuntimeEvent {
-                    name: format!("collision_enter:{}:{}", entity_id, other_name),
-                    data: Some(SaveValue::Text(other_name)),
-                });
-            }
-            for other_name in self.collision_stay_contacts.get(&entity_id).cloned().unwrap_or_default() {
-                self.pending_runtime_events.push(RuntimeEvent {
-                    name: format!("collision_stay:{}:{}", entity_id, other_name),
-                    data: Some(SaveValue::Text(other_name)),
-                });
-            }
-            for other_name in self.collision_exit_contacts.get(&entity_id).cloned().unwrap_or_default() {
-                self.pending_runtime_events.push(RuntimeEvent {
-                    name: format!("collision_exit:{}:{}", entity_id, other_name),
-                    data: Some(SaveValue::Text(other_name)),
-                });
-            }
-        }
-    }
-
-    pub fn stop_audio_by_name(&mut self, name: &str) -> usize {
-        let stopped = self.audio_runtime.stop_by_name(name);
-        if stopped > 0 {
-            let lowered = name.trim().to_ascii_lowercase();
-            self.started_audio.retain(|key| !key.to_ascii_lowercase().contains(&lowered));
-        }
-        stopped
-    }
-
-    pub fn sync_with_mode(
-        &mut self,
-        mode: RuntimePlayState,
-        source_scene: &Scene,
-        project_root: &Path,
-        ground_y: f32,
-    ) {
-        if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
-            self.active_scene = self.scene_manager.current_scene.clone();
-            self.reset_timing_state();
-            self.game_state.flow = RuntimeGameFlow::Playing;
-            self.game_state.loading_label = None;
-        }
-
-        match mode {
-            RuntimePlayState::Edit => {
-                if self.active_scene.is_some() {
-                    self.stop();
-                }
-                self.window_open = false;
-                self.game_state.flow = RuntimeGameFlow::Editing;
-            }
-            RuntimePlayState::Playing => {
-                if self.active_scene.is_none() {
-                    self.start_from_scene(source_scene);
-                }
-                self.window_open = true;
-                self.game_state.flow = RuntimeGameFlow::Playing;
-                self.update_frame(project_root, ground_y);
-            }
-            RuntimePlayState::Paused => {
-                if self.active_scene.is_none() {
-                    self.start_from_scene(source_scene);
-                }
-                self.window_open = true;
-                self.delta_time = 0.0;
-                self.last_frame_at = Some(Instant::now());
-                self.last_stage = RuntimeFrameStage::Idle;
-                self.game_state.flow = RuntimeGameFlow::Paused;
-            }
-        }
-    }
-
-    pub fn queue_spawn(&mut self, template: impl Into<String>, x: f32, y: f32) {
-        self.pending_spawns.push(PendingSpawnRequest {
-            kind: PendingSpawnKind::Template(template.into()),
-            x,
-            y,
-            velocity: None,
-            tags: Vec::new(),
-            hp: None,
-            anim: None,
-            request_seq: None,
-        });
-    }
-
-    pub fn queue_spawn_prefab(&mut self, prefab_path: impl Into<String>, x: f32, y: f32) {
-        self.pending_spawns.push(PendingSpawnRequest {
-            kind: PendingSpawnKind::PrefabPath(prefab_path.into()),
-            x,
-            y,
-            velocity: None,
-            tags: Vec::new(),
-            hp: None,
-            anim: None,
-            request_seq: None,
-        });
-    }
-
-    pub fn queue_particle(&mut self, particle: RuntimeParticle) {
-        self.pending_particles.push(particle);
-    }
-
-    pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
-        let entity_id = entity_id.into();
-        if self.pending_destroys.iter().any(|request| request.entity_id == entity_id) {
-            return;
-        }
-        self.pending_destroys.push(PendingDestroyRequest { entity_id });
-    }
-
-    pub fn queue_destroy_last_spawned(&mut self) -> bool {
-        let Some(id) = self.last_spawned_entity_id.clone() else {
-            return false;
-        };
-        self.queue_destroy(id);
-        true
-    }
-
-    pub fn estimated_fps(&self) -> f32 {
-        if self.delta_time <= f32::EPSILON {
-            0.0
-        } else {
-            1.0 / self.delta_time
-        }
-    }
-
-    // ── save / load ──────────────────────────────────────────
-
-    /// Salva `save_data` em `<project_root>/save/save.json`.
-    /// Grava também a cena atual para permitir o fluxo oficial de "Continuar".
-    pub fn save_game(&mut self, project_root: &Path) -> Result<(), String> {
-        if let Some(path) = &self.scene_manager.current_path {
-            let persisted_path = path
-                .strip_prefix(project_root)
-                .unwrap_or(path.as_path())
-                .to_string_lossy()
-                .replace('\\', "/");
-            self.save_data.current_scene = Some(persisted_path.clone());
-            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, persisted_path);
-        } else if let Some(scene) = &self.active_scene {
-            self.save_data.current_scene = Some(scene.name.clone());
-            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, scene.name.clone());
-        }
-
-        if let Some(scene) = &self.active_scene {
-            if let Some((player_id, player_name, x, y, vx, vy)) = capture_continue_player_snapshot(scene) {
-                self.save_data.set_text(SAVE_KEY_PLAYER_ID, player_id);
-                self.save_data.set_text(SAVE_KEY_PLAYER_NAME, player_name);
-                self.save_data.set_float(SAVE_KEY_PLAYER_X, x as f64);
-                self.save_data.set_float(SAVE_KEY_PLAYER_Y, y as f64);
-                self.save_data.set_float(SAVE_KEY_PLAYER_VX, vx as f64);
-                self.save_data.set_float(SAVE_KEY_PLAYER_VY, vy as f64);
+                let mut enter_ids: Vec<String> = current_ids.difference(&previous_ids).cloned().collect();
+                let mut stay_ids: Vec<String> = current_ids.intersection(&previous_ids).cloned().collect();
+                let mut exit_ids: Vec<String> = previous_ids.difference(&current_ids).cloned().collect();
+                enter_ids.sort();
+                stay_ids.sort();
+                exit_ids.sort();
+                if !enter_ids.is_empty() { enter_ids_out.insert(entity_id.clone(), enter_ids); }
+                if !stay_ids.is_empty() { stay_ids_out.insert(entity_id.clone(), stay_ids); }
+                if !exit_ids.is_empty() { exit_ids_out.insert(entity_id.clone(), exit_ids); }
             }
         }
 
-        self.save_data.save_to_project(project_root)
-    }
+        diff_maps(
+            &self.collision_contacts,
+            &self.previous_collision_contacts,
+            &self.collision_contact_ids,
+            &self.previous_collision_contact_ids,
+            &mut self.collision_enter_contacts,
+            &mut self.collision_stay_contacts,
+            &mut self.collision_exit_contacts,
+            &mut self.collision_enter_contact_ids,
+            &mut self.collision_stay_contact_ids,
+            &mut self.collision_exit_contact_ids,
+        );
 
-    /// Carrega `<project_root>/save/save.json` para `save_data`.
-    /// Retorna `false` se não existir arquivo (primeira sessão).
-    pub fn load_game(&mut self, project_root: &Path) -> bool {
-        if let Some(data) = SaveData::load_from_project(project_root) {
-            self.save_data = data;
-            true
-        } else {
-            false
-        }
-    }
+        diff_maps(
+            &self.trigger_contacts,
+            &self.previous_trigger_contacts,
+            &self.trigger_contact_ids,
+            &self.previous_trigger_contact_ids,
+            &mut self.trigger_enter_contacts,
+            &mut self.trigger_stay_contacts,
+            &mut self.trigger_exit_contacts,
+            &mut self.trigger_enter_contact_ids,
+            &mut self.trigger_stay_contact_ids,
+            &mut self.trigger_exit_contact_ids,
+        );
 
-    /// Apaga o save e reinicia `save_data`.
-    pub fn delete_save(&mut self, project_root: &Path) -> bool {
-        self.save_data = SaveData::new();
-        SaveData::delete_save(project_root)
-    }
-
-    fn restore_continue_runtime_state(&mut self) {
-        let Some(scene) = self.active_scene.as_mut() else {
-            return;
-        };
-
-        let saved_player_id = self.save_data.get_text(SAVE_KEY_PLAYER_ID).map(str::to_string);
-        let saved_player_name = self.save_data.get_text(SAVE_KEY_PLAYER_NAME).map(str::to_string);
-        let saved_x = self.save_data.get_float(SAVE_KEY_PLAYER_X).map(|v| v as f32);
-        let saved_y = self.save_data.get_float(SAVE_KEY_PLAYER_Y).map(|v| v as f32);
-        let saved_vx = self.save_data.get_float(SAVE_KEY_PLAYER_VX).map(|v| v as f32);
-        let saved_vy = self.save_data.get_float(SAVE_KEY_PLAYER_VY).map(|v| v as f32);
-
-        let Some(player) = find_continue_player_mut(scene, saved_player_id.as_deref(), saved_player_name.as_deref()) else {
-            return;
-        };
-
-        if let Some(transform) = player.transform_mut() {
-            if let Some(x) = saved_x { transform.x = x; }
-            if let Some(y) = saved_y { transform.y = y; }
-        }
-
-        if let Some(velocity) = player.velocity_mut() {
-            if let Some(vx) = saved_vx { velocity.x = vx; }
-            if let Some(vy) = saved_vy { velocity.y = vy; }
-        }
-    }
-
-    fn reset_timing_state(&mut self) {
-        self.elapsed_time = 0.0;
-        self.delta_time = 0.0;
-        self.frame_count = 0;
-        self.last_frame_at = Some(Instant::now());
-        self.started_scripts.clear();
-        self.started_audio.clear();
-        self.audio_runtime.stop_all();
-        self.input = RuntimeInput::default();
-        self.last_stage = RuntimeFrameStage::Idle;
-        self.pending_spawns.clear();
-        self.pending_destroys.clear();
-        self.last_spawned_entity_id = None;
-        self.particles.clear();
-        self.pending_particles.clear();
-        self.emitters.clear();
-        self.camera_shake_time = 0.0;
-        self.camera_shake_intensity = 0.0;
-        self.camera_zoom_override = None;
-        self.clear_script_state();
-        self.lua_vms.clear();
-        self.clear_lua_runtime_events();
-        self.clear_collision_tracking();
-    }
-
-    fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
-        let now = Instant::now();
-        let dt = self
-            .last_frame_at
-            .map(|last| (now - last).as_secs_f32().clamp(1.0 / 240.0, 1.0 / 20.0))
-            .unwrap_or(1.0 / 60.0);
-
-        self.last_frame_at = Some(now);
-        self.delta_time = dt;
-        self.elapsed_time += dt;
-        self.frame_count += 1;
-        self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
-        self.update_emitters(dt);
-        self.update_particles(dt);
-        if self.camera_shake_time > 0.0 {
-            self.camera_shake_time = (self.camera_shake_time - dt).max(0.0);
-            if self.camera_shake_time <= f32::EPSILON {
-                self.camera_shake_intensity = 0.0;
-            }
-        }
-
-        let player_input = systems::input_system::player_axis(&self.input);
-
-        let mut runtime_command = None;
-        let mut scene_snapshot = None;
-        let mut finalize_frame = false;
-
-        if let Some(scene) = &mut self.active_scene {
-            let mut camera_follow_target = None;
-
-            self.last_stage = RuntimeFrameStage::CaptureInput;
-
-            self.last_stage = RuntimeFrameStage::ApplyPlayerInput;
-            if player_input != eframe::egui::Vec2::ZERO {
-                systems::apply_player_controller_input(
-                    &mut scene.entities,
-                    project_root,
-                    dt,
-                    player_input,
-                );
-            }
-
-            self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
-            systems::apply_audio_autoplay(
-                &scene.entities,
-                project_root,
-                &mut self.started_audio,
-                &mut self.audio_runtime,
-            );
-            self.audio_runtime.maintain();
-            self.last_stage = RuntimeFrameStage::ApplyPhysics;
-            self.last_stage = RuntimeFrameStage::ResolveCollisions;
-            let elapsed = self.elapsed_time;
-            let mut frame_camera_shake = None;
-            let mut frame_camera_zoom = None;
-            let input_snap = self.input.clone();
-            let incoming_lua_events = self.current_runtime_events.clone();
-            self.previous_collision_contacts = self.collision_contacts.clone();
-            self.previous_collision_contact_ids = self.collision_contact_ids.clone();
-            self.collision_contacts.clear();
-            self.collision_contact_ids.clear();
-            let scene_label = Some(scene.name.as_str());
-            runtime_command = systems::update_entities_runtime(
-                &mut scene.entities,
-                dt,
-                elapsed,
-                project_root,
-                scene_label,
-                &mut self.started_scripts,
-                &mut camera_follow_target,
-                ground_y,
-                &mut self.save_data,
-                &mut self.session_state,
-                &mut self.script_state,
-                &input_snap,
-                &mut self.lua_vms,
-                &mut self.collision_contacts,
-                &mut self.collision_contact_ids,
-                &self.previous_collision_contacts,
-                &self.previous_collision_contact_ids,
-                &mut self.pending_destroys,
-                &mut self.pending_spawns,
-                &mut self.pending_particles,
-                &mut self.emitters,
-                &incoming_lua_events,
-                &mut self.pending_runtime_events,
-                &mut frame_camera_shake,
-                &mut frame_camera_zoom,
-                &mut self.audio_runtime,
-            );
-
-            if let Some((intensity, duration)) = frame_camera_shake {
-                self.camera_shake_intensity = intensity;
-                self.camera_shake_time = duration;
-            }
-            if let Some(zoom) = frame_camera_zoom {
-                self.camera_zoom_override = Some(zoom.clamp(0.2, 4.0));
-            }
-            self.last_stage = RuntimeFrameStage::UpdateCamera;
-            if let Some((x, y)) = camera_follow_target {
-                camera::set_main_camera_position(&mut scene.entities, x, y);
-            }
-
-            scene_snapshot = Some(scene.clone());
-            finalize_frame = true;
-        }
-
-        if finalize_frame {
-            self.rebuild_collision_events();
-
-            self.last_stage = RuntimeFrameStage::FinalizeFrame;
-            let pending_destroys = std::mem::take(&mut self.pending_destroys);
-            let pending_spawns = std::mem::take(&mut self.pending_spawns);
-            let pending_particles = std::mem::take(&mut self.pending_particles);
-            if let Some(mut scene) = self.active_scene.take() {
-                let mut pending_runtime_events = std::mem::take(&mut self.pending_runtime_events);
-                self.apply_pending_entity_commands(
-                    &mut scene,
-                    project_root,
-                    pending_destroys,
-                    pending_spawns,
-                    pending_particles,
-                    &mut pending_runtime_events,
-                );
-                self.pending_runtime_events = pending_runtime_events;
-                self.scene_manager.current_scene = Some(scene.clone());
-                self.active_scene = Some(scene);
-            } else if let Some(scene) = scene_snapshot {
-                self.scene_manager.current_scene = Some(scene);
-            }
-
-            if let Some(command) = runtime_command {
-                match command {
-                    RuntimeCommand::ChangeScene(path) => {
-                        self.queue_scene_change(project_root.join(path));
-                    }
-                    RuntimeCommand::ReloadScene => {
-                        self.scene_manager.change_scene(
-                            self.scene_manager.current_path.clone().unwrap_or_else(|| {
-                                project_root.join("assets/scenes/fase1.scene.json")
-                            }),
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    fn apply_pending_entity_commands(
-        &mut self,
-        scene: &mut Scene,
-        project_root: &Path,
-        pending_destroys: Vec<PendingDestroyRequest>,
-        pending_spawns: Vec<PendingSpawnRequest>,
-        pending_particles: Vec<RuntimeParticle>,
-        pending_runtime_events: &mut Vec<RuntimeEvent>,
-    ) {
-        for entity_id in pending_destroys.into_iter().map(|request| request.entity_id) {
-            if scene.remove_entity_by_id(&entity_id) {
-                self.cleanup_destroyed_entity_runtime_data(&entity_id);
-                if self.last_spawned_entity_id.as_deref() == Some(entity_id.as_str()) {
-                    self.last_spawned_entity_id = None;
+        fn emit_pair_events(prefix: &str, map: &HashMap<String, Vec<String>>, pending: &mut Vec<RuntimeEvent>) {
+            for (entity_id, names) in map {
+                for other in names {
+                    pending.push(RuntimeEvent {
+                        name: format!("{}:{}:{}", prefix, entity_id, other),
+                        data: None,
+                    });
                 }
             }
         }
 
-        for request in pending_spawns {
-            let mut entity = match &request.kind {
-                PendingSpawnKind::Template(template) => Self::build_spawn_entity(template, request.x, request.y),
-                PendingSpawnKind::PrefabPath(prefab_path) => self
-                    .build_spawned_prefab_entity(project_root, prefab_path, request.x, request.y)
-                    .unwrap_or_else(|| Self::build_spawn_entity(prefab_path, request.x, request.y)),
-            };
-            Self::apply_spawn_init_to_entity(&mut entity, request.velocity, &request.tags, request.hp, request.anim.as_deref());
-            let spawned_id = entity.id.clone();
-            self.last_spawned_entity_id = Some(spawned_id.clone());
-            scene.add_entity(entity);
-            if let Some(seq) = request.request_seq {
-                pending_runtime_events.push(RuntimeEvent {
-                    name: format!("spawn_result:{}", seq),
-                    data: Some(SaveValue::Text(spawned_id.clone())),
-                });
-                pending_runtime_events.push(RuntimeEvent {
-                    name: format!("rs2_spawn_done:{}", seq),
-                    data: Some(SaveValue::Text(spawned_id)),
-                });
-            }
-        }
-
-        if !pending_particles.is_empty() {
-            self.particles.extend(pending_particles);
-        }
-    }
-
-    fn cleanup_destroyed_entity_runtime_data(&mut self, entity_id: &str) {
-        let script_prefix = script_scope_prefix(entity_id);
-        let started_prefix = format!("lua::{}::", entity_id);
-        let vm_prefix = format!("vm::{}::", entity_id);
-        self.script_state.retain(|scope_key, _| !scope_key.starts_with(&script_prefix));
-        self.started_scripts.retain(|key| !key.starts_with(&started_prefix));
-        self.started_audio.retain(|key| !key.contains(entity_id));
-        self.lua_vms.retain(|key: &String, _| !key.starts_with(&vm_prefix));
-        self.purge_entity_from_collision_tracking(entity_id);
-    }
-
-
-    fn purge_entity_from_collision_tracking(&mut self, entity_id: &str) {
-        let removed_name = self.find_entity_name_in_collision_tracking(entity_id);
-        self.collision_contacts.remove(entity_id);
-        self.previous_collision_contacts.remove(entity_id);
-        self.collision_contact_ids.remove(entity_id);
-        self.previous_collision_contact_ids.remove(entity_id);
-        self.collision_enter_contacts.remove(entity_id);
-        self.collision_stay_contacts.remove(entity_id);
-        self.collision_exit_contacts.remove(entity_id);
-        self.collision_enter_contact_ids.remove(entity_id);
-        self.collision_stay_contact_ids.remove(entity_id);
-        self.collision_exit_contact_ids.remove(entity_id);
-        if let Some(name) = removed_name.as_ref() {
-            for contacts in self.collision_contacts.values_mut() { contacts.retain(|existing| existing != name); }
-            for contacts in self.previous_collision_contacts.values_mut() { contacts.retain(|existing| existing != name); }
-            for contacts in self.collision_enter_contacts.values_mut() { contacts.retain(|existing| existing != name); }
-            for contacts in self.collision_stay_contacts.values_mut() { contacts.retain(|existing| existing != name); }
-            for contacts in self.collision_exit_contacts.values_mut() { contacts.retain(|existing| existing != name); }
-        }
-        for contacts in self.collision_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
-        for contacts in self.previous_collision_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
-        for contacts in self.collision_enter_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
-        for contacts in self.collision_stay_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
-        for contacts in self.collision_exit_contact_ids.values_mut() { contacts.retain(|id| id != entity_id); }
-    }
-
-    fn find_entity_name_in_collision_tracking(&self, entity_id: &str) -> Option<String> {
-        self.active_scene.as_ref().and_then(|scene| scene.find_entity(entity_id)).map(|entity| {
-            if entity.name.trim().is_empty() { entity.id.clone() } else { entity.name.clone() }
-        })
-    }
-
-
-    fn build_spawn_entity(template: &str, x: f32, y: f32) -> Entity {
-        let template_name = template.trim().to_ascii_lowercase();
-        let mut entity = Entity::new(match template_name.as_str() {
-            "enemy" => "Enemy",
-            other if !other.is_empty() => other,
-            _ => "Spawned Entity",
-        });
-
-        if let Some(transform) = entity.transform_mut() {
-            transform.x = x;
-            transform.y = y;
-            transform.scale_x = 1.0;
-            transform.scale_y = 1.0;
-        }
-
-        if template_name == "enemy" {
-            entity.add_tag("enemy");
-            entity.set_max_hp(25.0);
-            entity.set_hp(25.0);
-        }
-        entity.add_component(Component::Velocity(Velocity::default()));
-        entity.add_component(Component::RigidBody2D(RigidBody2D {
-            gravity_scale: 1.0,
-            is_static: false,
-            grounded: false,
-        }));
-        entity.add_component(Component::BoxCollider(BoxCollider {
-            width: 32.0,
-            height: 32.0,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            is_trigger: false,
-            collision_enabled: true,
-            layer: 0,
-            mask: 0,
-            body_type: crate::core::component::BodyType::Kinematic,
-            shape: crate::core::component::Shape2D::Box { width: 32.0, height: 32.0 },
-            one_way: false,
-            one_way_margin: 6.0,
-        }));
-        entity.add_component(Component::Sprite(Sprite {
-            texture_path: String::new(),
-            color_r: 0.85,
-            color_g: 0.25,
-            color_b: 0.25,
-            color_a: 1.0,
-            screen_space: false,
-        }));
-        entity
-    }
-
-
-    fn build_spawned_prefab_entity(&self, project_root: &Path, prefab_path: &str, x: f32, y: f32) -> Option<Entity> {
-        let normalized = prefab_path.trim().replace('\\', "/");
-        if normalized.is_empty() {
-            return None;
-        }
-
-        let mut candidates = vec![project_root.join(&normalized)];
-        if !normalized.starts_with("assets/") {
-            candidates.push(project_root.join("assets/prefabs").join(&normalized));
-        }
-        if !normalized.ends_with(".prefab.json") {
-            candidates.push(project_root.join(format!("{}.prefab.json", normalized)));
-            candidates.push(project_root.join("assets/prefabs").join(format!("{}.prefab.json", normalized)));
-        }
-
-        let path = candidates.into_iter().find(|candidate| candidate.exists())?;
-        let prefab = crate::serialization::prefab_serializer::load_prefab_from_path(&path)?;
-        let mut entity = prefab.root_entity.clone();
-        entity.regenerate_ids_recursive();
-        if let Some(transform) = entity.transform_mut() {
-            transform.x = x;
-            transform.y = y;
-        }
-        Some(entity)
-    }
-
-    fn apply_spawn_init_to_entity(entity: &mut Entity, velocity: Option<(f32, f32)>, tags: &[String], hp: Option<f32>, anim: Option<&str>) {
-        if let Some((vx, vy)) = velocity {
-            if let Some(existing) = entity.velocity_mut() {
-                existing.x = vx;
-                existing.y = vy;
-            } else {
-                entity.add_component(Component::Velocity(Velocity { x: vx, y: vy }));
-            }
-        }
-        for tag in tags {
-            let _ = entity.add_tag(tag.clone());
-        }
-        if let Some(hp) = hp {
-            entity.set_hp(hp);
-        }
-        if let Some(anim_name) = anim {
-            for component in &mut entity.components {
-                if let Component::Animator(animator) = component {
-                    animator.current = anim_name.to_string();
-                    animator.prev_clip.clear();
-                    animator.timer = 0.0;
-                    break;
-                }
-            }
-        }
+        emit_pair_events("collision_enter", &self.collision_enter_contacts, &mut self.pending_runtime_events);
+        emit_pair_events("collision_stay", &self.collision_stay_contacts, &mut self.pending_runtime_events);
+        emit_pair_events("collision_exit", &self.collision_exit_contacts, &mut self.pending_runtime_events);
+        emit_pair_events("trigger_enter", &self.trigger_enter_contacts, &mut self.pending_runtime_events);
+        emit_pair_events("trigger_stay", &self.trigger_stay_contacts, &mut self.pending_runtime_events);
+        emit_pair_events("trigger_exit", &self.trigger_exit_contacts, &mut self.pending_runtime_events);
     }
 
     fn update_emitters(&mut self, dt: f32) {
@@ -1189,6 +705,346 @@ impl RuntimeState {
         }
 
         self.particles.retain(|particle| particle.life > 0.0 && particle.scale > 0.0);
+    }
+
+    fn reset_timing_state(&mut self) {
+        self.elapsed_time = 0.0;
+        self.delta_time = 0.0;
+        self.frame_count = 0;
+        self.last_frame_at = Some(Instant::now());
+        self.started_scripts.clear();
+        self.started_audio.clear();
+        self.audio_runtime.stop_all();
+        self.input = RuntimeInput::default();
+        self.last_stage = RuntimeFrameStage::Idle;
+        self.pending_spawns.clear();
+        self.pending_destroys.clear();
+        self.last_spawned_entity_id = None;
+        self.particles.clear();
+        self.pending_particles.clear();
+        self.emitters.clear();
+        self.camera_shake_time = 0.0;
+        self.camera_shake_intensity = 0.0;
+        self.camera_zoom_override = None;
+        self.clear_script_state();
+        self.lua_vms.clear();
+        self.clear_lua_runtime_events();
+        self.clear_collision_tracking();
+    }
+
+    fn restore_continue_runtime_state(&mut self) {
+        let Some(scene) = self.active_scene.as_mut() else {
+            return;
+        };
+
+        let saved_player_id = self.save_data.get_text(SAVE_KEY_PLAYER_ID).map(str::to_string);
+        let saved_player_name = self.save_data.get_text(SAVE_KEY_PLAYER_NAME).map(str::to_string);
+        let saved_x = self.save_data.get_float(SAVE_KEY_PLAYER_X).map(|v| v as f32);
+        let saved_y = self.save_data.get_float(SAVE_KEY_PLAYER_Y).map(|v| v as f32);
+        let saved_vx = self.save_data.get_float(SAVE_KEY_PLAYER_VX).map(|v| v as f32);
+        let saved_vy = self.save_data.get_float(SAVE_KEY_PLAYER_VY).map(|v| v as f32);
+
+        let Some(player) = find_continue_player_mut(scene, saved_player_id.as_deref(), saved_player_name.as_deref()) else {
+            return;
+        };
+
+        if let Some(transform) = player.transform_mut() {
+            if let Some(x) = saved_x { transform.x = x; }
+            if let Some(y) = saved_y { transform.y = y; }
+        }
+
+        if let Some(velocity) = player.velocity_mut() {
+            if let Some(vx) = saved_vx { velocity.x = vx; }
+            if let Some(vy) = saved_vy { velocity.y = vy; }
+        }
+    }
+
+    pub fn sync_with_mode(
+        &mut self,
+        mode: &RuntimePlayState,
+        source_scene: &Scene,
+        project_root: &Path,
+        ground_y: f32,
+    ) {
+        if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
+            self.active_scene = self.scene_manager.current_scene.clone();
+            self.reset_timing_state();
+            self.game_state.flow = RuntimeGameFlow::Playing;
+            self.game_state.loading_label = None;
+        }
+
+        match *mode {
+            RuntimePlayState::Edit => {
+                if self.active_scene.is_some() {
+                    self.stop();
+                }
+                self.window_open = false;
+                self.game_state.flow = RuntimeGameFlow::Editing;
+            }
+            RuntimePlayState::Playing => {
+                if self.active_scene.is_none() {
+                    self.start_from_scene(source_scene);
+                }
+                self.window_open = true;
+                self.game_state.flow = RuntimeGameFlow::Playing;
+                self.update_frame(project_root, ground_y);
+            }
+            RuntimePlayState::Paused => {
+                if self.active_scene.is_none() {
+                    self.start_from_scene(source_scene);
+                }
+                self.window_open = true;
+                self.delta_time = 0.0;
+                self.last_frame_at = Some(Instant::now());
+                self.last_stage = RuntimeFrameStage::Idle;
+                self.game_state.flow = RuntimeGameFlow::Paused;
+            }
+        }
+    }
+
+    pub fn estimated_fps(&self) -> f32 {
+        if self.delta_time <= f32::EPSILON {
+            0.0
+        } else {
+            1.0 / self.delta_time
+        }
+    }
+
+    pub fn queue_spawn(&mut self, template: impl Into<String>, x: f32, y: f32) {
+        self.pending_spawns.push(PendingSpawnRequest {
+            kind: PendingSpawnKind::Template(template.into()),
+            x,
+            y,
+            velocity: None,
+            tags: Vec::new(),
+            hp: None,
+            anim: None,
+            request_seq: None,
+        });
+    }
+
+    pub fn queue_destroy_last_spawned(&mut self) -> bool {
+        let Some(id) = self.last_spawned_entity_id.clone() else {
+            return false;
+        };
+        self.queue_destroy(id);
+        true
+    }
+
+    pub fn save_game(&mut self, project_root: &Path) -> Result<(), String> {
+        if let Some(path) = &self.scene_manager.current_path {
+            let persisted_path = path
+                .strip_prefix(project_root)
+                .unwrap_or(path.as_path())
+                .to_string_lossy()
+                .replace('\\', "/");
+            self.save_data.current_scene = Some(persisted_path.clone());
+            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, persisted_path);
+        } else if let Some(scene) = &self.active_scene {
+            self.save_data.current_scene = Some(scene.name.clone());
+            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, scene.name.clone());
+        }
+
+        if let Some(scene) = &self.active_scene {
+            if let Some((player_id, player_name, x, y, vx, vy)) = capture_continue_player_snapshot(scene) {
+                self.save_data.set_text(SAVE_KEY_PLAYER_ID, player_id);
+                self.save_data.set_text(SAVE_KEY_PLAYER_NAME, player_name);
+                self.save_data.set_float(SAVE_KEY_PLAYER_X, x as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_Y, y as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_VX, vx as f64);
+                self.save_data.set_float(SAVE_KEY_PLAYER_VY, vy as f64);
+            }
+        }
+
+        self.save_data.save_to_project(project_root)
+    }
+
+    pub fn load_game(&mut self, project_root: &Path) -> bool {
+        if let Some(data) = SaveData::load_from_project(project_root) {
+            self.save_data = data;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn stop_audio_by_name(&mut self, name: &str) -> usize {
+        let stopped = self.audio_runtime.stop_by_name(name);
+        if stopped > 0 {
+            let lowered = name.trim().to_ascii_lowercase();
+            self.started_audio.retain(|key| !key.to_ascii_lowercase().contains(&lowered));
+        }
+        stopped
+    }
+
+
+
+    pub fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
+        self.frame_count = self.frame_count.saturating_add(1);
+
+        let now = Instant::now();
+        let dt = if let Some(last) = self.last_frame_at.replace(now) {
+            (now - last).as_secs_f32()
+        } else {
+            1.0 / 60.0
+        };
+        self.delta_time = dt.clamp(1.0 / 240.0, 0.1);
+        self.elapsed_time += self.delta_time;
+        self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
+
+        self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
+
+        self.previous_collision_contacts = self.collision_contacts.clone();
+        self.previous_collision_contact_ids = self.collision_contact_ids.clone();
+        self.previous_trigger_contacts = self.trigger_contacts.clone();
+        self.previous_trigger_contact_ids = self.trigger_contact_ids.clone();
+
+        self.collision_contacts.clear();
+        self.collision_contact_ids.clear();
+        self.trigger_contacts.clear();
+        self.trigger_contact_ids.clear();
+
+        let mut camera_follow_target: Option<(f32, f32)> = None;
+        let mut camera_shake: Option<(f32, f32)> = None;
+        let mut camera_zoom: Option<f32> = None;
+
+        let command = if let Some(scene) = &mut self.active_scene {
+            let scene_label_owned = scene.name.clone();
+            systems::update_entities_runtime(
+                &mut scene.entities,
+                self.delta_time,
+                self.elapsed_time,
+                project_root,
+                Some(scene_label_owned.as_str()),
+                &mut self.started_scripts,
+                &mut camera_follow_target,
+                ground_y,
+                &mut self.save_data,
+                &mut self.session_state,
+                &mut self.script_state,
+                &self.input,
+                &mut self.lua_vms,
+                &mut self.collision_contacts,
+                &mut self.collision_contact_ids,
+                &mut self.trigger_contacts,
+                &mut self.trigger_contact_ids,
+                &self.previous_collision_contacts,
+                &self.previous_collision_contact_ids,
+                &self.previous_trigger_contacts,
+                &self.previous_trigger_contact_ids,
+                &mut self.pending_destroys,
+                &mut self.pending_spawns,
+                &mut self.pending_particles,
+                &mut self.emitters,
+                &self.current_runtime_events,
+                &mut self.pending_runtime_events,
+                &mut camera_shake,
+                &mut camera_zoom,
+                &mut self.audio_runtime,
+            )
+        } else {
+            None
+        };
+
+        if let Some((time, intensity)) = camera_shake {
+            self.camera_shake_time = time.max(0.0);
+            self.camera_shake_intensity = intensity.max(0.0);
+        }
+        if let Some(zoom) = camera_zoom {
+            self.camera_zoom_override = Some(zoom.max(0.01));
+        }
+
+        if !self.pending_destroys.is_empty() {
+            let destroys = std::mem::take(&mut self.pending_destroys);
+            let mut cleared_script_entities: Vec<String> = Vec::new();
+            if let Some(scene) = &mut self.active_scene {
+                for request in destroys {
+                    if scene.remove_entity_by_id(&request.entity_id) {
+                        cleared_script_entities.push(request.entity_id);
+                    }
+                }
+            }
+            for entity_id in cleared_script_entities {
+                self.clear_script_state_for_entity(&entity_id);
+            }
+        }
+
+        if !self.pending_spawns.is_empty() {
+            let spawns = std::mem::take(&mut self.pending_spawns);
+            if let Some(scene) = &mut self.active_scene {
+                for request in spawns {
+                    let mut entity = Entity::new(match &request.kind {
+                        PendingSpawnKind::Template(name) => name.clone(),
+                        PendingSpawnKind::PrefabPath(path) => Path::new(path)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Spawned")
+                            .to_string(),
+                    });
+
+                    if let Some(transform) = entity.transform_mut() {
+                        transform.x = request.x;
+                        transform.y = request.y;
+                    }
+
+                    entity.add_component(Component::Velocity(Velocity {
+                        x: request.velocity.map(|v| v.0).unwrap_or(0.0),
+                        y: request.velocity.map(|v| v.1).unwrap_or(0.0),
+                    }));
+
+                    for tag in request.tags {
+                        entity.add_tag(tag);
+                    }
+
+                    let spawned_id = entity.id.clone();
+                    scene.add_entity(entity);
+                    self.last_spawned_entity_id = Some(spawned_id.clone());
+
+                    if let Some(seq) = request.request_seq {
+                        self.pending_runtime_events.push(RuntimeEvent {
+                            name: format!("spawn_result:{}", seq),
+                            data: Some(SaveValue::Text(spawned_id)),
+                        });
+                    }
+                }
+            }
+        }
+
+        self.rebuild_collision_events();
+
+        if !self.pending_particles.is_empty() {
+            let pending = std::mem::take(&mut self.pending_particles);
+            self.particles.extend(pending);
+        }
+        self.update_emitters(self.delta_time);
+        self.update_particles(self.delta_time);
+
+        if let Some(command) = command {
+            match command {
+                RuntimeCommand::ChangeScene(path) => {
+                    self.queue_scene_change(PathBuf::from(path));
+                }
+                RuntimeCommand::ReloadScene => {
+                    if self.scene_manager.reload_scene().is_ok() {
+                        self.active_scene = self.scene_manager.current_scene.clone();
+                        self.reset_timing_state();
+                        self.game_state.flow = RuntimeGameFlow::Playing;
+                        self.game_state.loading_label = None;
+                    }
+                }
+            }
+        }
+
+        self.last_stage = RuntimeFrameStage::FinalizeFrame;
+    }
+
+
+pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
+        let entity_id = entity_id.into();
+        if self.pending_destroys.iter().any(|request| request.entity_id == entity_id) {
+            return;
+        }
+        self.pending_destroys.push(PendingDestroyRequest { entity_id });
     }
 }
 

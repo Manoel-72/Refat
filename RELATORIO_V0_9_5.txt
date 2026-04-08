@@ -1,0 +1,38 @@
+RS2BR-Engine V0.9.5 - resolucao estavel base
+
+Implementado:
+- Resolucao por eixo X -> Y para Kinematic vs Static
+- Triggers sem bloqueio fisico
+- Flags de contato no RigidBody2D:
+  - grounded
+  - hit_ceiling
+  - hit_left
+  - hit_right
+- Rastreamento de contatos solidos e triggers por frame
+- Eventos runtime emitidos:
+  - collision_enter:<entity_id>:<other_name>
+  - collision_stay:<entity_id>:<other_name>
+  - collision_exit:<entity_id>:<other_name>
+  - trigger_enter:<entity_id>:<other_name>
+  - trigger_stay:<entity_id>:<other_name>
+  - trigger_exit:<entity_id>:<other_name>
+
+Arquivos alterados:
+- src/core/component.rs
+- src/runtime/systems/physics_system.rs
+- src/runtime/systems.rs
+- src/runtime/state.rs
+
+Como testar:
+1. Abrir a cena validation.scene.json
+2. Andar no chao e verificar grounded
+3. Bater na parede e verificar hit_left/hit_right
+4. Pular no teto e verificar hit_ceiling
+5. Entrar e sair do TriggerCircle sem bloqueio
+6. Verificar eventos no runtime na proxima etapa de consumo
+
+Limitacoes conhecidas:
+- foco em Kinematic vs Static
+- nao vira Box2D
+- Kinematic vs Kinematic nao resolve de forma completa
+- nao avancei debug/query/one-way alem da base existente
