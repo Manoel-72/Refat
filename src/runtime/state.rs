@@ -566,6 +566,46 @@ fn rebuild_collision_events(&mut self) {
         self.trigger_stay_contact_ids.clear();
         self.trigger_exit_contact_ids.clear();
 
+        fn diff_names_and_ids(
+            current_names: &[String],
+            previous_names: &[String],
+            current_ids: &[String],
+            previous_ids: &[String],
+        ) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
+            let mut enter_names = Vec::new();
+            let mut stay_names = Vec::new();
+            let mut exit_names = Vec::new();
+            let mut enter_ids = Vec::new();
+            let mut stay_ids = Vec::new();
+            let mut exit_ids = Vec::new();
+
+            for (index, current_id) in current_ids.iter().enumerate() {
+                let current_name = current_names.get(index).cloned().unwrap_or_else(|| current_id.clone());
+                if previous_ids.iter().any(|id| id == current_id) {
+                    stay_ids.push(current_id.clone());
+                    stay_names.push(current_name);
+                } else {
+                    enter_ids.push(current_id.clone());
+                    enter_names.push(current_name);
+                }
+            }
+
+            for previous_id in previous_ids {
+                if current_ids.iter().any(|id| id == previous_id) {
+                    continue;
+                }
+                let previous_name = previous_ids.iter()
+                    .position(|id| id == previous_id)
+                    .and_then(|index| previous_names.get(index))
+                    .cloned()
+                    .unwrap_or_else(|| previous_id.clone());
+                exit_ids.push(previous_id.clone());
+                exit_names.push(previous_name);
+            }
+
+            (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids)
+        }
+
         fn diff_maps(
             current_names_map: &HashMap<String, Vec<String>>,
             previous_names_map: &HashMap<String, Vec<String>>,
@@ -578,35 +618,30 @@ fn rebuild_collision_events(&mut self) {
             stay_ids_out: &mut HashMap<String, Vec<String>>,
             exit_ids_out: &mut HashMap<String, Vec<String>>,
         ) {
-            let mut entity_ids: HashSet<String> = HashSet::new();
-            entity_ids.extend(current_names_map.keys().cloned());
-            entity_ids.extend(previous_names_map.keys().cloned());
-            entity_ids.extend(current_ids_map.keys().cloned());
-            entity_ids.extend(previous_ids_map.keys().cloned());
-
-            for entity_id in entity_ids {
-                let current_names: HashSet<String> = current_names_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-                let previous_names: HashSet<String> = previous_names_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-
-                let mut enter_names: Vec<String> = current_names.difference(&previous_names).cloned().collect();
-                let mut stay_names: Vec<String> = current_names.intersection(&previous_names).cloned().collect();
-                let mut exit_names: Vec<String> = previous_names.difference(&current_names).cloned().collect();
-                enter_names.sort();
-                stay_names.sort();
-                exit_names.sort();
+            for (entity_id, current_ids) in current_ids_map {
+                let current_names = current_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let previous_names = previous_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let previous_ids = previous_ids_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids) =
+                    diff_names_and_ids(current_names, previous_names, current_ids, previous_ids);
                 if !enter_names.is_empty() { enter_names_out.insert(entity_id.clone(), enter_names); }
                 if !stay_names.is_empty() { stay_names_out.insert(entity_id.clone(), stay_names); }
                 if !exit_names.is_empty() { exit_names_out.insert(entity_id.clone(), exit_names); }
+                if !enter_ids.is_empty() { enter_ids_out.insert(entity_id.clone(), enter_ids); }
+                if !stay_ids.is_empty() { stay_ids_out.insert(entity_id.clone(), stay_ids); }
+                if !exit_ids.is_empty() { exit_ids_out.insert(entity_id.clone(), exit_ids); }
+            }
 
-                let current_ids: HashSet<String> = current_ids_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-                let previous_ids: HashSet<String> = previous_ids_map.get(&entity_id).cloned().unwrap_or_default().into_iter().collect();
-
-                let mut enter_ids: Vec<String> = current_ids.difference(&previous_ids).cloned().collect();
-                let mut stay_ids: Vec<String> = current_ids.intersection(&previous_ids).cloned().collect();
-                let mut exit_ids: Vec<String> = previous_ids.difference(&current_ids).cloned().collect();
-                enter_ids.sort();
-                stay_ids.sort();
-                exit_ids.sort();
+            for (entity_id, previous_ids) in previous_ids_map {
+                if current_ids_map.contains_key(entity_id) {
+                    continue;
+                }
+                let previous_names = previous_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids) =
+                    diff_names_and_ids(&[], previous_names, &[], previous_ids);
+                if !enter_names.is_empty() { enter_names_out.insert(entity_id.clone(), enter_names); }
+                if !stay_names.is_empty() { stay_names_out.insert(entity_id.clone(), stay_names); }
+                if !exit_names.is_empty() { exit_names_out.insert(entity_id.clone(), exit_names); }
                 if !enter_ids.is_empty() { enter_ids_out.insert(entity_id.clone(), enter_ids); }
                 if !stay_ids.is_empty() { stay_ids_out.insert(entity_id.clone(), stay_ids); }
                 if !exit_ids.is_empty() { exit_ids_out.insert(entity_id.clone(), exit_ids); }
@@ -893,11 +928,10 @@ fn rebuild_collision_events(&mut self) {
 
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
 
-        // swap() é O(1) — apenas troca ponteiros internos; clear() reutiliza a memória já alocada
-        std::mem::swap(&mut self.previous_collision_contacts,    &mut self.collision_contacts);
-        std::mem::swap(&mut self.previous_collision_contact_ids, &mut self.collision_contact_ids);
-        std::mem::swap(&mut self.previous_trigger_contacts,      &mut self.trigger_contacts);
-        std::mem::swap(&mut self.previous_trigger_contact_ids,   &mut self.trigger_contact_ids);
+        self.previous_collision_contacts = self.collision_contacts.clone();
+        self.previous_collision_contact_ids = self.collision_contact_ids.clone();
+        self.previous_trigger_contacts = self.trigger_contacts.clone();
+        self.previous_trigger_contact_ids = self.trigger_contact_ids.clone();
 
         self.collision_contacts.clear();
         self.collision_contact_ids.clear();

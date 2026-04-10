@@ -315,6 +315,31 @@ impl Default for AnimationClip {
     }
 }
 
+fn default_locomotion_threshold() -> f32 { 6.0 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimationState {
+    #[serde(default)]
+    pub clip: String,
+    #[serde(default)]
+    pub looped: bool,
+    #[serde(default)]
+    pub interruptible: bool,
+    #[serde(default)]
+    pub next_state: String,
+}
+
+impl Default for AnimationState {
+    fn default() -> Self {
+        Self {
+            clip: "idle".to_string(),
+            looped: true,
+            interruptible: true,
+            next_state: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Animator {
     #[serde(default)]
@@ -330,12 +355,45 @@ pub struct Animator {
     /// Clip anterior — usado pelo runtime para detectar troca e resetar o timer.
     #[serde(default)]
     pub prev_clip: String,
+    #[serde(default)]
+    pub state_mode: bool,
+    #[serde(default)]
+    pub states: HashMap<String, AnimationState>,
+    #[serde(default)]
+    pub current_state: String,
+    #[serde(default)]
+    pub default_state: String,
+    #[serde(default)]
+    pub queued_state: String,
+    #[serde(default = "default_locomotion_threshold")]
+    pub locomotion_threshold: f32,
 }
 
 impl Default for Animator {
     fn default() -> Self {
         let mut clips = HashMap::new();
         clips.insert("idle".to_string(), AnimationClip::default());
+
+        let mut states = HashMap::new();
+        states.insert("idle".to_string(), AnimationState {
+            clip: "idle".to_string(),
+            looped: true,
+            interruptible: true,
+            next_state: String::new(),
+        });
+        states.insert("run".to_string(), AnimationState {
+            clip: "run".to_string(),
+            looped: true,
+            interruptible: true,
+            next_state: String::new(),
+        });
+        states.insert("attack".to_string(), AnimationState {
+            clip: "attack".to_string(),
+            looped: false,
+            interruptible: false,
+            next_state: "idle".to_string(),
+        });
+
         Self {
             clips,
             current: "idle".to_string(),
@@ -343,6 +401,12 @@ impl Default for Animator {
             playing: true,
             looped: true,
             prev_clip: String::new(),
+            state_mode: false,
+            states,
+            current_state: "idle".to_string(),
+            default_state: "idle".to_string(),
+            queued_state: String::new(),
+            locomotion_threshold: default_locomotion_threshold(),
         }
     }
 }

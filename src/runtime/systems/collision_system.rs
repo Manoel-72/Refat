@@ -46,6 +46,78 @@ impl RuntimeCollider {
             Shape2D::Box { .. } => (self.width.min(self.height) * 0.5).max(0.0),
         }
     }
+
+    #[inline]
+    pub fn aabb_bounds(&self) -> (f32, f32, f32, f32) {
+        let half_w = self.width * 0.5;
+        let half_h = self.height * 0.5;
+        (
+            self.center_x - half_w,
+            self.center_y - half_h,
+            self.center_x + half_w,
+            self.center_y + half_h,
+        )
+    }
+}
+
+
+#[derive(Debug, Default, Clone)]
+pub struct SpatialHashGrid {
+    cell_size: f32,
+    buckets: std::collections::HashMap<(i32, i32), Vec<usize>>,
+}
+
+impl SpatialHashGrid {
+    /// Broad phase simples por grid espacial.
+    /// Mudança local/segura: reduz pares candidatos sem alterar a física final.
+    pub fn build(colliders: &[RuntimeCollider]) -> Self {
+        const DEFAULT_CELL_SIZE: f32 = 128.0;
+
+        let mut grid = Self {
+            cell_size: DEFAULT_CELL_SIZE,
+            buckets: std::collections::HashMap::new(),
+        };
+
+        for (index, collider) in colliders.iter().enumerate() {
+            let (min_x, min_y, max_x, max_y) = collider.aabb_bounds();
+            let min_cell_x = (min_x / grid.cell_size).floor() as i32;
+            let max_cell_x = (max_x / grid.cell_size).floor() as i32;
+            let min_cell_y = (min_y / grid.cell_size).floor() as i32;
+            let max_cell_y = (max_y / grid.cell_size).floor() as i32;
+
+            for cell_y in min_cell_y..=max_cell_y {
+                for cell_x in min_cell_x..=max_cell_x {
+                    grid.buckets.entry((cell_x, cell_y)).or_default().push(index);
+                }
+            }
+        }
+
+        grid
+    }
+
+    #[inline]
+    pub fn collect_candidates(&self, collider: &RuntimeCollider, out: &mut Vec<usize>) {
+        out.clear();
+
+        let (min_x, min_y, max_x, max_y) = collider.aabb_bounds();
+        let min_cell_x = (min_x / self.cell_size).floor() as i32;
+        let max_cell_x = (max_x / self.cell_size).floor() as i32;
+        let min_cell_y = (min_y / self.cell_size).floor() as i32;
+        let max_cell_y = (max_y / self.cell_size).floor() as i32;
+
+        for cell_y in min_cell_y..=max_cell_y {
+            for cell_x in min_cell_x..=max_cell_x {
+                let Some(bucket) = self.buckets.get(&(cell_x, cell_y)) else {
+                    continue;
+                };
+                for &index in bucket {
+                    if !out.contains(&index) {
+                        out.push(index);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Vetor de separação mínima retornado pela resolução MTV.
@@ -384,6 +456,8 @@ mod tests {
             collision_enabled: true,
             layer,
             mask,
+            one_way: false,
+            one_way_margin: 0.0,
             entity_ptr: std::ptr::null(),
             entity_id: format!("{layer}:{mask}"),
             entity_name: String::new(),

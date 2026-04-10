@@ -372,22 +372,44 @@ pub fn advance_animator(entity: &mut Entity, delta_time: f32) {
 }
 
 fn next_animator_frame(entity: &mut Entity, delta_time: f32) -> Option<String> {
+    let velocity = entity.components.iter().find_map(|component| {
+        if let Component::Velocity(velocity) = component {
+            Some((velocity.x, velocity.y))
+        } else {
+            None
+        }
+    }).unwrap_or((0.0, 0.0));
+
+    let grounded = entity.components.iter().find_map(|component| {
+        if let Component::RigidBody2D(rb) = component {
+            Some(rb.grounded)
+        } else {
+            None
+        }
+    }).unwrap_or(false);
+
     for component in &mut entity.components {
         if let Component::Animator(animator) = component {
-            return compute_next_animation_frame(animator, delta_time);
+            return compute_next_animation_frame(animator, delta_time, velocity, grounded);
         }
     }
     None
 }
 
-fn compute_next_animation_frame(animator: &mut Animator, delta_time: f32) -> Option<String> {
+fn compute_next_animation_frame(
+    animator: &mut Animator,
+    delta_time: f32,
+    velocity: (f32, f32),
+    grounded: bool,
+) -> Option<String> {
     if !animator.playing {
         return None;
     }
 
+    sync_animator_state(animator, velocity, grounded);
+
     let current_clip_name = if animator.current.trim().is_empty() { "idle" } else { animator.current.trim() };
 
-    // Reseta o timer quando o clip muda (fix do bug V0.8)
     if animator.prev_clip != current_clip_name {
         animator.timer = 0.0;
         animator.prev_clip = current_clip_name.to_string();
@@ -410,4 +432,124 @@ fn compute_next_animation_frame(animator: &mut Animator, delta_time: f32) -> Opt
     }
 
     clip.frames.get(frame_index).cloned()
+}
+
+fn sync_animator_state(animator: &mut Animator, velocity: (f32, f32), grounded: bool) {
+    if !animator.state_mode {
+        return;
+    }
+
+    ensure_animator_states(animator);
+
+    if animator.default_state.trim().is_empty() {
+        animator.default_state = "idle".to_string();
+    }
+    if animator.current_state.trim().is_empty() {
+        animator.current_state = animator.default_state.clone();
+    }
+
+    let current_state_name = animator.current_state.clone();
+    let current_state = animator.states.get(current_state_name.as_str()).cloned();
+    let current_finished = is_current_state_finished(animator);
+
+    let queued_state = animator.queued_state.trim().to_string();
+    if !queued_state.is_empty() && animator.states.contains_key(queued_state.as_str()) {
+        let interruptible = current_state.as_ref().map(|state| state.interruptible).unwrap_or(true);
+        if interruptible || current_finished || queued_state == current_state_name {
+            apply_animator_state(animator, queued_state.as_str());
+            animator.queued_state.clear();
+            return;
+        }
+    }
+
+    if let Some(state) = current_state {
+        if !state.looped && current_finished {
+            let next_state = if state.next_state.trim().is_empty() {
+                animator.default_state.clone()
+            } else {
+                state.next_state.clone()
+            };
+            if animator.states.contains_key(next_state.as_str()) {
+                apply_animator_state(animator, next_state.as_str());
+                return;
+            }
+        }
+
+        if !state.interruptible && !current_finished {
+            apply_state_clip(animator, &state);
+            return;
+        }
+    }
+
+    let locomotion_threshold = animator.locomotion_threshold.max(0.0);
+    let speed_x = velocity.0.abs();
+    let speed_y = velocity.1;
+
+    let desired_state = if !grounded && speed_y < -locomotion_threshold && animator.states.contains_key("jump") {
+        "jump".to_string()
+    } else if !grounded && speed_y > locomotion_threshold && animator.states.contains_key("fall") {
+        "fall".to_string()
+    } else if speed_x > locomotion_threshold {
+        if animator.states.contains_key("run") {
+            "run".to_string()
+        } else if animator.states.contains_key("walk") {
+            "walk".to_string()
+        } else {
+            animator.default_state.clone()
+        }
+    } else {
+        animator.default_state.clone()
+    };
+
+    if animator.states.contains_key(desired_state.as_str()) {
+        apply_animator_state(animator, desired_state.as_str());
+    }
+}
+
+fn ensure_animator_states(animator: &mut Animator) {
+    let clip_names: Vec<String> = animator.clips.keys().cloned().collect();
+    for clip_name in clip_names {
+        animator.states.entry(clip_name.clone()).or_insert_with(|| {
+            let lower = clip_name.to_lowercase();
+            let looped = !matches!(lower.as_str(), "attack" | "hit" | "death");
+            let interruptible = !matches!(lower.as_str(), "attack" | "hit" | "death");
+            let next_state = if matches!(lower.as_str(), "attack" | "hit") {
+                "idle".to_string()
+            } else {
+                String::new()
+            };
+            crate::core::component::AnimationState {
+                clip: clip_name.clone(),
+                looped,
+                interruptible,
+                next_state,
+            }
+        });
+    }
+}
+
+fn is_current_state_finished(animator: &Animator) -> bool {
+    let state_name = if animator.current_state.trim().is_empty() {
+        animator.default_state.as_str()
+    } else {
+        animator.current_state.as_str()
+    };
+    let Some(state) = animator.states.get(state_name) else { return false; };
+    let Some(clip) = animator.clips.get(state.clip.as_str()) else { return false; };
+    !state.looped && clip.fps > f32::EPSILON && !clip.frames.is_empty() && animator.timer >= (clip.frames.len() as f32 / clip.fps)
+}
+
+fn apply_animator_state(animator: &mut Animator, state_name: &str) {
+    let Some(state) = animator.states.get(state_name).cloned() else { return; };
+    animator.current_state = state_name.to_string();
+    apply_state_clip(animator, &state);
+}
+
+fn apply_state_clip(animator: &mut Animator, state: &crate::core::component::AnimationState) {
+    animator.current = if state.clip.trim().is_empty() {
+        animator.current_state.clone()
+    } else {
+        state.clip.clone()
+    };
+    animator.looped = state.looped;
 }

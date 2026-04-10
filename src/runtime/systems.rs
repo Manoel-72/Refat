@@ -26,6 +26,65 @@ pub enum RuntimeCommand {
     ReloadScene,
 }
 
+
+#[inline]
+fn push_unique_string(values: &mut Vec<String>, value: &str) {
+    if values.iter().any(|existing| existing == value) {
+        return;
+    }
+    values.push(value.to_string());
+}
+
+#[inline]
+fn find_name_by_id(ids: &[String], names: &[String], target_id: &str) -> String {
+    ids.iter()
+        .position(|id| id == target_id)
+        .and_then(|index| names.get(index))
+        .cloned()
+        .unwrap_or_else(|| target_id.to_string())
+}
+
+#[derive(Default)]
+struct ContactDiff {
+    enter_names: Vec<String>,
+    stay_names: Vec<String>,
+    exit_names: Vec<String>,
+    enter_ids: Vec<String>,
+    stay_ids: Vec<String>,
+    exit_ids: Vec<String>,
+}
+
+fn build_contact_diff(
+    current_names: &[String],
+    current_ids: &[String],
+    previous_names: &[String],
+    previous_ids: &[String],
+) -> ContactDiff {
+    let mut diff = ContactDiff::default();
+
+    for (index, current_id) in current_ids.iter().enumerate() {
+        let current_name = current_names.get(index).cloned().unwrap_or_else(|| current_id.clone());
+        if previous_ids.iter().any(|id| id == current_id) {
+            push_unique_string(&mut diff.stay_ids, current_id);
+            push_unique_string(&mut diff.stay_names, &current_name);
+        } else {
+            push_unique_string(&mut diff.enter_ids, current_id);
+            push_unique_string(&mut diff.enter_names, &current_name);
+        }
+    }
+
+    for previous_id in previous_ids {
+        if current_ids.iter().any(|id| id == previous_id) {
+            continue;
+        }
+        let previous_name = find_name_by_id(previous_ids, previous_names, previous_id);
+        push_unique_string(&mut diff.exit_ids, previous_id);
+        push_unique_string(&mut diff.exit_names, &previous_name);
+    }
+
+    diff
+}
+
 pub fn update_entities_runtime(
     entities: &mut [Entity],
     delta_time: f32,
@@ -60,6 +119,8 @@ pub fn update_entities_runtime(
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
+    // Broad phase simples por grid espacial para reduzir pares no hot path.
+    let collision_grid = collision_system::SpatialHashGrid::build(&colliders);
     let mut tag_index: HashMap<String, Vec<(String, String)>> = HashMap::new();
     collect_tag_index(entities, &mut tag_index);
     let camera_view = camera::find_main_camera(entities);
@@ -75,6 +136,7 @@ pub fn update_entities_runtime(
         camera_follow_target,
         ground_y,
         &colliders,
+        &collision_grid,
         &tag_index,
         save_data,
         session_state,
@@ -112,6 +174,7 @@ fn update_entities_runtime_recursive(
     camera_follow_target: &mut Option<(f32, f32)>,
     ground_y: f32,
     colliders: &[collision_system::RuntimeCollider],
+    collision_grid: &collision_system::SpatialHashGrid,
     tag_index: &HashMap<String, Vec<(String, String)>>,
     save_data: &mut crate::runtime::save::SaveData,
     session_state: &mut std::collections::HashMap<String, crate::runtime::save::SaveValue>,
@@ -168,32 +231,26 @@ fn update_entities_runtime_recursive(
 
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
-        let collision_entries = collect_collision_entries(entity, entity_ptr, &my_collider_data, colliders);
+        let collision_entries = collect_collision_entries(entity, entity_ptr, &my_collider_data, colliders, collision_grid);
         let collision_names: Vec<String> = collision_entries.iter().map(|entry| entry.name.clone()).collect();
         let collision_ids: Vec<String> = collision_entries.iter().map(|entry| entry.id.clone()).collect();
-        let previous_collision_names = previous_collision_contacts.get(&entity.id).cloned().unwrap_or_default();
-        let previous_collision_ids = previous_collision_contact_ids.get(&entity.id).cloned().unwrap_or_default();
+        let previous_collision_names = previous_collision_contacts.get(&entity.id).map(Vec::as_slice).unwrap_or(&[]);
+        let previous_collision_ids = previous_collision_contact_ids.get(&entity.id).map(Vec::as_slice).unwrap_or(&[]);
         collision_contacts.insert(entity.id.clone(), collision_names.clone());
         collision_contact_ids.insert(entity.id.clone(), collision_ids.clone());
 
-        let current_collision_set: std::collections::HashSet<String> = collision_names.iter().cloned().collect();
-        let previous_collision_set: std::collections::HashSet<String> = previous_collision_names.iter().cloned().collect();
-        let current_collision_id_set: std::collections::HashSet<String> = collision_ids.iter().cloned().collect();
-        let previous_collision_id_set: std::collections::HashSet<String> = previous_collision_ids.iter().cloned().collect();
-
-        let mut collision_enter_names: Vec<String> = current_collision_set.difference(&previous_collision_set).cloned().collect();
-        let mut collision_stay_names: Vec<String> = current_collision_set.intersection(&previous_collision_set).cloned().collect();
-        let mut collision_exit_names: Vec<String> = previous_collision_set.difference(&current_collision_set).cloned().collect();
-        let mut collision_enter_ids: Vec<String> = current_collision_id_set.difference(&previous_collision_id_set).cloned().collect();
-        let mut collision_stay_ids: Vec<String> = current_collision_id_set.intersection(&previous_collision_id_set).cloned().collect();
-        let mut collision_exit_ids: Vec<String> = previous_collision_id_set.difference(&current_collision_id_set).cloned().collect();
-
-        collision_enter_names.sort();
-        collision_stay_names.sort();
-        collision_exit_names.sort();
-        collision_enter_ids.sort();
-        collision_stay_ids.sort();
-        collision_exit_ids.sort();
+        let collision_diff = build_contact_diff(
+            &collision_names,
+            &collision_ids,
+            previous_collision_names,
+            previous_collision_ids,
+        );
+        let collision_enter_names = collision_diff.enter_names;
+        let collision_stay_names = collision_diff.stay_names;
+        let collision_exit_names = collision_diff.exit_names;
+        let collision_enter_ids = collision_diff.enter_ids;
+        let collision_stay_ids = collision_diff.stay_ids;
+        let collision_exit_ids = collision_diff.exit_ids;
 
         // Restaura grounded para o valor correto antes de rodar o Lua.
         // apply_gravity() zera grounded como efeito colateral — mas o Lua
@@ -241,10 +298,10 @@ fn update_entities_runtime_recursive(
         }
 
         let collision_state =
-            handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders);
+            handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders, collision_grid);
         physics_system::clamp_to_ground(entity, ground_y, script_data.collider_half_height);
 
-        let final_contacts = collect_contact_frame(entity, entity_ptr, colliders);
+        let final_contacts = collect_contact_frame(entity, entity_ptr, colliders, collision_grid);
         collision_contacts.insert(entity.id.clone(), final_contacts.solid_names());
         collision_contact_ids.insert(entity.id.clone(), final_contacts.solid_ids());
         trigger_contacts.insert(entity.id.clone(), final_contacts.trigger_names());
@@ -280,6 +337,7 @@ fn update_entities_runtime_recursive(
             camera_follow_target,
             ground_y,
             colliders,
+            collision_grid,
             tag_index,
             save_data,
             session_state,
@@ -325,6 +383,7 @@ fn handle_entity_collisions(
     my_collider_data: Option<collision_system::RuntimeCollider>,
     old_position: (f32, f32),
     colliders: &[collision_system::RuntimeCollider],
+    collision_grid: &collision_system::SpatialHashGrid,
 ) -> CollisionState {
     const CONTACT_EPSILON: f32 = 0.001;
 
@@ -342,7 +401,10 @@ fn handle_entity_collisions(
 
     // Passo X
     if let Some(mut current_col) = find_entity_collider(entity) {
-        for other in colliders {
+        let mut candidate_indices = Vec::new();
+        collision_grid.collect_candidates(&current_col, &mut candidate_indices);
+        for &candidate_index in &candidate_indices {
+            let other = &colliders[candidate_index];
             if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
             if !collision_system::can_collide(&current_col, other) { continue; }
             if !collision_system::intersects(&current_col, other) { continue; }
@@ -389,8 +451,11 @@ fn handle_entity_collisions(
     // Passo Y
     if let Some(mut current_col) = find_entity_collider(entity) {
         let falling_or_idle = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
+        let mut candidate_indices = Vec::new();
+        collision_grid.collect_candidates(&current_col, &mut candidate_indices);
 
-        for other in colliders {
+        for &candidate_index in &candidate_indices {
+            let other = &colliders[candidate_index];
             if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
             if !collision_system::can_collide(&current_col, other) { continue; }
             if !collision_system::intersects(&current_col, other) { continue; }
@@ -457,13 +522,17 @@ fn collect_contact_frame(
     entity: &Entity,
     entity_ptr: *const Entity,
     colliders: &[collision_system::RuntimeCollider],
+    collision_grid: &collision_system::SpatialHashGrid,
 ) -> ContactFrame {
     let Some(my_col) = find_entity_collider(entity) else {
         return ContactFrame::default();
     };
 
     let mut frame = ContactFrame::default();
-    for other in colliders {
+    let mut candidate_indices = Vec::new();
+    collision_grid.collect_candidates(&my_col, &mut candidate_indices);
+    for &candidate_index in &candidate_indices {
+        let other = &colliders[candidate_index];
         if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
         if !collision_system::can_collide(&my_col, other) { continue; }
         if !collision_system::intersects(&my_col, other) { continue; }
@@ -478,16 +547,12 @@ fn collect_contact_frame(
             || matches!(other.body_type, BodyType::Trigger);
 
         if either_trigger {
-            frame.trigger_entries.push(entry);
+            push_unique_entry(&mut frame.trigger_entries, entry);
         } else {
-            frame.solid_entries.push(entry);
+            push_unique_entry(&mut frame.solid_entries, entry);
         }
     }
 
-    frame.solid_entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
-    frame.solid_entries.dedup_by(|a, b| a.id == b.id);
-    frame.trigger_entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
-    frame.trigger_entries.dedup_by(|a, b| a.id == b.id);
     frame
 }
 
@@ -560,33 +625,38 @@ impl ContactFrame {
     fn trigger_names(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.name.clone()).collect() }
     fn trigger_ids(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.id.clone()).collect() }
 }
+
+#[inline]
+fn push_unique_entry(entries: &mut Vec<CollisionEntry>, entry: CollisionEntry) {
+    if entries.iter().any(|existing| existing.id == entry.id) {
+        return;
+    }
+    entries.push(entry);
+}
 fn collect_collision_entries(
-    entity: &Entity,
+    _entity: &Entity,
     entity_ptr: *const Entity,
     my_collider_data: &Option<collision_system::RuntimeCollider>,
     colliders: &[collision_system::RuntimeCollider],
+    collision_grid: &collision_system::SpatialHashGrid,
 ) -> Vec<CollisionEntry> {
-    let Some(my_col) = my_collider_data.clone() else {
+    let Some(my_col) = my_collider_data.as_ref() else {
         return Vec::new();
     };
     let mut entries = Vec::new();
-    for other in colliders {
+    let mut candidate_indices = Vec::new();
+    collision_grid.collect_candidates(my_col, &mut candidate_indices);
+    for &candidate_index in &candidate_indices {
+        let other = &colliders[candidate_index];
         if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-        if !collision_system::can_collide(&my_col, other) { continue; }
-        if collision_system::intersects(&my_col, other) {
-            println!(
-                "[COLLISION_QUERY] {} <-> {}",
-                if entity.name.trim().is_empty() { &entity.id } else { &entity.name },
-                if other.entity_name.trim().is_empty() { &other.entity_id } else { &other.entity_name }
-            );
-            entries.push(CollisionEntry {
+        if !collision_system::can_collide(my_col, other) { continue; }
+        if collision_system::intersects(my_col, other) {
+            push_unique_entry(&mut entries, CollisionEntry {
                 id: other.entity_id.clone(),
                 name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
             });
         }
     }
-    entries.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
-    entries.dedup_by(|a, b| a.id == b.id);
     entries
 }
 

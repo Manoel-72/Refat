@@ -7,7 +7,7 @@
 use eframe::egui;
 use crate::{
     assets::is_rs2_script_file,
-    component::{AnimationClip, Animator, Audio, BodyType, BoxCollider, Shape2D, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
+    component::{Animator, Audio, BodyType, BoxCollider, Shape2D, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
 };
 use crate::runtime::script::is_valid_rs2_script;
 use super::{warnings::EditorWarningSeverity, EditorApp};
@@ -625,6 +625,155 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
 }
 
 
+
+fn relative_to_project_or_full(project_root: &std::path::Path, path: &std::path::Path) -> String {
+    if let Ok(relative) = path.strip_prefix(project_root) {
+        return relative.to_string_lossy().replace('\\', "/");
+    }
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn draw_text_label_component_ui(
+    ui: &mut egui::Ui,
+    index: usize,
+    label: &TextLabel,
+    updated_components: &mut Vec<(usize, Component)>,
+) {
+    let mut text = label.text.clone();
+    let mut font_size = label.font_size;
+    let mut color_r = label.color_r;
+    let mut color_g = label.color_g;
+    let mut color_b = label.color_b;
+    let mut color_a = label.color_a;
+    let mut screen_space = label.screen_space;
+    let mut changed = false;
+
+    egui::Grid::new(format!("text_label_{}", index))
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Texto:");
+            changed |= ui.text_edit_singleline(&mut text).changed();
+            ui.end_row();
+
+            ui.label("Fonte:");
+            changed |= ui.add(egui::Slider::new(&mut font_size, 8.0..=96.0)).changed();
+            ui.end_row();
+
+            ui.label("Screen space:");
+            changed |= ui.checkbox(&mut screen_space, "").changed();
+            ui.end_row();
+
+            ui.label("Cor R:");
+            changed |= ui.add(egui::Slider::new(&mut color_r, 0.0..=1.0)).changed();
+            ui.end_row();
+
+            ui.label("Cor G:");
+            changed |= ui.add(egui::Slider::new(&mut color_g, 0.0..=1.0)).changed();
+            ui.end_row();
+
+            ui.label("Cor B:");
+            changed |= ui.add(egui::Slider::new(&mut color_b, 0.0..=1.0)).changed();
+            ui.end_row();
+
+            ui.label("Alpha:");
+            changed |= ui.add(egui::Slider::new(&mut color_a, 0.0..=1.0)).changed();
+            ui.end_row();
+        });
+
+    if changed {
+        updated_components.push((
+            index,
+            Component::TextLabel(TextLabel {
+                text,
+                font_size,
+                color_r,
+                color_g,
+                color_b,
+                color_a,
+                screen_space,
+            }),
+        ));
+    }
+}
+
+fn draw_ui_button_component_ui(
+    ui: &mut egui::Ui,
+    index: usize,
+    button: &UIButton,
+    updated_components: &mut Vec<(usize, Component)>,
+) {
+    let mut edited = button.clone();
+    let mut changed = false;
+
+    egui::Grid::new(format!("ui_button_{}", index))
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Texto:");
+            changed |= ui.text_edit_singleline(&mut edited.text).changed();
+            ui.end_row();
+
+            ui.label("Label:");
+            changed |= ui.text_edit_singleline(&mut edited.label).changed();
+            ui.end_row();
+
+            ui.label("Ação:");
+            changed |= ui.text_edit_singleline(&mut edited.action).changed();
+            ui.end_row();
+
+            ui.label("Cena alvo:");
+            changed |= ui.text_edit_singleline(&mut edited.target_scene).changed();
+            ui.end_row();
+
+            ui.label("Fechar runtime:");
+            changed |= ui.checkbox(&mut edited.close_runtime, "").changed();
+            ui.end_row();
+
+            ui.label("Largura:");
+            changed |= ui.add(egui::Slider::new(&mut edited.width, 32.0..=512.0)).changed();
+            ui.end_row();
+
+            ui.label("Altura:");
+            changed |= ui.add(egui::Slider::new(&mut edited.height, 20.0..=256.0)).changed();
+            ui.end_row();
+
+            ui.label("Fonte:");
+            changed |= ui.add(egui::Slider::new(&mut edited.font_size, 8.0..=72.0)).changed();
+            ui.end_row();
+
+            ui.label("Screen space:");
+            changed |= ui.checkbox(&mut edited.screen_space, "").changed();
+            ui.end_row();
+        });
+
+    ui.collapsing("Cores do botão", |ui| {
+        egui::Grid::new(format!("ui_button_colors_{}", index))
+            .num_columns(2)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                for (name, value) in [
+                    ("BG R", &mut edited.color_r),
+                    ("BG G", &mut edited.color_g),
+                    ("BG B", &mut edited.color_b),
+                    ("BG A", &mut edited.color_a),
+                    ("TXT R", &mut edited.text_r),
+                    ("TXT G", &mut edited.text_g),
+                    ("TXT B", &mut edited.text_b),
+                    ("TXT A", &mut edited.text_a),
+                ] {
+                    ui.label(name);
+                    changed |= ui.add(egui::Slider::new(value, 0.0..=1.0)).changed();
+                    ui.end_row();
+                }
+            });
+    });
+
+    if changed {
+        updated_components.push((index, Component::UIButton(edited)));
+    }
+}
+
 fn draw_audio_component_ui(
     app: &mut EditorApp,
     ui: &mut egui::Ui,
@@ -1080,411 +1229,41 @@ fn draw_lua_script_component_ui(
 
 fn draw_animator_component_ui(
     ui: &mut egui::Ui,
-    index: usize,
+    _index: usize,
     animator: &Animator,
-    updated_components: &mut Vec<(usize, Component)>,
+    _updated_components: &mut Vec<(usize, Component)>,
 ) {
-    let mut current = animator.current.clone();
-    let mut fps = animator
-        .clips
-        .get(animator.current.as_str())
-        .map(|clip| clip.fps)
-        .unwrap_or(8.0);
-    let mut frames: Vec<String> = animator
-        .clips
-        .get(animator.current.as_str())
-        .map(|clip| clip.frames.clone())
-        .unwrap_or_default();
-    let mut playing = animator.playing;
-    let mut looped = animator.looped;
-    let mut changed = false;
+    let state_count = animator.states.len();
+    let clip_count = animator.clips.len();
+    let current_state = if animator.current_state.trim().is_empty() {
+        "idle"
+    } else {
+        animator.current_state.as_str()
+    };
+    let current_clip = if animator.current.trim().is_empty() {
+        "idle"
+    } else {
+        animator.current.as_str()
+    };
 
-    // ── Configurações básicas ──────────────────────────────────
     egui::Frame::none()
         .fill(egui::Color32::from_rgb(26, 32, 42))
         .rounding(5.0)
-        .inner_margin(egui::Margin::same(8.0))
+        .inner_margin(egui::Margin::same(10.0))
         .show(ui, |ui| {
-            egui::Grid::new(format!("animator_cfg_{}", index))
-                .num_columns(2)
-                .spacing([12.0, 5.0])
-                .show(ui, |ui| {
-                    ui.label(egui::RichText::new("Clip:").strong());
-                    changed |= ui.text_edit_singleline(&mut current)
-                        .on_hover_text("Nome do clip de animação atual")
-                        .changed();
-                    ui.end_row();
-
-                    ui.label(egui::RichText::new("FPS:").strong());
-                    ui.horizontal(|ui| {
-                        changed |= ui.add(
-                            egui::DragValue::new(&mut fps)
-                                .speed(0.5)
-                                .range(1.0..=60.0)
-                                .suffix(" fps"),
-                        ).on_hover_text("Quadros por segundo da animação").changed();
-                        let duration = if fps > 0.0 { frames.len() as f32 / fps } else { 0.0 };
-                        ui.label(
-                            egui::RichText::new(format!("= {:.2}s", duration))
-                                .small()
-                                .color(egui::Color32::from_rgb(139, 148, 158)),
-                        );
-                    });
-                    ui.end_row();
-
-                    ui.label(egui::RichText::new("Playing:").strong());
-                    changed |= ui.checkbox(&mut playing, "")
-                        .on_hover_text("Animação tocando no runtime").changed();
-                    ui.end_row();
-
-                    ui.label(egui::RichText::new("Loop:").strong());
-                    changed |= ui.checkbox(&mut looped, "")
-                        .on_hover_text("Repete a animação ao chegar no fim").changed();
-                    ui.end_row();
-                });
-        });
-
-    ui.add_space(6.0);
-
-    // ── Cabeçalho da lista de frames ──────────────────────────
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(format!("Frames  ({})", frames.len()))
-                .strong()
-                .size(12.0),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.add(
-                egui::Button::new(
-                    egui::RichText::new("Ordenar A-Z").small()
-                )
-                .min_size(egui::vec2(80.0, 18.0))
-            ).on_hover_text("Ordena os frames em ordem alfabética (útil quando os sprites têm numeração no nome)").clicked() {
-                frames.sort();
-                changed = true;
-            }
-            if ui.add(
-                egui::Button::new(egui::RichText::new("Limpar").small())
-                    .min_size(egui::vec2(54.0, 18.0))
-            ).on_hover_text("Remove todos os frames do clip").clicked() {
-                frames.clear();
-                changed = true;
-            }
-        });
-    });
-
-    ui.label(
-        egui::RichText::new("Cole paths de sprites abaixo, um por linha. Arraste sprites do Asset Browser para cá.")
-            .small()
-            .color(egui::Color32::from_rgb(100, 115, 135)),
-    );
-
-    // ── Lista visual de frames ─────────────────────────────────
-    let frame_count = frames.len();
-    let mut to_delete: Option<usize> = None;
-    let mut to_move_up: Option<usize> = None;
-    let mut to_move_down: Option<usize> = None;
-
-    if frame_count == 0 {
-        egui::Frame::none()
-            .fill(egui::Color32::from_rgb(20, 26, 35))
-            .rounding(4.0)
-            .inner_margin(egui::Margin::same(10.0))
-            .show(ui, |ui| {
-                ui.centered_and_justified(|ui| {
-                    ui.label(
-                        egui::RichText::new("Nenhum frame. Cole paths abaixo ou use o campo de texto.")
-                            .small()
-                            .color(egui::Color32::from_rgb(80, 95, 115)),
-                    );
-                });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("🎞 Animator Workspace").strong());
+                ui.separator();
+                ui.label(format!("Clips: {}", clip_count));
+                ui.separator();
+                ui.label(format!("Estados: {}", state_count));
             });
-    } else {
-        egui::ScrollArea::vertical()
-            .id_source(format!("anim_frames_{}", index))
-            .max_height(180.0)
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                for (i, frame) in frames.iter().enumerate() {
-                    egui::Frame::none()
-                        .fill(if i % 2 == 0 {
-                            egui::Color32::from_rgb(24, 30, 40)
-                        } else {
-                            egui::Color32::from_rgb(28, 35, 46)
-                        })
-                        .rounding(3.0)
-                        .inner_margin(egui::Margin { left: 8.0, right: 4.0, top: 2.0, bottom: 2.0 })
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                // Número do frame
-                                ui.label(
-                                    egui::RichText::new(format!("{:>2}.", i + 1))
-                                        .small()
-                                        .monospace()
-                                        .color(egui::Color32::from_rgb(88, 166, 255)),
-                                );
-                                // Nome do arquivo (só o final do path)
-                                let display = frame
-                                    .split(['/', '\\'])
-                                    .last()
-                                    .unwrap_or(frame.as_str());
-                                ui.label(
-                                    egui::RichText::new(display)
-                                        .small()
-                                        .color(egui::Color32::from_rgb(210, 220, 235)),
-                                )
-                                .on_hover_text(frame.as_str());
-
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.add(
-                                        egui::Button::new(egui::RichText::new("X").small().color(egui::Color32::from_rgb(200, 80, 80)))
-                                            .min_size(egui::vec2(18.0, 16.0))
-                                            .frame(false)
-                                    ).on_hover_text("Remover este frame").clicked() {
-                                        to_delete = Some(i);
-                                    }
-                                    if i + 1 < frame_count {
-                                        if ui.add(
-                                            egui::Button::new(egui::RichText::new("v").small())
-                                                .min_size(egui::vec2(16.0, 16.0))
-                                                .frame(false)
-                                        ).on_hover_text("Mover para baixo").clicked() {
-                                            to_move_down = Some(i);
-                                        }
-                                    }
-                                    if i > 0 {
-                                        if ui.add(
-                                            egui::Button::new(egui::RichText::new("^").small())
-                                                .min_size(egui::vec2(16.0, 16.0))
-                                                .frame(false)
-                                        ).on_hover_text("Mover para cima").clicked() {
-                                            to_move_up = Some(i);
-                                        }
-                                    }
-                                });
-                            });
-                        });
-                }
-            });
-    }
-
-    // Aplica ações da lista
-    if let Some(i) = to_delete {
-        frames.remove(i);
-        changed = true;
-    }
-    if let Some(i) = to_move_up {
-        frames.swap(i, i - 1);
-        changed = true;
-    }
-    if let Some(i) = to_move_down {
-        frames.swap(i, i + 1);
-        changed = true;
-    }
-
-    // ── Campo de texto para adicionar/colar frames ─────────────
-    ui.add_space(4.0);
-    ui.label(egui::RichText::new("Adicionar frames (cole paths, um por linha):").small().strong());
-
-    let paste_id = egui::Id::new(format!("anim_paste_{}", index));
-    let mut paste_buf = ui.data(|d| d.get_temp::<String>(paste_id).unwrap_or_default());
-
-    let resp = ui.add(
-        egui::TextEdit::multiline(&mut paste_buf)
-            .desired_rows(3)
-            .hint_text("sprites/player/run_01.png\nsprites/player/run_02.png")
-            .font(egui::TextStyle::Monospace),
-    );
-
-    if resp.changed() {
-        ui.data_mut(|d| d.insert_temp(paste_id, paste_buf.clone()));
-    }
-
-    ui.horizontal(|ui| {
-        if ui.button("Adicionar").on_hover_text("Adiciona os paths digitados acima à lista de frames").clicked() {
-            let new_frames = normalize_animator_frames(&paste_buf);
-            if !new_frames.is_empty() {
-                frames.extend(new_frames);
-                paste_buf.clear();
-                ui.data_mut(|d| d.insert_temp(paste_id, String::new()));
-                changed = true;
-            }
-        }
-        if ui.button("Substituir tudo").on_hover_text("Substitui toda a lista pelos paths digitados acima").clicked() {
-            let new_frames = normalize_animator_frames(&paste_buf);
-            frames = new_frames;
-            paste_buf.clear();
-            ui.data_mut(|d| d.insert_temp(paste_id, String::new()));
-            changed = true;
-        }
-    });
-
-    // ── Aplica mudanças ────────────────────────────────────────
-    if changed {
-        let mut clips = std::collections::HashMap::new();
-        clips.insert(current.clone(), AnimationClip { frames, fps });
-        let preserved_timer = animator.timer;
-        let preserved_prev_clip = animator.prev_clip.clone();
-        updated_components.push((
-            index,
-            Component::Animator(Animator {
-                clips,
-                current,
-                timer: preserved_timer,
-                playing,
-                looped,
-                prev_clip: preserved_prev_clip,
-            }),
-        ));
-    }
-}
-
-fn normalize_animator_frames(raw: &str) -> Vec<String> {
-    raw.replace(['\r', ';', ','], "\n")
-        .lines()
-        .flat_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.contains("assets/") {
-                trimmed.split_whitespace().map(str::to_string).collect::<Vec<_>>()
-            } else {
-                vec![trimmed.to_string()]
-            }
-        })
-        .map(|line| line.trim().trim_matches('"').trim_matches('\'').to_string())
-        .filter(|line| !line.is_empty())
-        .collect()
-}
-
-fn draw_text_label_component_ui(
-    ui: &mut egui::Ui,
-    index: usize,
-    label: &TextLabel,
-    updated_components: &mut Vec<(usize, Component)>,
-) {
-    let mut text = label.text.clone();
-    let mut font_size = label.font_size;
-    let mut screen_space = label.screen_space;
-    let mut color = [label.color_r, label.color_g, label.color_b, label.color_a];
-    let mut changed = false;
-
-    egui::Grid::new(format!("text_label_{}", index))
-        .num_columns(2)
-        .spacing([8.0, 4.0])
-        .show(ui, |ui| {
-            ui.label("Texto:");
-            changed |= ui.text_edit_singleline(&mut text).changed();
-            ui.end_row();
-            ui.label("Font size:");
-            changed |= ui.add(egui::DragValue::new(&mut font_size).speed(0.5).range(8.0..=96.0)).changed();
-            ui.end_row();
-            ui.label("Screen space:");
-            changed |= ui.checkbox(&mut screen_space, "").changed();
-            ui.end_row();
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(format!("Clip atual: {}", current_clip)).small());
+            ui.label(egui::RichText::new(format!("Estado atual: {}", current_state)).small());
+            ui.label(egui::RichText::new(if animator.state_mode { "Modo ativo: State Machine" } else { "Modo ativo: Clip clássico" }).small().weak());
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("Use a aba Animator no painel inferior para editar estados, graph view e timeline.").small().color(egui::Color32::from_rgb(130, 145, 170)));
         });
-
-    changed |= ui.color_edit_button_rgba_unmultiplied(&mut color).changed();
-
-    if changed {
-        updated_components.push((
-            index,
-            Component::TextLabel(TextLabel {
-                text,
-                font_size,
-                color_r: color[0],
-                color_g: color[1],
-                color_b: color[2],
-                color_a: color[3],
-                screen_space,
-            }),
-        ));
-    }
 }
 
-fn draw_ui_button_component_ui(
-    ui: &mut egui::Ui,
-    index: usize,
-    button: &UIButton,
-    updated_components: &mut Vec<(usize, Component)>,
-) {
-    let mut text = button.text.clone();
-    let mut width = button.width;
-    let mut height = button.height;
-    let mut font_size = button.font_size;
-    let mut target_scene = button.target_scene.clone();
-    let mut close_runtime = button.close_runtime;
-    let mut screen_space = button.screen_space;
-    let mut color = [button.color_r, button.color_g, button.color_b, button.color_a];
-    let mut text_color = [button.text_r, button.text_g, button.text_b, button.text_a];
-    let mut changed = false;
-
-    egui::Grid::new(format!("ui_button_{}", index))
-        .num_columns(2)
-        .spacing([8.0, 4.0])
-        .show(ui, |ui| {
-            ui.label("Texto:");
-            changed |= ui.text_edit_singleline(&mut text).changed();
-            ui.end_row();
-            ui.label("Largura:");
-            changed |= ui.add(egui::DragValue::new(&mut width).speed(1.0).range(72.0..=800.0)).changed();
-            ui.end_row();
-            ui.label("Altura:");
-            changed |= ui.add(egui::DragValue::new(&mut height).speed(1.0).range(28.0..=200.0)).changed();
-            ui.end_row();
-            ui.label("Font size:");
-            changed |= ui.add(egui::DragValue::new(&mut font_size).speed(0.5).range(8.0..=72.0)).changed();
-            ui.end_row();
-            ui.label("Target scene:");
-            changed |= ui.text_edit_singleline(&mut target_scene).changed();
-            ui.end_row();
-            ui.label("Fechar runtime:");
-            changed |= ui.checkbox(&mut close_runtime, "").changed();
-            ui.end_row();
-            ui.label("Screen space:");
-            changed |= ui.checkbox(&mut screen_space, "").changed();
-            ui.end_row();
-        });
-
-    ui.label("Cor do botão:");
-    changed |= ui.color_edit_button_rgba_unmultiplied(&mut color).changed();
-    ui.label("Cor do texto:");
-    changed |= ui.color_edit_button_rgba_unmultiplied(&mut text_color).changed();
-
-    ui.add_space(6.0);
-    ui.label("Uso rápido:");
-    ui.small("• target_scene: assets/scenes/main.scene.json");
-    ui.small("• close_runtime: fecha o Play e volta para o editor");
-    ui.small("• screen_space: mantém o botão preso na tela, ideal para menu e HUD");
-
-    if changed {
-        updated_components.push((
-            index,
-            Component::UIButton(UIButton {
-                label: text.clone(),
-                action: target_scene.clone(),
-                text,
-                width,
-                height,
-                font_size,
-                target_scene,
-                close_runtime,
-                color_r: color[0],
-                color_g: color[1],
-                color_b: color[2],
-                color_a: color[3],
-                text_r: text_color[0],
-                text_g: text_color[1],
-                text_b: text_color[2],
-                text_a: text_color[3],
-                screen_space,
-            }),
-        ));
-    }
-}
-
-fn relative_to_project_or_full(project_root: &std::path::Path, path: &std::path::Path) -> String {
-    if let Ok(rel) = path.strip_prefix(project_root) {
-        rel.to_string_lossy().replace('\\', "/")
-    } else {
-        path.to_string_lossy().replace('\\', "/")
-    }
-}

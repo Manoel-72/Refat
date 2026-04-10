@@ -184,20 +184,30 @@ fn collect_entity_warnings(project_root: &Path, entity: &Entity, warnings: &mut 
                 }
             }
             Component::Animator(animator) => {
-                let current = animator.current.trim();
-                if current.is_empty() {
+                let resolved_clip = if animator.state_mode {
+                    let state_name = if animator.current_state.trim().is_empty() {
+                        animator.default_state.trim()
+                    } else {
+                        animator.current_state.trim()
+                    };
+                    animator.states.get(state_name).map(|state| state.clip.as_str()).unwrap_or(animator.current.trim())
+                } else {
+                    animator.current.trim()
+                };
+
+                if resolved_clip.is_empty() {
                     warnings.push(EditorWarning {
                         kind: EditorWarningKind::Animation,
                         severity: EditorWarningSeverity::Warning,
                         label: format!("Animator sem clip atual em '{}'", entity.name),
-                        details: "Defina o campo current e pelo menos um frame válido no Animator.".to_string(),
+                        details: "Defina o campo current ou um estado válido com clip associado no Animator.".to_string(),
                     });
-                } else if animator.clips.get(current).map(|clip| clip.frames.is_empty()).unwrap_or(true) {
+                } else if animator.clips.get(resolved_clip).map(|clip| clip.frames.is_empty()).unwrap_or(true) {
                     warnings.push(EditorWarning {
                         kind: EditorWarningKind::Animation,
                         severity: EditorWarningSeverity::Warning,
                         label: format!("Animator vazio em '{}'", entity.name),
-                        details: format!("O clip '{}' não possui frames configurados.", current),
+                        details: format!("O clip '{}' não possui frames configurados.", resolved_clip),
                     });
                 }
             }

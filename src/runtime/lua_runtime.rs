@@ -102,6 +102,7 @@ pub struct LuaScriptResult {
     pub set_visible: Option<bool>,
     pub set_collision_enabled: Option<bool>,
     pub play_anim: Option<String>,
+    pub set_anim_state: Option<String>,
     pub set_text: Option<String>,
     pub set_color: Option<(f32, f32, f32, f32)>,
     pub set_hp: Option<f32>,
@@ -515,6 +516,13 @@ pub fn run_lua_script_with_vm(
         entity_tbl.set("get_anim", anim_fn).ok();
     }
     {
+        let current_state = entity.components.iter().find_map(|c| if let Component::Animator(anim) = c {
+            Some(if anim.current_state.trim().is_empty() { anim.current.clone() } else { anim.current_state.clone() })
+        } else { None }).unwrap_or_else(|| "idle".to_string());
+        let anim_state_fn = lua.create_function(move |lua_ctx, ()| Ok(LuaValue::String(lua_ctx.create_string(&current_state)?))).map_err(|e| e.to_string())?;
+        entity_tbl.set("get_anim_state", anim_state_fn).ok();
+    }
+    {
         let anim_finished = entity.components.iter().find_map(|c| if let Component::Animator(anim) = c {
             let clip_name = if anim.current.trim().is_empty() { "idle" } else { anim.current.trim() };
             let clip = anim.clips.get(clip_name);
@@ -589,6 +597,15 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("play_anim", play_anim).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_anim_state = lua.create_function(move |_, state_name: String| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("anim_state", state_name)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_anim_state", set_anim_state).ok();
     }
     {
         let tbl = entity_tbl.clone();
@@ -1503,6 +1520,9 @@ pub fn run_lua_script_with_vm(
             if let Ok(clip) = cmds.get::<String>("anim") {
                 result.play_anim = Some(clip);
             }
+            if let Ok(state) = cmds.get::<String>("anim_state") {
+                result.set_anim_state = Some(state);
+            }
             if let Ok(text) = cmds.get::<String>("text") {
                 result.set_text = Some(text);
             }
@@ -1871,6 +1891,22 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
             if let Component::Animator(anim) = c {
                 if anim.clips.contains_key(clip.as_str()) {
                     anim.current = clip.clone();
+                    anim.prev_clip.clear();
+                    if anim.state_mode && anim.states.contains_key(clip.as_str()) {
+                        anim.current_state = clip.clone();
+                    }
+                }
+                break;
+            }
+        }
+    }
+    if let Some(state_name) = &r.set_anim_state {
+        for c in &mut entity.components {
+            if let Component::Animator(anim) = c {
+                if anim.states.contains_key(state_name.as_str()) {
+                    anim.queued_state = state_name.clone();
+                } else if anim.clips.contains_key(state_name.as_str()) {
+                    anim.queued_state = state_name.clone();
                 }
                 break;
             }

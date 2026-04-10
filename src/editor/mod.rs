@@ -9,6 +9,7 @@ mod asset_browser;
 mod scene_view;
 mod menubar;
 mod warnings;
+mod animator_editor;
 
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,13 @@ pub enum AssetBrowserFilter {
     Prefabs,
     Audio,
     Fonts,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BottomDockTab {
+    Assets,
+    Animator,
 }
 
 #[derive(Debug, Clone)]
@@ -199,6 +207,18 @@ pub struct EditorApp {
     pub new_project_dialog: Option<(String, String)>,
     /// Diálogo: abrir projeto (caminho)
     pub open_project_dialog: Option<String>,
+    /// Aba ativa do dock inferior
+    pub bottom_tab: BottomDockTab,
+    /// Estado selecionado no workspace do Animator
+    pub animator_selected_state: String,
+    /// Posições normalizadas dos nós do Animator (0..1 dentro do graph)
+    pub animator_node_positions: HashMap<String, [f32; 2]>,
+    /// Estado sendo arrastado no graph do Animator
+    pub animator_dragging_state: Option<String>,
+    /// Offset local entre mouse e canto do nó durante arraste
+    pub animator_drag_offset: [f32; 2],
+    /// Zoom visual do graph do Animator
+    pub animator_graph_zoom: f32,
 }
 
 
@@ -273,6 +293,12 @@ impl EditorApp {
             project_hub_session,
             new_project_dialog: None,
             open_project_dialog: None,
+            bottom_tab: BottomDockTab::Assets,
+            animator_selected_state: "idle".to_string(),
+            animator_node_positions: HashMap::new(),
+            animator_dragging_state: None,
+            animator_drag_offset: [0.0, 0.0],
+            animator_graph_zoom: 1.0,
         }
     }
 
@@ -1687,7 +1713,23 @@ impl eframe::App for EditorApp {
             .min_height(150.0)
             .max_height(520.0)
             .show(ctx, |ui| {
-                asset_browser::show(self, ui);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let assets_selected = self.bottom_tab == BottomDockTab::Assets;
+                    if ui.selectable_label(assets_selected, "📦 Asset Browser").clicked() {
+                        self.bottom_tab = BottomDockTab::Assets;
+                    }
+                    let animator_selected = self.bottom_tab == BottomDockTab::Animator;
+                    if ui.selectable_label(animator_selected, "🎞 Animator").clicked() {
+                        self.bottom_tab = BottomDockTab::Animator;
+                    }
+                });
+                ui.separator();
+
+                match self.bottom_tab {
+                    BottomDockTab::Assets => asset_browser::show(self, ui),
+                    BottomDockTab::Animator => animator_editor::show(self, ui),
+                }
             });
         self.layout.asset_height = asset_response.response.rect.height();
 
