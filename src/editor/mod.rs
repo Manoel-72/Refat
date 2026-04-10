@@ -219,6 +219,10 @@ pub struct EditorApp {
     pub animator_drag_offset: [f32; 2],
     /// Zoom visual do graph do Animator
     pub animator_graph_zoom: f32,
+    /// Abre o Animator em uma janela destacada para edição ampla
+    pub animator_detached: bool,
+    /// Estado origem de uma ligação em arraste no graph
+    pub animator_link_drag_source: Option<String>,
 }
 
 
@@ -299,6 +303,8 @@ impl EditorApp {
             animator_dragging_state: None,
             animator_drag_offset: [0.0, 0.0],
             animator_graph_zoom: 1.0,
+            animator_detached: false,
+            animator_link_drag_source: None,
         }
     }
 
@@ -1708,10 +1714,10 @@ impl eframe::App for EditorApp {
         self.layout.inspector_width = inspector_response.response.rect.width();
 
         let asset_response = egui::TopBottomPanel::bottom("asset_panel")
-            .default_height(self.layout.asset_height)
+            .default_height(self.layout.asset_height.max(260.0))
             .resizable(true)
-            .min_height(150.0)
-            .max_height(520.0)
+            .min_height(170.0)
+            .max_height(900.0)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
@@ -1720,8 +1726,13 @@ impl eframe::App for EditorApp {
                         self.bottom_tab = BottomDockTab::Assets;
                     }
                     let animator_selected = self.bottom_tab == BottomDockTab::Animator;
-                    if ui.selectable_label(animator_selected, "🎞 Animator").clicked() {
+                    let animator_tab = ui.selectable_label(animator_selected, "🎞 Animator");
+                    if animator_tab.clicked() {
                         self.bottom_tab = BottomDockTab::Animator;
+                    }
+                    if animator_tab.double_clicked() {
+                        self.bottom_tab = BottomDockTab::Animator;
+                        self.animator_detached = true;
                     }
                 });
                 ui.separator();
@@ -1732,6 +1743,23 @@ impl eframe::App for EditorApp {
                 }
             });
         self.layout.asset_height = asset_response.response.rect.height();
+
+
+
+        if self.animator_detached {
+            let mut open = self.animator_detached;
+            egui::Window::new("🎞 Animator — Workspace")
+                .open(&mut open)
+                .default_size(egui::vec2(1180.0, 760.0))
+                .min_size(egui::vec2(760.0, 520.0))
+                .resizable(true)
+                .vscroll(true)
+                .hscroll(true)
+                .show(ctx, |ui| {
+                    animator_editor::show(self, ui);
+                });
+            self.animator_detached = open;
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             scene_view::show(self, ui);
