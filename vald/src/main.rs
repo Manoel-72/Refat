@@ -39,7 +39,6 @@ fn main() {
             .with_inner_size([1280.0, 720.0])
             .with_min_inner_size([800.0, 600.0])
             .with_icon(load_app_icon()),
-        vsync: true,         // sincroniza com o monitor — deltaTime estável (~16ms a 60hz)
         ..Default::default()
     };
 

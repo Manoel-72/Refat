@@ -281,7 +281,6 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
             entity,
             center,
             camera,
-            available,
         ) {
             pending_ui_action = Some(action);
         }

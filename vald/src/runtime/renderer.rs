@@ -67,8 +67,7 @@ pub fn draw_runtime_entity(
     sprite_textures: &mut HashMap<String, egui::TextureHandle>,
     entity: &Entity,
     center: egui::Pos2,
-    camera: CameraView,
-    viewport_rect: egui::Rect) -> Option<UiAction> {
+    camera: CameraView) -> Option<UiAction> {
     if !entity.visible {
         return None;
     }
@@ -82,26 +81,6 @@ pub fn draw_runtime_entity(
         center.x + ((ex - camera.x) * camera.zoom),
         center.y - ((ey - camera.y) * camera.zoom));
     let screen_space_pos = egui::pos2(center.x + ex, center.y - ey);
-
-    // ── Frustum Culling ──────────────────────────────────────
-    let is_screen_space = entity.components.iter()
-        .find_map(|c| if let Component::Sprite(s) = c { Some(s.screen_space) } else { None })
-        .unwrap_or(false);
-    let draw_pos = if is_screen_space { screen_space_pos } else { world_screen_pos };
-    let margin = 128.0_f32; // margem extra para entidades parcialmente visíveis
-    if !viewport_rect.expand(margin).contains(draw_pos) {
-        // filhos ainda podem estar na tela mesmo com o pai fora
-        let mut action = None;
-        for child in &entity.children {
-            if let Some(child_action) = draw_runtime_entity(
-                ui, painter, project_root, current_scene_path,
-                sprite_textures, child, center, camera, viewport_rect) {
-                action = Some(child_action);
-            }
-        }
-        return action;
-    }
-    // ─────────────────────────────────────────────────────────
 
     let mut sprite: Option<&Sprite> = None;
     let mut text_label: Option<&TextLabel> = None;
@@ -202,8 +181,7 @@ pub fn draw_runtime_entity(
             sprite_textures,
             child,
             center,
-            camera,
-            viewport_rect) {
+            camera) {
             action = Some(child_action);
         }
     }

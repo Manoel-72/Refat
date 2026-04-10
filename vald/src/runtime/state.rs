@@ -8,10 +8,11 @@ use crate::{
     core::{
         scene::Scene,
         entity::Entity,
-        component::{Component, Velocity},
+        component::{Component, Sprite, BoxCollider, RigidBody2D, Velocity},
     },
     runtime::context::RuntimePlayState,
     runtime::{
+        camera,
         input::{input_state::InputState, key_code::KeyCode},
         save::{SaveData, SaveValue},
         scene_manager::SceneManager,
@@ -893,11 +894,10 @@ fn rebuild_collision_events(&mut self) {
 
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
 
-        // swap() é O(1) — apenas troca ponteiros internos; clear() reutiliza a memória já alocada
-        std::mem::swap(&mut self.previous_collision_contacts,    &mut self.collision_contacts);
-        std::mem::swap(&mut self.previous_collision_contact_ids, &mut self.collision_contact_ids);
-        std::mem::swap(&mut self.previous_trigger_contacts,      &mut self.trigger_contacts);
-        std::mem::swap(&mut self.previous_trigger_contact_ids,   &mut self.trigger_contact_ids);
+        self.previous_collision_contacts = self.collision_contacts.clone();
+        self.previous_collision_contact_ids = self.collision_contact_ids.clone();
+        self.previous_trigger_contacts = self.trigger_contacts.clone();
+        self.previous_trigger_contact_ids = self.trigger_contact_ids.clone();
 
         self.collision_contacts.clear();
         self.collision_contact_ids.clear();
