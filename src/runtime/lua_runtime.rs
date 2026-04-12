@@ -101,6 +101,7 @@ pub struct LuaScriptResult {
     pub set_rotation: Option<f32>,
     pub set_visible: Option<bool>,
     pub set_collision_enabled: Option<bool>,
+    pub set_anim_playing: Option<bool>,
     pub play_anim: Option<String>,
     pub set_anim_state: Option<String>,
     pub set_text: Option<String>,
@@ -588,6 +589,15 @@ pub fn run_lua_script_with_vm(
             Ok(())
         }).map_err(|e| e.to_string())?;
         entity_tbl.set("set_collision_enabled", set_col).ok();
+    }
+    {
+        let tbl = entity_tbl.clone();
+        let set_anim_playing = lua.create_function(move |_, enabled: bool| {
+            let cmds: Table = tbl.get("_cmds")?;
+            cmds.set("anim_playing", enabled)?;
+            Ok(())
+        }).map_err(|e| e.to_string())?;
+        entity_tbl.set("set_anim_playing", set_anim_playing).ok();
     }
     {
         let tbl = entity_tbl.clone();
@@ -1517,6 +1527,9 @@ pub fn run_lua_script_with_vm(
             if let Ok(LuaValue::Boolean(true)) = cmds.get::<LuaValue>("destroy") {
                 result.destroy_entity = true;
             }
+            if let Ok(LuaValue::Boolean(v)) = cmds.get::<LuaValue>("anim_playing") {
+                result.set_anim_playing = Some(v);
+            }
             if let Ok(clip) = cmds.get::<String>("anim") {
                 result.play_anim = Some(clip);
             }
@@ -1885,6 +1898,17 @@ pub fn apply_lua_result(entity: &mut Entity, r: &LuaScriptResult) {
     }
     if let Some(enabled) = r.set_collision_enabled {
         entity.set_collision_enabled(enabled);
+    }
+    if let Some(playing) = r.set_anim_playing {
+        for c in &mut entity.components {
+            if let Component::Animator(anim) = c {
+                anim.playing = playing;
+                if !playing {
+                    anim.timer = 0.0;
+                }
+                break;
+            }
+        }
     }
     if let Some(clip) = &r.play_anim {
         for c in &mut entity.components {

@@ -1236,12 +1236,12 @@ fn draw_animator_component_ui(
     let state_count = animator.states.len();
     let clip_count = animator.clips.len();
     let current_state = if animator.current_state.trim().is_empty() {
-        "idle"
+        "<nenhum>"
     } else {
         animator.current_state.as_str()
     };
     let current_clip = if animator.current.trim().is_empty() {
-        "idle"
+        "<nenhum>"
     } else {
         animator.current.as_str()
     };
@@ -1263,7 +1263,7 @@ fn draw_animator_component_ui(
             ui.label(egui::RichText::new(format!("Estado atual: {}", current_state)).small());
             ui.label(egui::RichText::new(if animator.state_mode { "Modo ativo: State Machine" } else { "Modo ativo: Clip clássico" }).small().weak());
             ui.add_space(8.0);
-            ui.label(egui::RichText::new("Use a aba Animator no painel inferior para editar estados, graph view e timeline.").small().color(egui::Color32::from_rgb(130, 145, 170)));
+            ui.label(egui::RichText::new("Use a aba Animator no painel inferior para criar estados, arrastar frames e ajustar a transição pelo campo 'Próximo estado'.").small().color(egui::Color32::from_rgb(130, 145, 170)));
         });
 }
 

@@ -332,7 +332,7 @@ pub struct AnimationState {
 impl Default for AnimationState {
     fn default() -> Self {
         Self {
-            clip: "idle".to_string(),
+            clip: String::new(),
             looped: true,
             interruptible: true,
             next_state: String::new(),
@@ -371,40 +371,17 @@ pub struct Animator {
 
 impl Default for Animator {
     fn default() -> Self {
-        let mut clips = HashMap::new();
-        clips.insert("idle".to_string(), AnimationClip::default());
-
-        let mut states = HashMap::new();
-        states.insert("idle".to_string(), AnimationState {
-            clip: "idle".to_string(),
-            looped: true,
-            interruptible: true,
-            next_state: String::new(),
-        });
-        states.insert("run".to_string(), AnimationState {
-            clip: "run".to_string(),
-            looped: true,
-            interruptible: true,
-            next_state: String::new(),
-        });
-        states.insert("attack".to_string(), AnimationState {
-            clip: "attack".to_string(),
-            looped: false,
-            interruptible: false,
-            next_state: "idle".to_string(),
-        });
-
         Self {
-            clips,
-            current: "idle".to_string(),
+            clips: HashMap::new(),
+            current: String::new(),
             timer: 0.0,
             playing: true,
             looped: true,
             prev_clip: String::new(),
-            state_mode: false,
-            states,
-            current_state: "idle".to_string(),
-            default_state: "idle".to_string(),
+            state_mode: true,
+            states: HashMap::new(),
+            current_state: String::new(),
+            default_state: String::new(),
             queued_state: String::new(),
             locomotion_threshold: default_locomotion_threshold(),
         }

@@ -302,36 +302,39 @@
         {
           "Animator": {
             "clips": {
-              "idle": {
+              "walk": {
                 "frames": [
-                  ""
-                ],
-                "fps": 4.0
-              },
-              "jump": {
-                "frames": [
-                  ""
-                ],
-                "fps": 4.0
-              },
-              "run": {
-                "frames": [
-                  "",
-                  ""
+                  "sprites/untitled_0001.png",
+                  "sprites/untitled_0002.png",
+                  "sprites/untitled_0003.png",
+                  "sprites/untitled_0004.png"
                 ],
                 "fps": 8.0
               }
             },
-            "current": "idle",
+            "current": "walk",
             "timer": 0.0,
             "playing": true,
             "looped": true,
-            "prev_clip": ""
+            "prev_clip": "",
+            "state_mode": true,
+            "states": {
+              "walk": {
+                "clip": "walk",
+                "looped": true,
+                "interruptible": true,
+                "next_state": ""
+              }
+            },
+            "current_state": "walk",
+            "default_state": "walk",
+            "queued_state": "",
+            "locomotion_threshold": 6.0
           }
         },
         {
           "LuaScript": {
-            "file_path": "assets/scripts/movimentacao_basica.lua"
+            "file_path": "assets/scripts/walk_demo.lua"
           }
         }
       ],

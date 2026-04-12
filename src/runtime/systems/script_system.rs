@@ -408,7 +408,14 @@ fn compute_next_animation_frame(
 
     sync_animator_state(animator, velocity, grounded);
 
-    let current_clip_name = if animator.current.trim().is_empty() { "idle" } else { animator.current.trim() };
+    let current_clip_name = if animator.current.trim().is_empty() {
+        match animator.clips.keys().next() {
+            Some(name) => name.as_str(),
+            None => return None,
+        }
+    } else {
+        animator.current.trim()
+    };
 
     if animator.prev_clip != current_clip_name {
         animator.timer = 0.0;
@@ -442,7 +449,13 @@ fn sync_animator_state(animator: &mut Animator, velocity: (f32, f32), grounded: 
     ensure_animator_states(animator);
 
     if animator.default_state.trim().is_empty() {
-        animator.default_state = "idle".to_string();
+        if animator.states.contains_key("walk") {
+            animator.default_state = "walk".to_string();
+        } else if let Some(first_state) = animator.states.keys().next().cloned() {
+            animator.default_state = first_state;
+        } else {
+            return;
+        }
     }
     if animator.current_state.trim().is_empty() {
         animator.current_state = animator.default_state.clone();
@@ -490,10 +503,10 @@ fn sync_animator_state(animator: &mut Animator, velocity: (f32, f32), grounded: 
     } else if !grounded && speed_y > locomotion_threshold && animator.states.contains_key("fall") {
         "fall".to_string()
     } else if speed_x > locomotion_threshold {
-        if animator.states.contains_key("run") {
-            "run".to_string()
-        } else if animator.states.contains_key("walk") {
+        if animator.states.contains_key("walk") {
             "walk".to_string()
+        } else if animator.states.contains_key("run") {
+            "run".to_string()
         } else {
             animator.default_state.clone()
         }
@@ -510,19 +523,11 @@ fn ensure_animator_states(animator: &mut Animator) {
     let clip_names: Vec<String> = animator.clips.keys().cloned().collect();
     for clip_name in clip_names {
         animator.states.entry(clip_name.clone()).or_insert_with(|| {
-            let lower = clip_name.to_lowercase();
-            let looped = !matches!(lower.as_str(), "attack" | "hit" | "death");
-            let interruptible = !matches!(lower.as_str(), "attack" | "hit" | "death");
-            let next_state = if matches!(lower.as_str(), "attack" | "hit") {
-                "idle".to_string()
-            } else {
-                String::new()
-            };
             crate::core::component::AnimationState {
                 clip: clip_name.clone(),
-                looped,
-                interruptible,
-                next_state,
+                looped: true,
+                interruptible: true,
+                next_state: String::new(),
             }
         });
     }
