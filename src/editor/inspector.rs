@@ -15,22 +15,30 @@ use super::{warnings::EditorWarningSeverity, EditorApp};
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Cabeçalho do Inspector ──
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(22, 27, 34))
-        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
+        .fill(egui::Color32::from_rgb(14, 18, 28))
+        .inner_margin(egui::Margin { left: 10.0, right: 8.0, top: 7.0, bottom: 5.0 })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🔍 Inspector").strong().size(13.0));
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                let dot_color = if app.selected_entity_id.is_some() {
+                    egui::Color32::from_rgb(63, 185, 80)
+                } else {
+                    egui::Color32::from_rgb(88, 166, 255)
+                };
+                ui.painter().circle_filled(dot.center(), 4.0, dot_color);
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("Inspector").strong().size(13.0).color(egui::Color32::WHITE));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if app.selected_entity_id.is_some() {
                         ui.label(
-                            egui::RichText::new("entidade selecionada")
-                                .small()
+                            egui::RichText::new("selecionado")
+                                .size(10.0)
                                 .color(egui::Color32::from_rgb(63, 185, 80)),
                         );
                     } else {
                         ui.label(
                             egui::RichText::new("cena")
-                                .small()
+                                .size(10.0)
                                 .color(egui::Color32::from_rgb(88, 166, 255)),
                         );
                     }

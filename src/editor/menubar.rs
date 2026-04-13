@@ -10,19 +10,22 @@ use crate::{entity::Entity, scene::Scene};
 
 use super::{EditorApp, EditorPlayState};
 
-// Cores do tema
-const ACCENT:    egui::Color32 = egui::Color32::from_rgb(88,  166, 255);
-const WARN:      egui::Color32 = egui::Color32::from_rgb(255, 180, 50);
-const TEXT_DIM:  egui::Color32 = egui::Color32::from_rgb(139, 148, 158);
-const PLAY_BG:   egui::Color32 = egui::Color32::from_rgb(35,  134, 54);
-const PAUSE_BG:  egui::Color32 = egui::Color32::from_rgb(88,  100, 50);
-const STOP_BG:   egui::Color32 = egui::Color32::from_rgb(110, 40,  40);
+// Cores do tema — V0.9.7.5
+const ACCENT:      egui::Color32 = egui::Color32::from_rgb(88,  166, 255);
+const WARN:        egui::Color32 = egui::Color32::from_rgb(255, 180, 50);
+const TEXT_DIM:    egui::Color32 = egui::Color32::from_rgb(120, 136, 158);
+const PLAY_BG:     egui::Color32 = egui::Color32::from_rgb(35,  134, 54);
+const PAUSE_BG:    egui::Color32 = egui::Color32::from_rgb(180, 130, 20);
+const STOP_BG:     egui::Color32 = egui::Color32::from_rgb(170, 40,  40);
+const TOOLBAR_BG:  egui::Color32 = egui::Color32::from_rgb(14,  18,  28);
+const PANEL_LINE:  egui::Color32 = egui::Color32::from_rgb(36,  46,  66);
+const TAB_ACTIVE:  egui::Color32 = egui::Color32::from_rgb(24,  32,  52);
 
 pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
     egui::TopBottomPanel::top("menubar")
         .frame(egui::Frame::none()
-            .fill(egui::Color32::from_rgb(22, 27, 34))
-            .inner_margin(egui::Margin { left: 4.0, right: 4.0, top: 2.0, bottom: 0.0 }))
+            .fill(TOOLBAR_BG)
+            .inner_margin(egui::Margin { left: 4.0, right: 4.0, top: 3.0, bottom: 0.0 }))
         .show(ctx, |ui| {
         ui.vertical(|ui| {
 
@@ -292,12 +295,14 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         let is_paused  = app.play_state == EditorPlayState::Paused;
 
                         // Play
+                        let play_col = if is_playing { PLAY_BG } else { egui::Color32::from_rgb(35, 44, 60) };
                         let play_btn = egui::Button::new(
-                            egui::RichText::new("  ▶  Play  ").color(egui::Color32::WHITE).strong()
+                            egui::RichText::new("▶  Play").color(egui::Color32::WHITE).size(12.0).strong()
                         )
-                        .fill(if is_playing { PLAY_BG } else { egui::Color32::from_rgb(46, 52, 63) })
-                        .min_size(egui::vec2(80.0, 26.0));
-                        if ui.add(play_btn).on_hover_text("Inicia o jogo em janela separada (F5)").clicked() {
+                        .fill(play_col)
+                        .rounding(5.0)
+                        .min_size(egui::vec2(76.0, 26.0));
+                        if ui.add(play_btn).on_hover_text("Inicia o jogo (F5)").clicked() {
                             app.play_state = EditorPlayState::Playing;
                             app.runtime.window_open = true;
                             app.sync_active_scene_document();
@@ -313,27 +318,36 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                             }
                         }
 
+                        ui.add_space(2.0);
+
                         // Pause
+                        let pause_col = if is_paused { PAUSE_BG } else { egui::Color32::from_rgb(35, 44, 60) };
                         let pause_btn = egui::Button::new(
-                            egui::RichText::new("  ⏸  ").color(egui::Color32::WHITE)
+                            egui::RichText::new("⏸").color(egui::Color32::WHITE).size(13.0)
                         )
-                        .fill(if is_paused { PAUSE_BG } else { egui::Color32::from_rgb(46, 52, 63) })
-                        .min_size(egui::vec2(40.0, 26.0));
-                        if ui.add_enabled(is_playing, pause_btn)
-                            .on_hover_text("Pausa a simulação sem fechar o jogo")
+                        .fill(pause_col)
+                        .rounding(5.0)
+                        .min_size(egui::vec2(34.0, 26.0));
+                        if ui.add_enabled(is_playing || is_paused, pause_btn)
+                            .on_hover_text("Pausar simulação")
                             .clicked()
                         {
                             app.play_state = EditorPlayState::Paused;
                             app.status_msg = "⏸ Pausado.".to_string();
                         }
 
+                        ui.add_space(2.0);
+
                         // Stop
+                        let stop_active = is_playing || is_paused;
+                        let stop_col = if stop_active { STOP_BG } else { egui::Color32::from_rgb(35, 44, 60) };
                         let stop_btn = egui::Button::new(
-                            egui::RichText::new("  ⏹  Parar  ").color(egui::Color32::WHITE)
+                            egui::RichText::new("⏹  Parar").color(egui::Color32::WHITE).size(12.0)
                         )
-                        .fill(if !is_playing && !is_paused { egui::Color32::from_rgb(46, 52, 63) } else { STOP_BG })
-                        .min_size(egui::vec2(70.0, 26.0));
-                        if ui.add(stop_btn).on_hover_text("Para o jogo e volta ao modo de edição").clicked() {
+                        .fill(stop_col)
+                        .rounding(5.0)
+                        .min_size(egui::vec2(72.0, 26.0));
+                        if ui.add(stop_btn).on_hover_text("Para o jogo e volta ao editor").clicked() {
                             app.play_state = EditorPlayState::Edit;
                             app.runtime.stop();
                             app.runtime.window_open = false;
@@ -347,44 +361,59 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     ui.add_space(8.0);
                     let warn_count = app.warning_count();
                     if warn_count > 0 {
-                        ui.label(egui::RichText::new(format!("⚠ {}", warn_count)).color(WARN).small());
+                        ui.label(egui::RichText::new(format!("⚠ {}", warn_count)).color(WARN).size(11.0));
                         ui.separator();
                     }
+                    // versão compacta
                     ui.label(
-                        egui::RichText::new(format!(
-                            "🌐 {}  |  {} aba(s)",
-                            app.scene.name,
-                            app.open_scenes.len()
-                        ))
-                        .color(TEXT_DIM)
-                        .small(),
+                        egui::RichText::new(format!("RS2BR {}", crate::core::version::ENGINE_VERSION))
+                            .size(11.0)
+                            .color(TEXT_DIM),
+                    );
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!("{}  ·  {} aba(s)", app.scene.name, app.open_scenes.len()))
+                            .size(11.0)
+                            .color(TEXT_DIM),
                     );
                 });
             });
 
             // ══════════════════════════════════════════════════
-            // LINHA 2: Tabs de cenas abertas + Desfazer/Refazer
+            // LINHA 2: Tabs de cenas + Undo/Redo + Snap info
             // ══════════════════════════════════════════════════
             ui.horizontal(|ui| {
-                ui.add_space(4.0);
+                ui.add_space(6.0);
 
-                // Desfazer / Refazer compactos
-                if ui.add(
-                    egui::Button::new(egui::RichText::new("< Undo").size(12.0))
-                        .min_size(egui::vec2(52.0, 20.0))
-                ).on_hover_text("Desfazer (Ctrl+Z)").clicked() {
+                // Desfazer / Refazer — ícones compactos
+                let undo_btn = egui::Button::new(
+                    egui::RichText::new("↩").size(13.0).color(TEXT_DIM)
+                ).min_size(egui::vec2(26.0, 22.0)).frame(true);
+                if ui.add(undo_btn).on_hover_text("Desfazer  Ctrl+Z").clicked() {
                     app.undo_scene();
                 }
-                if ui.add(
-                    egui::Button::new(egui::RichText::new("Redo >").size(12.0))
-                        .min_size(egui::vec2(52.0, 20.0))
-                ).on_hover_text("Refazer (Ctrl+Y)").clicked() {
+                let redo_btn = egui::Button::new(
+                    egui::RichText::new("↪").size(13.0).color(TEXT_DIM)
+                ).min_size(egui::vec2(26.0, 22.0)).frame(true);
+                if ui.add(redo_btn).on_hover_text("Refazer  Ctrl+Y").clicked() {
                     app.redo_scene();
                 }
 
                 ui.separator();
 
-                // Tabs
+                // Snap badge
+                let snap_label = if app.snap_to_grid { "Snap 32px" } else { "Snap off" };
+                let snap_color = if app.snap_to_grid { ACCENT } else { TEXT_DIM };
+                if ui.add(
+                    egui::Button::new(egui::RichText::new(snap_label).size(11.0).color(snap_color))
+                        .min_size(egui::vec2(60.0, 22.0))
+                ).on_hover_text("Ligar/desligar snap à grade").clicked() {
+                    app.snap_to_grid = !app.snap_to_grid;
+                }
+
+                ui.separator();
+
+                // Tabs de cena — estilizadas
                 let tabs: Vec<(usize, String)> = app
                     .open_scenes
                     .iter()
@@ -392,42 +421,91 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     .map(|(index, doc)| (index, doc.display_name()))
                     .collect();
 
+                let mut close_tab: Option<usize> = None;
+
                 for (index, label) in tabs {
                     let selected = app.active_scene_index == index;
-                    let tab_color = if selected { ACCENT } else { TEXT_DIM };
-                    let tab_text = egui::RichText::new(format!("🎬 {}", label))
-                        .color(tab_color)
-                        .small();
 
-                    if ui.selectable_label(selected, tab_text).clicked() {
-                        app.activate_scene_tab(index);
-                    }
+                    let tab_frame = if selected {
+                        egui::Frame::none()
+                            .fill(TAB_ACTIVE)
+                            .rounding(4.0)
+                            .inner_margin(egui::Margin { left: 8.0, right: 6.0, top: 2.0, bottom: 2.0 })
+                    } else {
+                        egui::Frame::none()
+                            .fill(egui::Color32::TRANSPARENT)
+                            .rounding(4.0)
+                            .inner_margin(egui::Margin { left: 8.0, right: 6.0, top: 2.0, bottom: 2.0 })
+                    };
 
-                    if app.open_scenes.len() > 1 {
-                        if ui.add(
-                            egui::Button::new(egui::RichText::new("[x]").color(TEXT_DIM).small())
-                                .min_size(egui::vec2(24.0, 16.0))
-                                .frame(false)
-                        ).on_hover_text("Fechar aba").clicked() {
-                            app.close_scene_tab(index);
-                            break;
-                        }
-                    }
-                    ui.add_space(2.0);
+                    tab_frame.show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 3.0;
+                            let dot_color = if selected { ACCENT } else { TEXT_DIM };
+                            let (dot_rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+                            ui.painter().circle_filled(dot_rect.center(), 3.0, dot_color);
+
+                            let tab_text = egui::RichText::new(&label)
+                                .size(12.0)
+                                .color(if selected { egui::Color32::WHITE } else { TEXT_DIM });
+                            if ui.add(egui::Label::new(tab_text).sense(egui::Sense::click())).clicked() {
+                                app.activate_scene_tab(index);
+                            }
+
+                            if app.open_scenes.len() > 1 {
+                                if ui.add(
+                                    egui::Button::new(egui::RichText::new("×").color(TEXT_DIM).size(11.0))
+                                        .min_size(egui::vec2(14.0, 14.0))
+                                        .frame(false)
+                                ).on_hover_text("Fechar aba").clicked() {
+                                    close_tab = Some(index);
+                                }
+                            }
+                        });
+                    });
+                    ui.add_space(1.0);
                 }
 
-                // Botão + para nova cena
+                if let Some(idx) = close_tab {
+                    app.close_scene_tab(idx);
+                }
+
+                // Botão + nova aba
                 if ui.add(
-                    egui::Button::new(egui::RichText::new("[+]").color(TEXT_DIM).small())
-                        .min_size(egui::vec2(28.0, 20.0))
+                    egui::Button::new(egui::RichText::new("+").color(TEXT_DIM).size(14.0))
+                        .min_size(egui::vec2(24.0, 22.0))
                         .frame(false)
                 ).on_hover_text("Nova Cena").clicked() {
                     let next_name = format!("Cena {}", app.open_scenes.len() + 1);
                     app.create_new_scene_tab(next_name);
                 }
+
+                // Info direita: nome cena + entidades
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{}  ·  {} entidade(s)",
+                            app.scene.name,
+                            app.scene.entities.len()
+                        ))
+                        .size(11.0)
+                        .color(TEXT_DIM),
+                    );
+                    if let Some(ent) = app.selected_entity_id.as_ref()
+                        .and_then(|id| app.scene.find_entity(id))
+                    {
+                        ui.separator();
+                        ui.label(
+                            egui::RichText::new(format!("sel: {}", ent.name))
+                                .size(11.0)
+                                .color(ACCENT),
+                        );
+                    }
+                });
             });
 
-            ui.add_space(2.0);
+            ui.add_space(1.0);
         });
     });
 }

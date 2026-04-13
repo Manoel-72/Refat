@@ -169,7 +169,7 @@ end
 
 ---
 
-*Versão da API: RS2BR-Engine V0.9 — sujeita a extensão sem quebra de retrocompatibilidade.*
+*Versão da API: RS2BR-Engine V0.9.7.5.7.5 — sujeita a extensão sem quebra de retrocompatibilidade.*
 
 
 ### entity.collision_enabled / entity.set_collision_enabled(bool)
