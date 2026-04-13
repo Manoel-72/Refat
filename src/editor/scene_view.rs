@@ -7,7 +7,7 @@
 
 use eframe::egui;
 
-use crate::{component::Component, entity::Entity};
+use crate::{component::{Animator, Audio, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, UIButton, Velocity}, entity::Entity};
 use super::{EditorApp, EditorPlayState};
 
 /// Ação disparada por interação do mouse dentro da viewport.
@@ -682,6 +682,12 @@ fn draw_entity(
         });
     }
 
+    response.context_menu(|ui| {
+        ui.label(egui::RichText::new(&entity.name).small().strong());
+        ui.separator();
+        show_scene_add_component_menu(ui, app, &entity.id);
+    });
+
     if response.dragged_by(egui::PointerButton::Primary) {
         let delta = ui.ctx().input(|i| i.pointer.delta());
         return Some(SceneInteraction::Drag {
@@ -699,6 +705,55 @@ fn draw_entity(
     }
 
     None
+}
+
+
+fn show_scene_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
+    ui.label(egui::RichText::new("Adicionar componente").small().strong());
+    ui.separator();
+
+    ui.menu_button("🎮 Gameplay", |ui| {
+        scene_component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
+        scene_component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
+        scene_component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
+        scene_component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
+    });
+
+    ui.menu_button("🧠 Scripts", |ui| {
+        scene_component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
+        scene_component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
+    });
+
+    ui.menu_button("🖼 Visual", |ui| {
+        scene_component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
+        scene_component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
+        scene_component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
+        scene_component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
+    });
+
+    ui.menu_button("📷 Cena", |ui| {
+        scene_component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
+    });
+}
+
+fn scene_component_menu_button(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str, label: &str, component: Component) {
+    let already_has = app
+        .find_entity_mut(entity_id)
+        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
+        .unwrap_or(false);
+
+    let response = ui.add_enabled(!already_has, egui::Button::new(label));
+    if response.clicked() {
+        app.push_undo_state();
+        if let Some(entity) = app.find_entity_mut(entity_id) {
+            entity.add_component(component);
+        }
+        ui.close_menu();
+    }
+
+    if already_has {
+        response.on_hover_text("Esta entidade já possui esse componente.");
+    }
 }
 
 fn component_badges(entity: &Entity) -> String {
