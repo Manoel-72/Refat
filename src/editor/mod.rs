@@ -223,6 +223,8 @@ pub struct EditorApp {
     pub animator_detached: bool,
     /// Estado origem de uma ligação em arraste no graph
     pub animator_link_drag_source: Option<String>,
+    /// Campo temporário para renomear o estado selecionado no Animator
+    pub animator_state_rename_buffer: String,
 }
 
 
@@ -305,6 +307,7 @@ impl EditorApp {
             animator_graph_zoom: 1.0,
             animator_detached: false,
             animator_link_drag_source: None,
+            animator_state_rename_buffer: String::new(),
         }
     }
 
@@ -390,380 +393,231 @@ impl EditorApp {
     }
 
     fn show_project_hub(&mut self, ctx: &egui::Context) {
-        // ── Paleta — dark professional (mesmo tema do editor) ──
-        let bg          = egui::Color32::from_rgb(15, 18, 24);
-        let panel_bg    = egui::Color32::from_rgb(22, 27, 36);
-        let card_bg     = egui::Color32::from_rgb(28, 34, 46);
-        let accent      = egui::Color32::from_rgb(88, 166, 255);
-        let accent_green= egui::Color32::from_rgb(63, 185, 80);
-        let accent_org  = egui::Color32::from_rgb(210, 105, 30);
-        let accent_red  = egui::Color32::from_rgb(200, 50, 50);
-        let text_dim    = egui::Color32::from_rgb(120, 135, 155);
-        let text_muted  = egui::Color32::from_rgb(75, 88, 108);
-        let border      = egui::Color32::from_rgb(38, 46, 62);
+        let bg = egui::Color32::from_rgb(61, 122, 204);
+        let bg_soft = egui::Color32::from_rgba_unmultiplied(13, 28, 56, 72);
+        let card_bg = egui::Color32::from_rgba_unmultiplied(240, 246, 255, 228);
+        let card_bg_hover = egui::Color32::from_rgba_unmultiplied(228, 238, 252, 244);
+        let title_color = egui::Color32::from_rgb(246, 250, 255);
+        let text_color = egui::Color32::from_rgb(34, 51, 79);
+        let text_dim = egui::Color32::from_rgb(82, 108, 148);
+        let primary_blue = egui::Color32::from_rgb(59, 110, 242);
+        let green = egui::Color32::from_rgb(122, 214, 84);
+        let orange = egui::Color32::from_rgb(245, 152, 57);
+        let red = egui::Color32::from_rgb(239, 96, 74);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(bg))
             .show(ctx, |ui| {
-
-            let total_w = ui.available_width();
-            let total_h = ui.available_height();
-
-            // ── Header strip ──
-            let header_h = 52.0_f32;
-            let (header_rect, _) = ui.allocate_exact_size(
-                egui::vec2(total_w, header_h), egui::Sense::hover(),
-            );
-            ui.painter().rect_filled(header_rect, 0.0, panel_bg);
-            // linha inferior sutil
-            ui.painter().line_segment(
-                [header_rect.left_bottom(), header_rect.right_bottom()],
-                egui::Stroke::new(1.0, border),
-            );
-            // Título + versão no header
-            let title_text = format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION);
-            ui.painter().text(
-                egui::pos2(header_rect.left() + 22.0, header_rect.center().y - 7.0),
-                egui::Align2::LEFT_CENTER,
-                &title_text,
-                egui::FontId::proportional(16.0),
-                egui::Color32::WHITE,
-            );
-            ui.painter().text(
-                egui::pos2(header_rect.left() + 22.0, header_rect.center().y + 10.0),
-                egui::Align2::LEFT_CENTER,
-                "Game Engine 2D — Hub de Projetos",
-                egui::FontId::proportional(11.0),
-                text_dim,
-            );
-            // Pequeno badge de versão
-            let badge_text = version::ENGINE_VERSION;
-            let badge_rect = egui::Rect::from_min_size(
-                egui::pos2(header_rect.right() - 100.0, header_rect.center().y - 10.0),
-                egui::vec2(88.0, 20.0),
-            );
-            ui.painter().rect_filled(badge_rect, 4.0, egui::Color32::from_rgb(30, 50, 80));
-            ui.painter().rect_stroke(badge_rect, 4.0, egui::Stroke::new(1.0, accent));
-            ui.painter().text(
-                badge_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                badge_text,
-                egui::FontId::proportional(11.0),
-                accent,
-            );
-
-            // ── Corpo: coluna esquerda (projetos) + coluna direita (ações) ──
-            let body_y      = header_h + 1.0;
-            let body_h      = total_h - body_y - 28.0; // 28 = status bar
-            let sidebar_w   = 260.0_f32;
-            let content_w   = total_w - sidebar_w - 1.0;
-
-            // ── Sidebar direita de ações ──
-            let sidebar_x   = total_w - sidebar_w;
-            let sidebar_rect = egui::Rect::from_min_size(
-                egui::pos2(sidebar_x, body_y),
-                egui::vec2(sidebar_w, body_h),
-            );
-            ui.painter().rect_filled(sidebar_rect, 0.0, panel_bg);
-            ui.painter().line_segment(
-                [sidebar_rect.left_top(), sidebar_rect.left_bottom()],
-                egui::Stroke::new(1.0, border),
-            );
-
-            // Ações sidebar
-            let action_defs: &[(&str, &str, egui::Color32)] = &[
-                ("＋", "Novo Projeto",       accent_green),
-                ("▣",  "Abrir Projeto",      accent),
-                ("→",  "Entrar no Editor",   egui::Color32::from_rgb(88, 166, 255)),
-                ("⏻",  "Sair",              accent_red),
-            ];
-
-            let mut sb_ui_rect = egui::Rect::from_min_size(
-                egui::pos2(sidebar_x + 16.0, body_y + 20.0),
-                egui::vec2(sidebar_w - 32.0, body_h - 40.0),
-            );
-
-            for (icon, label, color) in action_defs {
-                let btn_h = 46.0_f32;
-                let btn_rect = egui::Rect::from_min_size(
-                    sb_ui_rect.min,
-                    egui::vec2(sb_ui_rect.width(), btn_h),
+                let full_rect = ui.max_rect();
+                ui.painter().rect_filled(full_rect, 0.0, bg);
+                ui.painter().rect_filled(
+                    full_rect.shrink2(egui::vec2(24.0, 24.0)),
+                    24.0,
+                    bg_soft,
                 );
 
-                let btn_id = egui::Id::new(format!("hub_action_{}", label));
-                let response = ui.interact(btn_rect, btn_id, egui::Sense::click());
+                ui.add_space(18.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION))
+                            .size(23.0)
+                            .color(title_color)
+                            .strong(),
+                    );
+                });
+                ui.add_space(18.0);
 
-                let bg_color = if response.hovered() {
-                    egui::Color32::from_rgb(38, 50, 70)
-                } else {
-                    card_bg
-                };
+                ui.horizontal(|ui| {
+                    let left_w = (ui.available_width() - 120.0).max(320.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(left_w, ui.available_height()),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            egui::Frame::none()
+                                .fill(card_bg)
+                                .rounding(16.0)
+                                .inner_margin(egui::Margin::same(18.0))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("📁").size(44.0));
+                                        ui.add_space(8.0);
+                                        ui.vertical(|ui| {
+                                            ui.label(
+                                                egui::RichText::new("Projeto atual")
+                                                    .size(12.0)
+                                                    .color(egui::Color32::from_rgb(106, 128, 164)),
+                                            );
+                                            let last_project = self
+                                                .project_hub_session
+                                                .last_project
+                                                .clone()
+                                                .unwrap_or_else(|| "Nenhum projeto selecionado".to_string());
+                                            ui.label(
+                                                egui::RichText::new(last_project)
+                                                    .size(14.0)
+                                                    .color(text_color),
+                                            );
+                                        });
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            let play = egui::Button::new(
+                                                egui::RichText::new("▶")
+                                                    .size(22.0)
+                                                    .color(egui::Color32::WHITE)
+                                                    .strong(),
+                                            )
+                                            .fill(primary_blue)
+                                            .min_size(egui::vec2(170.0, 40.0));
+                                            if ui.add(play).clicked() {
+                                                if let Some(path) = self.project_hub_session.last_project.clone() {
+                                                    if let Err(e) = self.load_project_root(ctx, PathBuf::from(path)) {
+                                                        self.status_msg = format!("❌ {}", e);
+                                                    }
+                                                } else {
+                                                    self.enter_editor_for_current_project(ctx);
+                                                }
+                                            }
+                                        });
+                                    });
+                                });
 
-                ui.painter().rect_filled(btn_rect, 6.0, bg_color);
-                ui.painter().rect_stroke(btn_rect, 6.0, egui::Stroke::new(1.0, border));
+                            ui.add_space(14.0);
 
-                // ícone círculo colorido
-                let icon_center = egui::pos2(btn_rect.left() + 24.0, btn_rect.center().y);
-                ui.painter().circle_filled(icon_center, 14.0, *color);
-                ui.painter().text(
-                    icon_center,
-                    egui::Align2::CENTER_CENTER,
-                    icon,
-                    egui::FontId::proportional(14.0),
-                    egui::Color32::WHITE,
-                );
-                // label
-                ui.painter().text(
-                    egui::pos2(btn_rect.left() + 46.0, btn_rect.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    label,
-                    egui::FontId::proportional(13.0),
-                    egui::Color32::WHITE,
-                );
-                // seta
-                ui.painter().text(
-                    egui::pos2(btn_rect.right() - 12.0, btn_rect.center().y),
-                    egui::Align2::CENTER_CENTER,
-                    "›",
-                    egui::FontId::proportional(18.0),
-                    text_muted,
-                );
+                            egui::ScrollArea::vertical()
+                                .id_source("project_hub_recent_cards")
+                                .max_height(ui.available_height() - 22.0)
+                                .show(ui, |ui| {
+                                    if self.project_hub_session.recent_projects.is_empty() {
+                                        egui::Frame::none()
+                                            .fill(card_bg)
+                                            .rounding(14.0)
+                                            .inner_margin(egui::Margin::same(14.0))
+                                            .show(ui, |ui| {
+                                                ui.label(
+                                                    egui::RichText::new("Nenhum projeto recente.")
+                                                        .color(text_color),
+                                                );
+                                            });
+                                    } else {
+                                        let recent = self.project_hub_session.recent_projects.clone();
+                                        for path in recent {
+                                            let mut clicked = false;
+                                            let response = egui::Frame::none()
+                                                .fill(card_bg)
+                                                .rounding(14.0)
+                                                .inner_margin(egui::Margin::same(14.0))
+                                                .show(ui, |ui| {
+                                                    ui.set_min_height(54.0);
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(egui::RichText::new("🗂").size(26.0));
+                                                        ui.add_space(6.0);
+                                                        ui.vertical(|ui| {
+                                                            let file_name = Path::new(&path)
+                                                                .file_name()
+                                                                .and_then(|n| n.to_str())
+                                                                .unwrap_or(&path)
+                                                                .to_string();
+                                                            ui.label(
+                                                                egui::RichText::new(file_name)
+                                                                    .color(text_color)
+                                                                    .size(15.0)
+                                                                    .strong(),
+                                                            );
+                                                            ui.label(
+                                                                egui::RichText::new(&path)
+                                                                    .color(text_dim)
+                                                                    .size(12.0),
+                                                            );
+                                                        });
+                                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                            ui.label(egui::RichText::new("›").size(18.0).color(text_dim));
+                                                        });
+                                                    });
+                                                })
+                                                .response;
 
-                if response.clicked() {
-                    match *label {
-                        "Novo Projeto" => {
-                            let base = std::env::current_dir()
-                                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                                .to_string_lossy()
-                                .to_string();
-                            self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
-                        }
-                        "Abrir Projeto" => {
-                            self.open_project_dialog = Some(String::new());
-                        }
-                        "Entrar no Editor" => {
-                            self.enter_editor_for_current_project(ctx);
-                        }
-                        "Sair" => {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                        _ => {}
+                                            if response.hovered() {
+                                                ui.painter().rect_filled(response.rect, 14.0, card_bg_hover);
+                                            }
+                                            if response.clicked() {
+                                                clicked = true;
+                                            }
+
+                                            if clicked {
+                                                if let Err(e) = self.load_project_root(ctx, PathBuf::from(&path)) {
+                                                    self.status_msg = format!("❌ {}", e);
+                                                }
+                                            }
+                                            ui.add_space(8.0);
+                                        }
+                                    }
+                                });
+                        },
+                    );
+
+                    ui.add_space(14.0);
+
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(78.0, ui.available_height()),
+                        egui::Layout::top_down(egui::Align::Center),
+                        |ui| {
+                            let actions = [
+                                ("➕", "Novo projeto", primary_blue),
+                                ("📂", "Abrir projeto", orange),
+                                ("➡", "Entrar no editor", green),
+                                ("⏻", "Sair", red),
+                            ];
+
+                            for (icon, label, color) in actions {
+                                let button = egui::Button::new(
+                                    egui::RichText::new(icon)
+                                        .size(26.0)
+                                        .color(egui::Color32::WHITE)
+                                        .strong(),
+                                )
+                                .fill(color)
+                                .min_size(egui::vec2(56.0, 50.0));
+
+                                let response = ui.add(button).on_hover_text(label);
+                                if response.clicked() {
+                                    match label {
+                                        "Novo projeto" => {
+                                            let base = std::env::current_dir()
+                                                .unwrap_or_else(|_| PathBuf::from("."))
+                                                .to_string_lossy()
+                                                .to_string();
+                                            self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
+                                        }
+                                        "Abrir projeto" => {
+                                            self.open_project_dialog = Some(String::new());
+                                        }
+                                        "Entrar no editor" => {
+                                            self.enter_editor_for_current_project(ctx);
+                                        }
+                                        "Sair" => {
+                                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                ui.add_space(10.0);
+                            }
+                        },
+                    );
+                });
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("Selecione um projeto para começar")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(255, 232, 138)),
+                    );
+                    if !self.status_msg.is_empty() {
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new(&self.status_msg).color(title_color));
                     }
-                }
-
-                sb_ui_rect.min.y += btn_h + 8.0;
-            }
-
-            // ── Coluna esquerda: projetos ──
-            let left_rect = egui::Rect::from_min_size(
-                egui::pos2(0.0, body_y),
-                egui::vec2(content_w, body_h),
-            );
-
-            // Último projeto — card em destaque
-            let last_card_h = 90.0_f32;
-            let last_card_rect = egui::Rect::from_min_size(
-                egui::pos2(left_rect.left() + 16.0, left_rect.top() + 16.0),
-                egui::vec2(left_rect.width() - 32.0, last_card_h),
-            );
-
-            ui.painter().rect_filled(last_card_rect, 8.0, card_bg);
-            ui.painter().rect_stroke(last_card_rect, 8.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 100, 170)));
-
-            // ícone pasta grande
-            let folder_cx = last_card_rect.left() + 52.0;
-            let folder_cy = last_card_rect.center().y;
-            // sombra do folder
-            ui.painter().circle_filled(egui::pos2(folder_cx, folder_cy), 26.0, egui::Color32::from_rgb(20, 30, 50));
-            ui.painter().text(
-                egui::pos2(folder_cx, folder_cy),
-                egui::Align2::CENTER_CENTER,
-                "▶",
-                egui::FontId::proportional(22.0),
-                accent_green,
-            );
-
-            match self.project_hub_session.last_project.clone() {
-                Some(ref path) => {
-                    let short = std::path::Path::new(path)
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or(path.as_str());
-                    ui.painter().text(
-                        egui::pos2(last_card_rect.left() + 96.0, folder_cy - 12.0),
-                        egui::Align2::LEFT_CENTER,
-                        short,
-                        egui::FontId::proportional(14.0),
-                        egui::Color32::WHITE,
-                    );
-                    ui.painter().text(
-                        egui::pos2(last_card_rect.left() + 96.0, folder_cy + 6.0),
-                        egui::Align2::LEFT_CENTER,
-                        path.as_str(),
-                        egui::FontId::proportional(10.0),
-                        text_dim,
-                    );
-
-                    // botão play
-                    let play_btn = egui::Rect::from_min_size(
-                        egui::pos2(last_card_rect.left() + 96.0, folder_cy + 22.0),
-                        egui::vec2(130.0, 22.0),
-                    );
-                    let play_id = egui::Id::new("hub_continue_btn");
-                    let play_resp = ui.interact(play_btn, play_id, egui::Sense::click());
-                    let play_col = if play_resp.hovered() {
-                        egui::Color32::from_rgb(46, 120, 220)
-                    } else {
-                        egui::Color32::from_rgb(36, 100, 200)
-                    };
-                    ui.painter().rect_filled(play_btn, 4.0, play_col);
-                    ui.painter().text(
-                        play_btn.center(),
-                        egui::Align2::CENTER_CENTER,
-                        "▶  Continuar",
-                        egui::FontId::proportional(11.0),
-                        egui::Color32::WHITE,
-                    );
-                    if play_resp.clicked() {
-                        let root = std::path::PathBuf::from(path.clone());
-                        if let Err(e) = self.load_project_root(ctx, root) {
-                            self.status_msg = format!("❌ {}", e);
-                        }
-                    }
-                }
-                None => {
-                    ui.painter().text(
-                        egui::pos2(last_card_rect.left() + 96.0, folder_cy),
-                        egui::Align2::LEFT_CENTER,
-                        "Nenhum projeto recente",
-                        egui::FontId::proportional(13.0),
-                        text_dim,
-                    );
-                }
-            }
-
-            // ── Seção "Recentes" ──
-            let section_y = last_card_rect.bottom() + 20.0;
-            ui.painter().text(
-                egui::pos2(left_rect.left() + 16.0, section_y),
-                egui::Align2::LEFT_TOP,
-                "PROJETOS RECENTES",
-                egui::FontId::proportional(10.0),
-                text_muted,
-            );
-            ui.painter().line_segment(
-                [
-                    egui::pos2(left_rect.left() + 16.0, section_y + 14.0),
-                    egui::pos2(left_rect.right() - 16.0, section_y + 14.0),
-                ],
-                egui::Stroke::new(1.0, border),
-            );
-
-            let recent_start_y = section_y + 22.0;
-            let recent = self.project_hub_session.recent_projects.clone();
-            if recent.is_empty() {
-                ui.painter().text(
-                    egui::pos2(left_rect.left() + 16.0, recent_start_y + 10.0),
-                    egui::Align2::LEFT_TOP,
-                    "Nenhum projeto recente.",
-                    egui::FontId::proportional(12.0),
-                    text_dim,
-                );
-            } else {
-                for (i, path) in recent.iter().enumerate() {
-                    let row_h = 44.0_f32;
-                    let row_rect = egui::Rect::from_min_size(
-                        egui::pos2(left_rect.left() + 16.0, recent_start_y + i as f32 * (row_h + 6.0)),
-                        egui::vec2(left_rect.width() - 32.0, row_h),
-                    );
-
-                    if row_rect.bottom() > left_rect.bottom() - 8.0 { break; }
-
-                    let row_id = egui::Id::new(format!("hub_recent_{}", i));
-                    let row_resp = ui.interact(row_rect, row_id, egui::Sense::click());
-
-                    let row_bg = if row_resp.hovered() {
-                        egui::Color32::from_rgb(34, 42, 58)
-                    } else {
-                        egui::Color32::from_rgb(24, 30, 42)
-                    };
-                    ui.painter().rect_filled(row_rect, 5.0, row_bg);
-                    ui.painter().rect_stroke(row_rect, 5.0, egui::Stroke::new(1.0, border));
-
-                    // folder icon
-                    let folder_colors = [
-                        egui::Color32::from_rgb(210, 140, 30),
-                        egui::Color32::from_rgb(30, 140, 100),
-                        egui::Color32::from_rgb(100, 80, 200),
-                        egui::Color32::from_rgb(200, 80, 80),
-                    ];
-                    let fc = folder_colors[i % folder_colors.len()];
-                    ui.painter().text(
-                        egui::pos2(row_rect.left() + 22.0, row_rect.center().y),
-                        egui::Align2::CENTER_CENTER,
-                        "▣",
-                        egui::FontId::proportional(16.0),
-                        fc,
-                    );
-
-                    let short = std::path::Path::new(path)
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or(path.as_str());
-                    ui.painter().text(
-                        egui::pos2(row_rect.left() + 40.0, row_rect.center().y - 6.0),
-                        egui::Align2::LEFT_CENTER,
-                        short,
-                        egui::FontId::proportional(13.0),
-                        egui::Color32::WHITE,
-                    );
-                    ui.painter().text(
-                        egui::pos2(row_rect.left() + 40.0, row_rect.center().y + 8.0),
-                        egui::Align2::LEFT_CENTER,
-                        path.as_str(),
-                        egui::FontId::proportional(10.0),
-                        text_dim,
-                    );
-                    // seta abrir
-                    ui.painter().text(
-                        egui::pos2(row_rect.right() - 14.0, row_rect.center().y),
-                        egui::Align2::CENTER_CENTER,
-                        "›",
-                        egui::FontId::proportional(18.0),
-                        text_muted,
-                    );
-
-                    if row_resp.clicked() || row_resp.double_clicked() {
-                        if let Err(e) = self.load_project_root(ctx, std::path::PathBuf::from(path.clone())) {
-                            self.status_msg = format!("❌ {}", e);
-                        }
-                    }
-                }
-            }
-
-            // ── Status bar inferior ──
-            let status_rect = egui::Rect::from_min_size(
-                egui::pos2(0.0, total_h - 26.0),
-                egui::vec2(total_w, 26.0),
-            );
-            ui.painter().rect_filled(status_rect, 0.0, panel_bg);
-            ui.painter().line_segment(
-                [status_rect.left_top(), status_rect.right_top()],
-                egui::Stroke::new(1.0, border),
-            );
-            let status_text = if self.status_msg.is_empty() {
-                "Selecione um projeto para começar.".to_string()
-            } else {
-                self.status_msg.clone()
-            };
-            ui.painter().text(
-                egui::pos2(status_rect.right() - 12.0, status_rect.center().y),
-                egui::Align2::RIGHT_CENTER,
-                &status_text,
-                egui::FontId::proportional(11.0),
-                text_dim,
-            );
-        });
+                });
+            });
 
         self.show_new_project_dialog(ctx);
         self.show_open_project_dialog(ctx);
@@ -853,62 +707,20 @@ impl EditorApp {
             return;
         }
 
-        let panel_bg  = egui::Color32::from_rgb(18, 23, 35);
-        let accent     = egui::Color32::from_rgb(88, 166, 255);
-        let text_dim   = egui::Color32::from_rgb(120, 136, 158);
-        let border     = egui::Color32::from_rgb(38, 52, 78);
-
-        egui::Window::new("##version_popup")
-            .title_bar(false)
+        egui::Window::new("RS2BR Engine - Versão atual")
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .frame(egui::Frame::none()
-                .fill(panel_bg)
-                .rounding(10.0)
-                .stroke(egui::Stroke::new(1.0, border))
-                .inner_margin(egui::Margin::same(24.0)))
             .show(ctx, |ui| {
-                ui.set_min_width(320.0);
-
-                // cabeçalho
-                ui.horizontal(|ui| {
-                    let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                    ui.painter().circle_filled(dot.center(), 5.0, accent);
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new(version::ENGINE_TITLE)
-                            .size(16.0)
-                            .strong()
-                            .color(egui::Color32::WHITE),
-                    );
-                });
-                ui.add_space(4.0);
-
-                // versão badge
-                let ver_text = format!("Versão  {}", version::ENGINE_VERSION);
-                ui.label(egui::RichText::new(&ver_text).size(13.0).color(accent));
-                ui.add_space(8.0);
-
-                ui.label(egui::RichText::new("Engine 2D — Game Layer ativo").size(11.0).color(text_dim));
-                ui.label(egui::RichText::new("Use Lua para scripts · JSON para cenas · RS2 para shaders").size(10.0).color(text_dim));
-
-                ui.add_space(16.0);
+                ui.heading(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION));
+                ui.label(format!("Status: {}", version::ENGINE_STATUS));
+                ui.label("Esta versão está em teste.");
+                ui.label("Clique em OK para continuar e confirmar qual versão está aberta.");
                 ui.separator();
-                ui.add_space(8.0);
-
-                ui.vertical_centered(|ui| {
-                    let ok_btn = egui::Button::new(
-                        egui::RichText::new("  Entrar no Editor  ").color(egui::Color32::WHITE).size(12.0)
-                    )
-                    .fill(egui::Color32::from_rgb(36, 100, 200))
-                    .rounding(5.0)
-                    .min_size(egui::vec2(160.0, 30.0));
-                    if ui.add(ok_btn).clicked() {
-                        self.show_version_popup = false;
-                        self.status_msg = version::startup_message();
-                    }
-                });
+                if ui.button("OK").clicked() {
+                    self.show_version_popup = false;
+                    self.status_msg = format!("{}", version::startup_message());
+                }
             });
     }
 
@@ -1736,46 +1548,46 @@ fn status_visuals(level: EditorStatusLevel) -> (&'static str, egui::Color32) {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // ── Tema — RS2BR-Engine V0.9.7.5 ──
+        // ── Tema azul/cobalto inspirado no mockup v0.95.7 ──
         let mut visuals = egui::Visuals::dark();
-        visuals.override_text_color = Some(egui::Color32::from_rgb(210, 220, 235));
-        // Fundos dos painéis
-        visuals.panel_fill              = egui::Color32::from_rgb(18, 22, 32);   // painel lateral
-        visuals.faint_bg_color          = egui::Color32::from_rgb(24, 30, 42);
-        visuals.extreme_bg_color        = egui::Color32::from_rgb(10, 13, 20);   // viewport grid
-        visuals.code_bg_color           = egui::Color32::from_rgb(16, 22, 34);
-        visuals.window_fill             = egui::Color32::from_rgb(22, 28, 40);
-        // Widgets
-        visuals.widgets.noninteractive.bg_fill      = egui::Color32::from_rgb(24, 30, 44);
-        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(28, 36, 50);
-        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(32, 40, 58);
-        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(36, 45, 64);
-        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(44, 58, 84);
-        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(48, 64, 90);
-        visuals.widgets.active.bg_fill              = egui::Color32::from_rgb(40, 100, 200);
-        visuals.widgets.active.weak_bg_fill         = egui::Color32::from_rgb(32, 84, 175);
-        visuals.widgets.open.bg_fill                = egui::Color32::from_rgb(30, 38, 56);
-        // Seleção
-        visuals.selection.bg_fill                   = egui::Color32::from_rgb(40, 100, 200);
-        visuals.selection.stroke.color              = egui::Color32::from_rgb(88, 166, 255);
-        visuals.hyperlink_color                     = egui::Color32::from_rgb(88, 166, 255);
-        // Bordas e strokes
-        visuals.window_stroke.color                         = egui::Color32::from_rgb(40, 52, 72);
-        visuals.widgets.noninteractive.bg_stroke.color      = egui::Color32::from_rgb(36, 46, 66);
-        visuals.widgets.inactive.bg_stroke.color            = egui::Color32::from_rgb(42, 54, 76);
-        visuals.widgets.hovered.bg_stroke.color             = egui::Color32::from_rgb(88, 166, 255);
-        visuals.widgets.active.bg_stroke.color              = egui::Color32::from_rgb(120, 190, 255);
-        visuals.widgets.open.bg_stroke.color                = egui::Color32::from_rgb(50, 64, 88);
-        visuals.widgets.noninteractive.fg_stroke.color      = egui::Color32::from_rgb(40, 52, 72);
-        // Rounding — minimalista mas com cantos levemente arredondados
-        visuals.window_rounding                             = 6.0.into();
-        visuals.menu_rounding                               = 5.0.into();
-        visuals.widgets.noninteractive.rounding             = 3.0.into();
-        visuals.widgets.inactive.rounding                   = 3.0.into();
-        visuals.widgets.hovered.rounding                    = 3.0.into();
-        visuals.widgets.active.rounding                     = 3.0.into();
-        visuals.widgets.open.rounding                       = 3.0.into();
+        visuals.override_text_color = Some(egui::Color32::from_rgb(226, 236, 248));
+        visuals.panel_fill              = egui::Color32::from_rgb(19, 39, 86);
+        visuals.faint_bg_color          = egui::Color32::from_rgb(23, 49, 102);
+        visuals.extreme_bg_color        = egui::Color32::from_rgb(10, 21, 50);
+        visuals.code_bg_color           = egui::Color32::from_rgb(14, 29, 64);
+        visuals.window_fill             = egui::Color32::from_rgb(20, 43, 92);
+        visuals.widgets.noninteractive.bg_fill      = egui::Color32::from_rgb(22, 47, 98);
+        visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(27, 55, 112);
+        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(28, 60, 120);
+        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(32, 67, 132);
+        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(41, 86, 168);
+        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(46, 95, 182);
+        visuals.widgets.active.bg_fill              = egui::Color32::from_rgb(74, 196, 108);
+        visuals.widgets.active.weak_bg_fill         = egui::Color32::from_rgb(55, 160, 94);
+        visuals.widgets.open.bg_fill                = egui::Color32::from_rgb(26, 53, 108);
+        visuals.selection.bg_fill                   = egui::Color32::from_rgb(56, 112, 242);
+        visuals.selection.stroke.color              = egui::Color32::from_rgb(125, 206, 255);
+        visuals.hyperlink_color                     = egui::Color32::from_rgb(125, 206, 255);
+        visuals.window_stroke.color                         = egui::Color32::from_rgb(79, 123, 196);
+        visuals.widgets.noninteractive.bg_stroke.color      = egui::Color32::from_rgb(49, 84, 148);
+        visuals.widgets.inactive.bg_stroke.color            = egui::Color32::from_rgb(59, 98, 170);
+        visuals.widgets.hovered.bg_stroke.color             = egui::Color32::from_rgb(121, 200, 255);
+        visuals.widgets.active.bg_stroke.color              = egui::Color32::from_rgb(151, 240, 176);
+        visuals.widgets.open.bg_stroke.color                = egui::Color32::from_rgb(76, 120, 192);
+        visuals.widgets.noninteractive.fg_stroke.color      = egui::Color32::from_rgb(202, 220, 244);
+        visuals.window_rounding                             = 12.0.into();
+        visuals.menu_rounding                               = 10.0.into();
+        visuals.widgets.noninteractive.rounding             = 10.0.into();
+        visuals.widgets.inactive.rounding                   = 10.0.into();
+        visuals.widgets.hovered.rounding                    = 10.0.into();
+        visuals.widgets.active.rounding                     = 10.0.into();
+        visuals.widgets.open.rounding                       = 10.0.into();
         ctx.set_visuals(visuals);
+        ctx.style_mut(|style| {
+            style.spacing.button_padding = egui::vec2(10.0, 7.0);
+            style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+            style.visuals.window_shadow = egui::epaint::Shadow::NONE;
+        });
 
         if self.app_screen == EditorScreen::ProjectHub {
             self.show_project_hub(ctx);
@@ -1889,25 +1701,13 @@ impl eframe::App for EditorApp {
             .max_height(900.0)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    // Tab Assets
+                    ui.spacing_mut().item_spacing.x = 6.0;
                     let assets_selected = self.bottom_tab == BottomDockTab::Assets;
-                    let assets_color = if assets_selected { egui::Color32::WHITE } else { egui::Color32::from_rgb(120, 136, 158) };
-                    let assets_bg = if assets_selected { egui::Color32::from_rgb(32, 48, 72) } else { egui::Color32::TRANSPARENT };
-                    let assets_btn = egui::Button::new(
-                        egui::RichText::new("Assets").size(12.0).color(assets_color)
-                    ).fill(assets_bg).rounding(4.0).min_size(egui::vec2(64.0, 22.0));
-                    if ui.add(assets_btn).clicked() {
+                    if ui.selectable_label(assets_selected, "📦 Asset Browser").clicked() {
                         self.bottom_tab = BottomDockTab::Assets;
                     }
-                    // Tab Animator
                     let animator_selected = self.bottom_tab == BottomDockTab::Animator;
-                    let anim_color = if animator_selected { egui::Color32::WHITE } else { egui::Color32::from_rgb(120, 136, 158) };
-                    let anim_bg = if animator_selected { egui::Color32::from_rgb(32, 48, 72) } else { egui::Color32::TRANSPARENT };
-                    let anim_btn = egui::Button::new(
-                        egui::RichText::new("Animator").size(12.0).color(anim_color)
-                    ).fill(anim_bg).rounding(4.0).min_size(egui::vec2(72.0, 22.0));
-                    let animator_tab = ui.add(anim_btn);
+                    let animator_tab = ui.selectable_label(animator_selected, "🎞 Animator");
                     if animator_tab.clicked() {
                         self.bottom_tab = BottomDockTab::Animator;
                     }
@@ -1946,73 +1746,49 @@ impl eframe::App for EditorApp {
             scene_view::show(self, ui);
         });
 
-        egui::TopBottomPanel::bottom("status_bar")
-            .frame(egui::Frame::none()
-                .fill(egui::Color32::from_rgb(12, 16, 26))
-                .inner_margin(egui::Margin { left: 10.0, right: 10.0, top: 3.0, bottom: 3.0 }))
-            .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                // ── Mensagem de status com ícone colorido ──
+        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
                 let level = infer_status_level(&self.status_msg);
                 let (icon, color) = status_visuals(level);
                 let trimmed_message = self
                     .status_msg
                     .trim_start_matches(|c: char| matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' '));
-                ui.label(egui::RichText::new(format!("{} {}", icon, trimmed_message)).size(11.0).color(color));
+                ui.colored_label(color, format!("{} {}", icon, trimmed_message));
+                ui.separator();
 
-                // ── Direita: modo, warnings, asset, seleção ──
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(4.0);
+                let mode_label = match self.play_state {
+                    EditorPlayState::Edit => "Modo: Edição",
+                    EditorPlayState::Playing => "Modo: Play",
+                    EditorPlayState::Paused => "Modo: Pausado",
+                };
+                ui.label(mode_label);
 
-                    // Versão compacta
-                    ui.label(
-                        egui::RichText::new(version::ENGINE_VERSION)
-                            .size(10.0)
-                            .color(egui::Color32::from_rgb(60, 80, 110)),
-                    );
+                let warning_count = self.warning_count();
+                ui.separator();
+                if warning_count == 0 {
+                    ui.label("Warnings: 0");
+                } else {
+                    ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
+                }
+
+                if let Some(asset) = self.selected_asset.as_ref() {
+                    let record = self.assets.asset_record_for(asset);
                     ui.separator();
-
-                    // Seleção múltipla
-                    if !self.selected_entity_ids.is_empty() {
-                        ui.label(
-                            egui::RichText::new(format!("{} sel.", self.selected_entity_ids.len()))
-                                .size(11.0)
-                                .color(egui::Color32::from_rgb(88, 166, 255)),
-                        );
-                        ui.separator();
-                    }
-
-                    // Asset selecionado
-                    if let Some(asset) = self.selected_asset.as_ref() {
-                        let record = self.assets.asset_record_for(asset);
-                        let asset_color = if record.validation.is_valid {
-                            egui::Color32::from_rgb(80, 190, 100)
-                        } else {
-                            egui::Color32::from_rgb(220, 80, 80)
-                        };
-                        ui.label(egui::RichText::new(&record.name).size(11.0).color(asset_color));
-                        ui.separator();
-                    }
-
-                    // Warnings
-                    let warning_count = self.warning_count();
-                    if warning_count > 0 {
-                        ui.label(
-                            egui::RichText::new(format!("⚠ {}", warning_count))
-                                .size(11.0)
-                                .color(egui::Color32::from_rgb(230, 160, 30)),
-                        );
-                        ui.separator();
-                    }
-
-                    // Modo play
-                    let (mode_label, mode_color) = match self.play_state {
-                        EditorPlayState::Edit    => ("● Edição",  egui::Color32::from_rgb(80, 110, 160)),
-                        EditorPlayState::Playing => ("▶ Play",    egui::Color32::from_rgb(63, 185, 80)),
-                        EditorPlayState::Paused  => ("⏸ Pausado", egui::Color32::from_rgb(200, 160, 30)),
+                    let asset_color = if record.validation.is_valid {
+                        egui::Color32::from_rgb(120, 220, 140)
+                    } else {
+                        egui::Color32::from_rgb(255, 120, 120)
                     };
-                    ui.label(egui::RichText::new(mode_label).size(11.0).color(mode_color));
-                });
+                    ui.colored_label(asset_color, format!("Asset: {}", record.name));
+                }
+
+                if !self.selected_entity_ids.is_empty() {
+                    ui.separator();
+                    ui.label(format!(
+                        "{} selecionada(s)",
+                        self.selected_entity_ids.len()
+                    ));
+                }
             });
         });
 

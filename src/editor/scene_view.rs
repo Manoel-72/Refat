@@ -28,59 +28,48 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // ── Cabeçalho da viewport ──
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(14, 18, 28))
-        .inner_margin(egui::Margin { left: 10.0, right: 8.0, top: 5.0, bottom: 4.0 })
+        .fill(egui::Color32::from_rgb(22, 27, 34))
+        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 4.0, bottom: 3.0 })
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                // Nome da cena com ponto de acento
-                let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-                ui.painter().circle_filled(
-                    dot.center(), 4.0,
-                    egui::Color32::from_rgb(88, 166, 255),
-                );
-                ui.add_space(4.0);
+                ui.label(egui::RichText::new("🎬 Cena 2D").strong().size(13.0));
+                ui.separator();
                 ui.label(
-                    egui::RichText::new(&app.scene.name)
-                        .color(egui::Color32::WHITE)
-                        .strong()
+                    egui::RichText::new(format!("📌 {}", app.scene.name))
+                        .color(egui::Color32::from_rgb(88, 166, 255))
                         .size(12.0),
                 );
                 ui.separator();
-                // Zoom
                 ui.label(
                     egui::RichText::new(format!("{:.0}%", app.scene_zoom * 100.0))
-                        .color(egui::Color32::from_rgb(100, 118, 145))
-                        .size(11.0),
+                        .color(egui::Color32::from_rgb(139, 148, 158))
+                        .size(12.0),
                 );
                 ui.separator();
-                // Contagem de entidades
                 ui.label(
-                    egui::RichText::new(format!("{} obj", entity_count))
-                        .color(egui::Color32::from_rgb(100, 118, 145))
-                        .size(11.0),
+                    egui::RichText::new(format!("🎯 {} obj", entity_count))
+                        .color(egui::Color32::from_rgb(139, 148, 158))
+                        .size(12.0),
                 );
 
                 if app.play_state != EditorPlayState::Edit {
                     ui.separator();
-                    ui.label(
-                        egui::RichText::new("▶ Runtime ativo")
-                            .color(egui::Color32::from_rgb(63, 185, 80))
-                            .size(11.0),
+                    ui.colored_label(
+                        egui::Color32::from_rgb(63, 185, 80),
+                        "▶ Runtime ativo",
                     );
                 }
 
                 ui.separator();
-                ui.checkbox(&mut app.show_entity_names, "Nomes")
+                ui.checkbox(&mut app.show_entity_names, "🏷 Nomes")
                     .on_hover_text("Exibe o nome de cada entidade na viewport");
-                ui.checkbox(&mut app.show_colliders, "Colliders")
+                ui.checkbox(&mut app.show_colliders, "📐 Colliders")
                     .on_hover_text("Mostra os box colliders como bordas verdes");
-                ui.checkbox(&mut app.snap_to_grid, "Snap 32px")
+                ui.checkbox(&mut app.snap_to_grid, "📏 Snap 32px")
                     .on_hover_text("Encaixa entidades na grade de 32px ao mover");
 
-                if ui.add(
-                    egui::Button::new(egui::RichText::new("⊙ Reset").size(11.0))
-                        .frame(false)
-                ).on_hover_text("Volta zoom 100% e centraliza a viewport").clicked() {
+                if ui.small_button("🎯 Resetar Visão")
+                    .on_hover_text("Volta zoom 100% e centraliza a viewport").clicked() {
                     app.scene_zoom = 1.0;
                     app.scene_pan = egui::Vec2::ZERO;
                 }
@@ -416,9 +405,9 @@ fn draw_grid(
     snap_active: bool,
 ) {
     let grid_color = if snap_active {
-        egui::Color32::from_rgba_unmultiplied(60, 120, 200, 55)
+        egui::Color32::from_rgba_unmultiplied(100, 150, 120, 90)
     } else {
-        egui::Color32::from_rgba_unmultiplied(50, 65, 100, 38)
+        egui::Color32::from_rgba_unmultiplied(80, 80, 90, 60)
     };
     let grid_size = (32.0_f32 * zoom).clamp(8.0, 128.0);
 

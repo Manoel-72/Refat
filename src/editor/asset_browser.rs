@@ -20,17 +20,15 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // ── Cabeçalho + Busca ──
     ui.horizontal_wrapped(|ui| {
-        ui.label(egui::RichText::new("Assets").strong().size(12.0).color(egui::Color32::WHITE));
+        ui.heading("Assets");
         ui.separator();
+        ui.label("Buscar:");
         ui.add(
             egui::TextEdit::singleline(&mut app.asset_search)
-                .hint_text("buscar asset...")
-                .desired_width(140.0),
+                .hint_text("sprite, MATR, script rs2/lua...")
+                .desired_width(160.0),
         );
-        if ui.add(
-            egui::Button::new(egui::RichText::new("✕").size(10.0))
-                .frame(false)
-        ).on_hover_text("Limpar busca").clicked() {
+        if ui.button("✖").on_hover_text("Limpar busca").clicked() {
             app.asset_search.clear();
             app.asset_filter = AssetBrowserFilter::All;
         }
@@ -74,30 +72,25 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     });
 
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.label("Filtros rápidos:");
         for (label, filter) in quick_filters() {
             let selected = app.asset_filter == filter;
-            let fg = if selected { egui::Color32::WHITE } else { egui::Color32::from_rgb(110, 130, 155) };
-            let bg = if selected { egui::Color32::from_rgb(32, 52, 84) } else { egui::Color32::TRANSPARENT };
-            let btn = egui::Button::new(egui::RichText::new(label).size(11.0).color(fg))
-                .fill(bg)
-                .rounding(3.0)
-                .min_size(egui::vec2(0.0, 20.0));
-            if ui.add(btn).clicked() {
+            if ui.selectable_label(selected, label).clicked() {
                 app.asset_filter = filter;
             }
         }
-        ui.separator();
+
         let total_assets = app.assets.list_asset_records().len();
-        ui.label(egui::RichText::new(format!("{} assets", total_assets)).size(10.0).color(egui::Color32::from_rgb(80, 98, 120)));
+        ui.separator();
+        ui.small(format!("{} registros", total_assets));
     });
 
     ui.label(
         egui::RichText::new(
-            "Clique direito para opções · Arraste para a cena",
+            "Dica: clique direito para criar/deletar/renomear e arraste imagens ou MATRs direto para a cena.",
         )
-        .size(10.0)
-        .color(egui::Color32::from_rgb(70, 88, 112)),
+        .small()
+        .weak(),
     );
 
     if let Some(selected_asset) = app.selected_asset.clone() {
@@ -483,27 +476,15 @@ fn show_node(
 }
 
 fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root: &Path) {
-    let accent     = egui::Color32::from_rgb(88, 166, 255);
-    let text_dim   = egui::Color32::from_rgb(110, 130, 155);
-    let ok_green   = egui::Color32::from_rgb(63, 185, 80);
-    let warn_yel   = egui::Color32::from_rgb(210, 160, 30);
-
-    egui::Frame::none()
-        .fill(egui::Color32::from_rgb(18, 23, 35))
-        .rounding(6.0)
-        .inner_margin(egui::Margin::same(10.0))
-        .show(ui, |ui| {
-
-        ui.label(egui::RichText::new("Detalhes do Asset").size(12.0).strong().color(egui::Color32::WHITE));
-        ui.add_space(4.0);
+    ui.group(|ui| {
+        ui.heading("🧭 Detalhes do Asset");
 
         let selected = app.selected_asset.clone();
         let Some(path) = selected else {
-            ui.label(egui::RichText::new("Selecione uma pasta ou asset para ver detalhes.").size(11.0).color(text_dim));
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new("· Crie prefabs/Sprites Sprites e pontos de referência").size(10.0).color(text_dim));
-            ui.label(egui::RichText::new("· MATRs virar arrastados para cena").size(10.0).color(text_dim));
-            ui.label(egui::RichText::new("· Clique direto para criar RS2/TilesScript e others").size(10.0).color(text_dim));
+            ui.label("Selecione um arquivo ou pasta para ver detalhes.");
+            ui.label("• imagens podem virar entidades Sprite");
+            ui.label("• MATRs podem ser arrastados para a cena");
+            ui.label("• clique direito para criar scripts RS2, pastas e deletar");
             return;
         };
 
@@ -513,38 +494,32 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
             .relative_path(&path)
             .map(|p| p.to_string_lossy().replace('\\', "/"));
 
-        ui.label(egui::RichText::new(name).size(13.0).strong().color(egui::Color32::WHITE));
+        ui.label(egui::RichText::new(name).strong());
         let record = app.assets.asset_record_for(&path);
         let tipo_texto = match record.asset_type {
-            AssetType::Folder   => "pasta",
-            AssetType::Scene    => "cena",
-            AssetType::Prefab   => "prefab",
-            AssetType::Texture  => "textura",
-            AssetType::Audio    => "áudio",
-            AssetType::Font     => "fonte",
+            AssetType::Folder => "pasta",
+            AssetType::Scene => "cena",
+            AssetType::Prefab => "prefab",
+            AssetType::Texture => "textura",
+            AssetType::Audio => "áudio",
+            AssetType::Font => "fonte",
             AssetType::ScriptRs2 => "script RS2",
             AssetType::ScriptLua => "script Lua",
-            AssetType::Json     => "json",
-            AssetType::Unknown  => "desconhecido",
+            AssetType::Json => "json",
+            AssetType::Unknown => "desconhecido",
         };
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Tipo").size(10.0).color(text_dim));
-            ui.label(egui::RichText::new(tipo_texto).size(11.0).color(accent));
-        });
+        ui.label(format!("Tipo: {}", tipo_texto));
         let status_text = match record.load_status {
-            AssetLoadStatus::Ready     => "Ready",
+            AssetLoadStatus::Ready => "Ready",
             AssetLoadStatus::NotLoaded => "NotLoaded",
-            AssetLoadStatus::Missing   => "Missing",
-            AssetLoadStatus::Invalid   => "Invalid",
+            AssetLoadStatus::Missing => "Missing",
+            AssetLoadStatus::Invalid => "Invalid",
         };
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Status").size(10.0).color(text_dim));
-            ui.label(egui::RichText::new(status_text).size(11.0).color(accent));
-        });
+        ui.label(format!("Status: {}", status_text));
         if !record.validation.is_valid {
-            ui.label(egui::RichText::new(format!("⚠ {}", record.validation.message)).size(10.0).color(warn_yel));
+            ui.colored_label(egui::Color32::YELLOW, format!("⚠ {}", record.validation.message));
         } else {
-            ui.label(egui::RichText::new("✔ OK").size(10.0).color(ok_green));
+            ui.colored_label(egui::Color32::LIGHT_GREEN, "✔ Validação OK");
         }
 
         if let Some(rel) = &relative {
@@ -673,7 +648,7 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                 app.assets.refresh();
             }
         });
-    }); // Frame
+    });
 }
 
 

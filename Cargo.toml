@@ -1,6 +1,6 @@
 [package]
 name = "rs2br-engine"
-version = "0.9.7-5"
+version = "0.9.5-7"
 edition = "2021"
 
 [[bin]]

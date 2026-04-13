@@ -15,26 +15,17 @@ use super::{DeleteTarget, EditorApp};
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Cabeçalho da Hierarquia ──
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(14, 18, 28))
-        .inner_margin(egui::Margin { left: 10.0, right: 8.0, top: 7.0, bottom: 5.0 })
+        .fill(egui::Color32::from_rgb(22, 27, 34))
+        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                // ponto colorido de acento
-                let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-                ui.painter().circle_filled(dot.center(), 4.0, egui::Color32::from_rgb(88, 166, 255));
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new("Hierarquia").strong().size(13.0).color(egui::Color32::WHITE));
+                ui.label(egui::RichText::new("🌳 Hierarquia").strong().size(13.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let count = app.scene.entities.len();
                     ui.label(
-                        egui::RichText::new(format!("{}", count))
-                            .size(11.0)
+                        egui::RichText::new(format!("{} entidade(s)", count))
+                            .small()
                             .color(egui::Color32::from_rgb(88, 166, 255)),
-                    );
-                    ui.label(
-                        egui::RichText::new("ent ·")
-                            .size(10.0)
-                            .color(egui::Color32::from_rgb(80, 95, 115)),
                     );
                 });
             });

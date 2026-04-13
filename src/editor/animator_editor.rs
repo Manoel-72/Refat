@@ -57,6 +57,9 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             }
 
             let selected_state_name = app.animator_selected_state.clone();
+            if app.animator_state_rename_buffer.trim().is_empty() {
+                app.animator_state_rename_buffer = selected_state_name.clone();
+            }
             let selected_state = animator_snapshot
                 .states
                 .get(&selected_state_name)
@@ -202,7 +205,7 @@ fn draw_state_sidebar(
                 ui.label(egui::RichText::new("Estados").strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("+ Estado").clicked() {
-                        let mut new_name = unique_state_name(animator, "estado");
+                        let mut new_name = unique_state_name(animator, "novo");
                         update_animator(app, entity_id, animator_index, |animator| {
                             animator.states.insert(
                                 new_name.clone(),
@@ -221,6 +224,8 @@ fn draw_state_sidebar(
                         let y = (0.18 + count * 0.12).min(0.82);
                         app.animator_node_positions.insert(new_name.clone(), [0.40, y]);
                         app.animator_selected_state = std::mem::take(&mut new_name);
+                        app.animator_state_rename_buffer = app.animator_selected_state.clone();
+                        app.status_msg = format!("✅ Estado '{}' criado.", app.animator_selected_state);
                     }
                 });
             });
@@ -231,51 +236,72 @@ fn draw_state_sidebar(
                 .max_height(260.0)
                 .show(ui, |ui| {
                     for state_name in state_names {
-                        let selected = app.animator_selected_state == *state_name;
-                        let response = ui.selectable_label(selected, state_name);
-                        if response.clicked() {
-                            app.animator_selected_state = state_name.clone();
-                        }
-                        if response.double_clicked() {
-                            let target = state_name.clone();
-                            update_animator(app, entity_id, animator_index, move |animator| {
-                                animator.current_state = target.clone();
-                                if let Some(state) = animator.states.get(&target) {
-                                    animator.current = state.clip.clone();
-                                    animator.looped = state.looped;
-                                }
-                            });
-                        }
-
-                        let source_name = state_name.clone();
-                        response.context_menu(|ui| {
-                            ui.label(format!("Estado: {}", source_name));
-                            ui.separator();
-                            if ui.button("Limpar ligação → saída").clicked() {
-                                let source = source_name.clone();
+                        ui.horizontal(|ui| {
+                            let selected = app.animator_selected_state == *state_name;
+                            let response = ui.add_sized(
+                                [ui.available_width() - 30.0, 24.0],
+                                egui::SelectableLabel::new(selected, state_name),
+                            );
+                            if response.clicked() {
+                                app.animator_selected_state = state_name.clone();
+                                app.animator_state_rename_buffer = state_name.clone();
+                            }
+                            if response.double_clicked() {
+                                let target = state_name.clone();
                                 update_animator(app, entity_id, animator_index, move |animator| {
-                                    if let Some(state) = animator.states.get_mut(&source) {
-                                        state.next_state.clear();
+                                    animator.current_state = target.clone();
+                                    if let Some(state) = animator.states.get(&target) {
+                                        animator.current = state.clip.clone();
+                                        animator.looped = state.looped;
                                     }
                                 });
-                                ui.close_menu();
                             }
-                            ui.separator();
-                            ui.label("Ligar com:");
-                            for target_name in state_names {
-                                if target_name != &source_name
-                                    && ui.button(format!("→ {}", target_name)).clicked()
-                                {
+
+                            let delete_clicked = ui
+                                .add_sized(
+                                    [24.0, 24.0],
+                                    egui::Button::new(egui::RichText::new("🗑").size(12.0)),
+                                )
+                                .on_hover_text("Deletar estado")
+                                .clicked();
+                            if delete_clicked {
+                                delete_state(app, entity_id, animator_index, state_name);
+                            }
+
+                            let source_name = state_name.clone();
+                            response.context_menu(|ui| {
+                                ui.label(format!("Estado: {}", source_name));
+                                ui.separator();
+                                if ui.button("Limpar ligação → saída").clicked() {
                                     let source = source_name.clone();
-                                    let target = target_name.clone();
                                     update_animator(app, entity_id, animator_index, move |animator| {
                                         if let Some(state) = animator.states.get_mut(&source) {
-                                            state.next_state = target.clone();
+                                            state.next_state.clear();
                                         }
                                     });
                                     ui.close_menu();
                                 }
-                            }
+                                if ui.button("🗑 Deletar estado").clicked() {
+                                    delete_state(app, entity_id, animator_index, &source_name);
+                                    ui.close_menu();
+                                }
+                                ui.separator();
+                                ui.label("Ligar com:");
+                                for target_name in state_names {
+                                    if target_name != &source_name
+                                        && ui.button(format!("→ {}", target_name)).clicked()
+                                    {
+                                        let source = source_name.clone();
+                                        let target = target_name.clone();
+                                        update_animator(app, entity_id, animator_index, move |animator| {
+                                            if let Some(state) = animator.states.get_mut(&source) {
+                                                state.next_state = target.clone();
+                                            }
+                                        });
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
                         });
                     }
                 });
@@ -345,7 +371,7 @@ fn draw_empty_animator_setup(
             ui.label("Clique no botão abaixo para criar seu primeiro estado vazio. Depois arraste os sprites para a área de frames e ajuste FPS.");
             ui.add_space(10.0);
             if ui.button("+ Criar primeiro estado").clicked() {
-                let new_name = "walk".to_string();
+                let new_name = "idle".to_string();
                 let selected_name = new_name.clone();
                 update_animator(app, entity_id, animator_index, move |animator| {
                     animator.states.insert(
@@ -362,7 +388,9 @@ fn draw_empty_animator_setup(
                     animator.default_state = new_name.clone();
                     animator.state_mode = true;
                 });
-                app.animator_selected_state = selected_name;
+                app.animator_selected_state = selected_name.clone();
+                app.animator_state_rename_buffer = selected_name;
+                app.status_msg = "✅ Primeiro estado criado.".to_string();
             }
         });
 }
@@ -385,6 +413,8 @@ fn draw_simple_workspace(
         .inner_margin(egui::Margin::same(10.0))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(format!("Editar estado: {}", selected_name)).strong());
+            ui.add_space(6.0);
+            draw_state_rename_row(app, ui, entity_id, animator_index, selected_name);
             ui.add_space(8.0);
 
             let compact = ui.available_width() < 720.0;
@@ -478,20 +508,33 @@ fn draw_clip_drop_and_frames(
             ui.horizontal_wrapped(|ui| {
                 ui.label("Clip usado:");
                 let clip_names = sorted_clip_names(animator);
-                egui::ComboBox::from_id_source("simple_workspace_clip")
+                let before = clip_name.clone();
+                egui::ComboBox::from_id_source(format!("simple_workspace_clip_{}_{}", entity_id, selected_name))
                     .selected_text(if clip_name.is_empty() { "<vazio>" } else { clip_name.as_str() })
                     .show_ui(ui, |ui| {
                         for clip in &clip_names {
                             ui.selectable_value(&mut clip_name, clip.clone(), clip);
                         }
                     });
+                if clip_name != before {
+                    let target = selected_name.to_string();
+                    let clip = clip_name.clone();
+                    update_animator(app, entity_id, animator_index, move |animator| {
+                        animator.clips.entry(clip.clone()).or_insert_with(AnimationClip::default);
+                        animator.states.entry(target.clone()).or_default().clip = clip.clone();
+                        animator.current = clip.clone();
+                    });
+                    app.status_msg = format!("✅ Clip '{}' vinculado ao estado '{}'.", clip_name, selected_name);
+                }
                 if ui.button("Salvar clip no estado").clicked() {
                     let target = selected_name.to_string();
                     let clip = clip_name.clone();
                     update_animator(app, entity_id, animator_index, move |animator| {
                         animator.clips.entry(clip.clone()).or_insert_with(AnimationClip::default);
                         animator.states.entry(target.clone()).or_default().clip = clip.clone();
+                        animator.current = clip.clone();
                     });
+                    app.status_msg = format!("✅ Clip '{}' salvo no estado '{}'.", clip_name, selected_name);
                 }
             });
 
@@ -572,18 +615,39 @@ fn draw_frame_drop_zone(
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         if ui.button("+ asset selecionado").clicked() {
-            if let Some(path) = app.selected_asset.clone() {
-                if is_image_asset_path(&path) {
+            match app.selected_asset.clone() {
+                Some(path) if is_image_asset_path(&path) => {
                     let rel = relative_to_project_or_full(&app.project_root, &path);
                     append_frames_to_clip(app, entity_id, animator_index, clip_name, vec![rel]);
+                }
+                Some(_) => {
+                    app.status_msg = "❌ O asset selecionado não é uma imagem compatível.".to_string();
+                }
+                None => {
+                    app.status_msg = "❌ Nenhum asset selecionado no painel Assets.".to_string();
                 }
             }
         }
         if ui.button("Limpar frames").clicked() {
-            let clip = clip_name.to_string();
-            update_animator(app, entity_id, animator_index, move |animator| {
-                animator.clips.entry(clip.clone()).or_default().frames.clear();
-            });
+            let had_frames = app
+                .scene
+                .find_entity(entity_id)
+                .and_then(|entity| entity.components.get(animator_index))
+                .and_then(|component| match component {
+                    Component::Animator(animator) => animator.clips.get(clip_name),
+                    _ => None,
+                })
+                .map(|clip| !clip.frames.is_empty())
+                .unwrap_or(false);
+            if had_frames {
+                let clip = clip_name.to_string();
+                update_animator(app, entity_id, animator_index, move |animator| {
+                    animator.clips.entry(clip.clone()).or_default().frames.clear();
+                });
+                app.status_msg = format!("✅ Frames do clip '{}' foram limpos.", clip_name);
+            } else {
+                app.status_msg = format!("ℹ O clip '{}' já está sem frames.", clip_name);
+            }
         }
     });
 
@@ -733,67 +797,325 @@ fn draw_simple_settings(
     let mut next_state = selected_state.next_state.clone();
     let mut default_state = animator.default_state.clone();
     let mut threshold = animator.locomotion_threshold;
+    let mut changed = false;
 
-    egui::Grid::new("simple_settings_grid").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
-        ui.label("FPS:");
-        ui.add(egui::DragValue::new(&mut fps).speed(0.25).range(1.0..=60.0));
-        ui.end_row();
+    egui::Grid::new(format!("simple_settings_grid_{}_{}", entity_id, selected_name))
+        .num_columns(2)
+        .spacing([10.0, 8.0])
+        .show(ui, |ui| {
+            ui.label("FPS:");
+            changed |= ui.add(egui::DragValue::new(&mut fps).speed(0.25).range(1.0..=60.0)).changed();
+            ui.end_row();
 
-        ui.label("Loop:");
-        ui.checkbox(&mut looped, "Repetir animação");
-        ui.end_row();
+            ui.label("Loop:");
+            changed |= ui.checkbox(&mut looped, "Repetir animação").changed();
+            ui.end_row();
 
-        ui.label("Interruptível:");
-        ui.checkbox(&mut interruptible, "Pode trocar no meio");
-        ui.end_row();
+            ui.label("Interruptível:");
+            changed |= ui.checkbox(&mut interruptible, "Pode trocar no meio").changed();
+            ui.end_row();
 
-        ui.label("Próximo estado:");
-        egui::ComboBox::from_id_source("simple_next_state")
-            .selected_text(if next_state.is_empty() { "<nenhum>" } else { next_state.as_str() })
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut next_state, String::new(), "<nenhum>");
-                for name in state_names {
-                    if name != selected_name {
-                        ui.selectable_value(&mut next_state, name.clone(), name);
+            ui.label("Próximo estado:");
+            let next_before = next_state.clone();
+            egui::ComboBox::from_id_source(format!("simple_next_state_{}_{}", entity_id, selected_name))
+                .selected_text(if next_state.is_empty() { "<nenhum>" } else { next_state.as_str() })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut next_state, String::new(), "<nenhum>");
+                    for name in state_names {
+                        if name != selected_name {
+                            ui.selectable_value(&mut next_state, name.clone(), name);
+                        }
                     }
-                }
-            });
-        ui.end_row();
+                });
+            changed |= next_state != next_before;
+            ui.end_row();
 
-        ui.label("Estado padrão:");
-        egui::ComboBox::from_id_source("simple_default_state")
-            .selected_text(if default_state.is_empty() { "<nenhum>" } else { default_state.as_str() })
-            .show_ui(ui, |ui| {
-                for name in state_names {
-                    ui.selectable_value(&mut default_state, name.clone(), name);
-                }
-            });
-        ui.end_row();
+            ui.label("Estado padrão:");
+            let default_before = default_state.clone();
+            egui::ComboBox::from_id_source(format!("simple_default_state_{}_{}", entity_id, selected_name))
+                .selected_text(if default_state.is_empty() { "<nenhum>" } else { default_state.as_str() })
+                .show_ui(ui, |ui| {
+                    for name in state_names {
+                        ui.selectable_value(&mut default_state, name.clone(), name);
+                    }
+                });
+            changed |= default_state != default_before;
+            ui.end_row();
 
-        ui.label("Threshold movimento:");
-        ui.add(egui::DragValue::new(&mut threshold).speed(0.25).range(0.0..=999.0));
-        ui.end_row();
-    });
+            ui.label("Threshold movimento:");
+            changed |= ui.add(egui::DragValue::new(&mut threshold).speed(0.25).range(0.0..=999.0)).changed();
+            ui.end_row();
+        });
+
+    if changed {
+        let state_name = selected_name.to_string();
+        let clip_name = selected_clip_name.to_string();
+        let next_state_for_save = next_state.clone();
+        let default_state_for_save = default_state.clone();
+        update_animator(app, entity_id, animator_index, move |animator| {
+            animator.state_mode = true;
+            animator.default_state = default_state_for_save.clone();
+            animator.locomotion_threshold = threshold;
+            animator.clips.entry(clip_name.clone()).or_default().fps = fps;
+            if let Some(state) = animator.states.get_mut(&state_name) {
+                state.clip = clip_name.clone();
+                state.looped = looped;
+                state.interruptible = interruptible;
+                state.next_state = next_state_for_save.clone();
+            }
+            if animator.current_state == state_name {
+                animator.looped = looped;
+            }
+        });
+    }
 
     ui.add_space(8.0);
     if ui.button("Salvar ajustes").clicked() {
         let state_name = selected_name.to_string();
         let clip_name = selected_clip_name.to_string();
+        let next_state_for_save = next_state.clone();
+        let default_state_for_save = default_state.clone();
         update_animator(app, entity_id, animator_index, move |animator| {
             animator.state_mode = true;
-            animator.default_state = default_state.clone();
+            animator.default_state = default_state_for_save.clone();
             animator.locomotion_threshold = threshold;
             animator.clips.entry(clip_name.clone()).or_default().fps = fps;
-            animator.states.insert(
-                state_name.clone(),
-                AnimationState {
-                    clip: clip_name.clone(),
-                    looped,
-                    interruptible,
-                    next_state: next_state.clone(),
-                },
-            );
+            if let Some(state) = animator.states.get_mut(&state_name) {
+                state.clip = clip_name.clone();
+                state.looped = looped;
+                state.interruptible = interruptible;
+                state.next_state = next_state_for_save.clone();
+            }
+            if animator.current_state == state_name {
+                animator.looped = looped;
+            }
         });
+        app.status_msg = format!("✅ Ajustes do estado '{}' salvos com sucesso.", selected_name);
+    }
+}
+
+fn draw_state_rename_row(
+    app: &mut EditorApp,
+    ui: &mut egui::Ui,
+    entity_id: &str,
+    animator_index: usize,
+    selected_name: &str,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Nome do estado:");
+        let response = ui.add(
+            egui::TextEdit::singleline(&mut app.animator_state_rename_buffer)
+                .desired_width(220.0)
+                .hint_text("idle, run, attack..."),
+        );
+        let confirm = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let clicked = ui.button("Salvar nome").clicked();
+        if confirm || clicked {
+            rename_selected_state(app, entity_id, animator_index, selected_name);
+        }
+        if ui
+            .add(egui::Button::new(egui::RichText::new("🗑 Deletar estado").size(12.0)))
+            .on_hover_text("Remove o estado atual com segurança")
+            .clicked()
+        {
+            delete_state(app, entity_id, animator_index, selected_name);
+        }
+    });
+    ui.label(egui::RichText::new("Exemplo: idle, run, attack, jump, slide.").small().weak());
+}
+
+fn delete_state(
+    app: &mut EditorApp,
+    entity_id: &str,
+    animator_index: usize,
+    state_name: &str,
+) {
+    let state_to_delete = state_name.trim().to_string();
+    if state_to_delete.is_empty() {
+        app.status_msg = "❌ Nenhum estado selecionado para deletar.".to_string();
+        return;
+    }
+
+    let mut delete_result: Result<String, String> = Err("Estado inválido.".to_string());
+    update_animator(app, entity_id, animator_index, |animator| {
+        if !animator.states.contains_key(&state_to_delete) {
+            delete_result = Err(format!("Estado '{}' não encontrado.", state_to_delete));
+            return;
+        }
+
+        let removed_state = animator.states.remove(&state_to_delete).unwrap_or_default();
+        let removed_clip_name = removed_state.clip.clone();
+
+        for state in animator.states.values_mut() {
+            if state.next_state == state_to_delete {
+                state.next_state.clear();
+            }
+        }
+
+        if animator.current_state == state_to_delete {
+            animator.current_state = if !animator.default_state.is_empty()
+                && animator.states.contains_key(&animator.default_state)
+            {
+                animator.default_state.clone()
+            } else {
+                animator.states.keys().next().cloned().unwrap_or_default()
+            };
+        }
+        if animator.default_state == state_to_delete {
+            animator.default_state = animator.states.keys().next().cloned().unwrap_or_default();
+        }
+        if animator.queued_state == state_to_delete {
+            animator.queued_state.clear();
+        }
+
+        let clip_still_used = animator
+            .states
+            .values()
+            .any(|state| !removed_clip_name.is_empty() && state.clip == removed_clip_name);
+
+        if !removed_clip_name.is_empty() && !clip_still_used {
+            animator.clips.remove(&removed_clip_name);
+            if animator.current == removed_clip_name {
+                animator.current = if animator.current_state.is_empty() {
+                    String::new()
+                } else {
+                    animator
+                        .states
+                        .get(&animator.current_state)
+                        .map(|state| state.clip.clone())
+                        .unwrap_or_default()
+                };
+            }
+            if animator.prev_clip == removed_clip_name {
+                animator.prev_clip.clear();
+            }
+        }
+
+        if animator.states.is_empty() {
+            animator.current_state.clear();
+            animator.default_state.clear();
+            animator.current.clear();
+        } else if animator.current.is_empty() {
+            animator.current = if animator.current_state.is_empty() {
+                String::new()
+            } else {
+                animator
+                    .states
+                    .get(&animator.current_state)
+                    .map(|state| state.clip.clone())
+                    .unwrap_or_default()
+            };
+        }
+
+        delete_result = Ok(removed_clip_name);
+    });
+
+    match delete_result {
+        Ok(_) => {
+            app.animator_node_positions.remove(&state_to_delete);
+            let remaining_states: Vec<String> = app
+                .scene
+                .find_entity(entity_id)
+                .and_then(|entity| entity.components.get(animator_index))
+                .and_then(|component| match component {
+                    Component::Animator(animator) => Some(sorted_state_names(animator)),
+                    _ => None,
+                })
+                .unwrap_or_default();
+
+            app.animator_selected_state = remaining_states.first().cloned().unwrap_or_default();
+            app.animator_state_rename_buffer = app.animator_selected_state.clone();
+            if remaining_states.is_empty() {
+                app.status_msg = format!("✅ Estado '{}' removido. O Animator ficou sem estados.", state_to_delete);
+            } else {
+                app.status_msg = format!("✅ Estado '{}' removido com sucesso.", state_to_delete);
+            }
+        }
+        Err(error) => {
+            app.status_msg = format!("❌ {}", error);
+        }
+    }
+}
+
+fn rename_selected_state(
+    app: &mut EditorApp,
+    entity_id: &str,
+    animator_index: usize,
+    old_name: &str,
+) {
+    let new_name = app.animator_state_rename_buffer.trim().to_string();
+    if new_name.is_empty() {
+        app.status_msg = "❌ Digite um nome válido para o estado.".to_string();
+        return;
+    }
+    if new_name == old_name {
+        app.status_msg = "ℹ O estado já está com esse nome.".to_string();
+        return;
+    }
+
+    let mut rename_result: Result<(), String> = Ok(());
+    update_animator(app, entity_id, animator_index, |animator| {
+        if animator.states.contains_key(&new_name) {
+            rename_result = Err(format!("Já existe um estado chamado '{}'.", new_name));
+            return;
+        }
+        let Some(mut state) = animator.states.remove(old_name) else {
+            rename_result = Err(format!("Estado '{}' não encontrado.", old_name));
+            return;
+        };
+
+        let should_rename_clip = state.clip.trim().is_empty() || state.clip == old_name;
+        if should_rename_clip {
+            state.clip = new_name.clone();
+        }
+        animator.states.insert(new_name.clone(), state);
+
+        for state in animator.states.values_mut() {
+            if state.next_state == old_name {
+                state.next_state = new_name.clone();
+            }
+            if should_rename_clip && state.clip == old_name {
+                state.clip = new_name.clone();
+            }
+        }
+
+        if should_rename_clip {
+            if let Some(clip) = animator.clips.remove(old_name) {
+                animator.clips.insert(new_name.clone(), clip);
+            } else {
+                animator.clips.entry(new_name.clone()).or_insert_with(AnimationClip::default);
+            }
+            if animator.current == old_name {
+                animator.current = new_name.clone();
+            }
+            if animator.prev_clip == old_name {
+                animator.prev_clip = new_name.clone();
+            }
+        }
+
+        if animator.current_state == old_name {
+            animator.current_state = new_name.clone();
+        }
+        if animator.default_state == old_name {
+            animator.default_state = new_name.clone();
+        }
+        if animator.queued_state == old_name {
+            animator.queued_state = new_name.clone();
+        }
+    });
+
+    match rename_result {
+        Ok(()) => {
+            if let Some(position) = app.animator_node_positions.remove(old_name) {
+                app.animator_node_positions.insert(new_name.clone(), position);
+            }
+            app.animator_selected_state = new_name.clone();
+            app.animator_state_rename_buffer = new_name.clone();
+            app.status_msg = format!("✅ Estado '{}' renomeado para '{}'.", old_name, new_name);
+        }
+        Err(error) => {
+            app.status_msg = format!("❌ {}", error);
+        }
     }
 }
 
@@ -805,9 +1127,11 @@ fn append_frames_to_clip(
     frames: Vec<String>,
 ) {
     if frames.is_empty() {
+        app.status_msg = "❌ Nenhum asset de imagem válido foi encontrado para adicionar.".to_string();
         return;
     }
     let clip = clip_name.to_string();
+    let added_count = frames.len();
     update_animator(app, entity_id, animator_index, move |animator| {
         let entry = animator.clips.entry(clip.clone()).or_default();
         for frame in &frames {
@@ -816,6 +1140,11 @@ fn append_frames_to_clip(
             }
         }
     });
+    app.status_msg = if added_count == 1 {
+        format!("✅ 1 frame adicionado ao clip '{}'.", clip_name)
+    } else {
+        format!("✅ {} frames adicionados ao clip '{}'.", added_count, clip_name)
+    };
 }
 
 fn move_frame(

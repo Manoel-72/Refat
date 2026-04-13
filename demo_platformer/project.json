@@ -1,5 +1,5 @@
 {
-  "name": "Demo Gameplay V0.9.7.5",
+  "name": "Demo Gameplay V0.95.7",
   "initial_scene": "assets/scenes/main.scene.json",
-  "engine_version": "0.9.7.5"
+  "engine_version": "0.95.7"
 }

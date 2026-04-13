@@ -1,0 +1,13 @@
+{
+  "entries": {
+    "continue.player.id": "player-001",
+    "continue.checkpoint.scene": "assets/scenes/main.scene.json",
+    "continue.player.y": -139.0,
+    "continue.player.vx": 0.0,
+    "continue.player.x": 62.95829772949219,
+    "continue.player.name": "Player",
+    "continue.player.vy": 0.0
+  },
+  "current_scene": "assets/scenes/main.scene.json",
+  "version": 1
+}
