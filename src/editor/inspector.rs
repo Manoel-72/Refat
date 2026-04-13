@@ -44,16 +44,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         .id_source("inspector_scroll")
         .auto_shrink([false; 2])
         .show(ui, |ui| {
-            let selected_id_for_menu = app.selected_entity_id.clone();
-            let inner = ui.scope(|ui| {
-                show_inspector_contents(app, ui);
-            });
-
-            if let Some(entity_id) = selected_id_for_menu {
-                inner.response.context_menu(|ui| {
-                    show_add_component_menu(ui, app, &entity_id);
-                });
-            }
+            show_inspector_contents(app, ui);
         });
 }
 
@@ -573,67 +564,20 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     ui.add_space(8.0);
     ui.separator();
-    ui.label(egui::RichText::new("Componentes").strong());
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new("Componentes").strong());
+        ui.menu_button("➕ Adicionar componente", |ui| {
+            show_add_component_menu_inspector(ui, app, &selected_id);
+        });
+    });
     ui.label(
-        egui::RichText::new("Clique com o botão direito na Hierarquia, na Cena ou aqui no Inspector para adicionar componentes por categoria.")
+        egui::RichText::new("Use o botão acima para adicionar componentes. Botão direito continua disponível na Hierarquia e na Cena.")
             .small()
             .color(egui::Color32::from_rgb(150, 160, 180)),
     );
 }
 
-fn show_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
-    ui.label(egui::RichText::new("Adicionar componente").small().strong());
-    ui.separator();
 
-    ui.menu_button("🎮 Gameplay", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
-        inspector_component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
-        inspector_component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
-    });
-
-    ui.menu_button("🧠 Scripts", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
-        inspector_component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
-    });
-
-    ui.menu_button("🖼 Visual", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
-    });
-
-    ui.menu_button("📷 Cena", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
-    });
-}
-
-fn inspector_component_menu_button(
-    ui: &mut egui::Ui,
-    app: &mut EditorApp,
-    entity_id: &str,
-    label: &str,
-    component: Component,
-) {
-    let already_has = app
-        .find_entity_mut(entity_id)
-        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
-        .unwrap_or(false);
-
-    let response = ui.add_enabled(!already_has, egui::Button::new(label));
-    if response.clicked() {
-        app.push_undo_state();
-        if let Some(entity) = app.find_entity_mut(entity_id) {
-            entity.add_component(component);
-        }
-        ui.close_menu();
-    }
-
-    if already_has {
-        response.on_hover_text("Esta entidade já possui esse componente.");
-    }
-}
 
 fn relative_to_project_or_full(project_root: &std::path::Path, path: &std::path::Path) -> String {
     if let Ok(relative) = path.strip_prefix(project_root) {
@@ -1276,3 +1220,52 @@ fn draw_animator_component_ui(
         });
 }
 
+
+
+fn show_add_component_menu_inspector(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
+    ui.label(egui::RichText::new("Adicionar componente").small().strong());
+    ui.separator();
+
+    ui.menu_button("🎮 Gameplay", |ui| {
+        inspector_component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
+        inspector_component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
+        inspector_component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
+        inspector_component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
+    });
+
+    ui.menu_button("🧠 Scripts", |ui| {
+        inspector_component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
+        inspector_component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
+    });
+
+    ui.menu_button("🖼 Visual", |ui| {
+        inspector_component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
+        inspector_component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
+        inspector_component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
+        inspector_component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
+    });
+
+    ui.menu_button("📷 Cena", |ui| {
+        inspector_component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
+    });
+}
+
+fn inspector_component_menu_button(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str, label: &str, component: Component) {
+    let already_has = app
+        .find_entity_mut(entity_id)
+        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
+        .unwrap_or(false);
+
+    let response = ui.add_enabled(!already_has, egui::Button::new(label));
+    if response.clicked() {
+        app.push_undo_state();
+        if let Some(entity) = app.find_entity_mut(entity_id) {
+            entity.add_component(component);
+        }
+        ui.close_menu();
+    }
+
+    if already_has {
+        response.on_hover_text("Esta entidade já possui esse componente.");
+    }
+}
