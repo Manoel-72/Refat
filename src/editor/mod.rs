@@ -17,6 +17,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use crate::{
@@ -1187,6 +1188,117 @@ impl EditorApp {
         Ok(path)
     }
 
+    pub fn build_standalone_pc(&mut self) -> Result<PathBuf, String> {
+        let saved_scene_path = self.save_active_scene()?;
+
+        let engine_root = find_engine_root(&self.project_root)
+            .ok_or_else(|| "Não foi possível localizar a raiz da engine (Cargo.toml).".to_string())?;
+
+        let cargo_toml = engine_root.join("Cargo.toml");
+        let bin_name = detect_bin_name(&cargo_toml).unwrap_or_else(|| "rs2br-engine".to_string());
+        let exe_name = if cfg!(target_os = "windows") {
+            format!("{}.exe", bin_name)
+        } else {
+            bin_name.clone()
+        };
+
+        let project_name = self.current_project_name();
+        let safe_project_name = sanitize_filename(&project_name);
+        let export_root = self.project_root.join("build").join("standalone_pc").join(&safe_project_name);
+        let assets_dst = export_root.join("assets");
+        let save_dst = export_root.join("save");
+
+        if export_root.exists() {
+            fs::remove_dir_all(&export_root)
+                .map_err(|e| format!("Falha ao limpar build anterior: {}", e))?;
+        }
+        fs::create_dir_all(&export_root)
+            .map_err(|e| format!("Falha ao criar pasta de build: {}", e))?;
+
+        self.status_msg = "🔧 Build Standalone PC: compilando runtime em release...".to_string();
+        self.push_console_message(format!(
+            "🔧 Iniciando build desktop do projeto '{}'...",
+            project_name
+        ));
+
+        let output = Command::new("cargo")
+            .arg("build")
+            .arg("--release")
+            .arg("--bin")
+            .arg(&bin_name)
+            .current_dir(&engine_root)
+            .output()
+            .map_err(|e| format!("Falha ao executar cargo build --release: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() { stderr } else { stdout };
+            self.push_console_message(format!("❌ Build falhou: {}", detail));
+            return Err(format!("Build falhou. {}", detail));
+        }
+
+        let exe_src = engine_root.join("target").join("release").join(&exe_name);
+        if !exe_src.exists() {
+            return Err(format!(
+                "Build concluído, mas o executável não foi encontrado em {}",
+                exe_src.display()
+            ));
+        }
+
+        fs::copy(&exe_src, export_root.join(&exe_name))
+            .map_err(|e| format!("Falha ao copiar executável: {}", e))?;
+
+        let project_json_src = self.project_root.join("project.json");
+        if project_json_src.exists() {
+            fs::copy(&project_json_src, export_root.join("project.json"))
+                .map_err(|e| format!("Falha ao copiar project.json: {}", e))?;
+        }
+
+        let assets_src = self.project_root.join("assets");
+        if assets_src.exists() {
+            copy_dir_recursive(&assets_src, &assets_dst)
+                .map_err(|e| format!("Falha ao copiar assets: {}", e))?;
+        }
+
+        let save_src = self.project_root.join("save");
+        if save_src.exists() {
+            copy_dir_recursive(&save_src, &save_dst)
+                .map_err(|e| format!("Falha ao copiar save: {}", e))?;
+        }
+
+        let readme = format!(
+            "RS2BR Engine - Build Standalone PC
+
+Projeto: {}
+Cena inicial salva: {}
+Executável: {}
+
+Para rodar:
+1. Deixe esta pasta inteira junta.
+2. Execute {}
+3. O jogo usará os arquivos de assets e project.json ao lado do executável.
+",
+            project_name,
+            saved_scene_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.scene.json"),
+            exe_name,
+            exe_name,
+        );
+        fs::write(export_root.join("LEIA-ME.txt"), readme)
+            .map_err(|e| format!("Falha ao criar LEIA-ME.txt: {}", e))?;
+
+        if cfg!(target_os = "windows") {
+            let bat = format!("@echo off\r\ncd /d \"%~dp0\"\r\nstart \"\" \"{}\"\r\n", exe_name);
+            let _ = fs::write(export_root.join("Executar Jogo.bat"), bat);
+        }
+
+        self.push_console_message(format!(
+            "✅ Build desktop concluído: {}",
+            export_root.display()
+        ));
+        Ok(export_root)
+    }
+
     pub fn close_scene_tab(&mut self, index: usize) {
         if self.open_scenes.len() <= 1 || index >= self.open_scenes.len() {
             return;
@@ -1948,6 +2060,71 @@ fn load_project_hub_session(engine_root: &Path) -> Option<ProjectHubSession> {
     serde_json::from_str(&content).ok()
 }
 
+
+
+fn find_engine_root(project_root: &Path) -> Option<PathBuf> {
+    for base in [project_root.to_path_buf(), std::env::current_dir().ok()?] {
+        for ancestor in base.ancestors() {
+            let candidate = ancestor.join("Cargo.toml");
+            if candidate.exists() {
+                return Some(ancestor.to_path_buf());
+            }
+        }
+    }
+    None
+}
+
+fn detect_bin_name(cargo_toml_path: &Path) -> Option<String> {
+    let content = fs::read_to_string(cargo_toml_path).ok()?;
+    let mut in_bin = false;
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line == "[[bin]]" {
+            in_bin = true;
+            continue;
+        }
+        if line.starts_with('[') && line != "[[bin]]" {
+            if in_bin {
+                break;
+            }
+        }
+        if in_bin && line.starts_with("name") {
+            let value = line.split('=').nth(1)?.trim().trim_matches('"').to_string();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+    }
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.starts_with("name") {
+            let value = line.split('=').nth(1)?.trim().trim_matches('"').to_string();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if ty.is_file() {
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
 fn save_project_hub_session(engine_root: &Path, session: &ProjectHubSession) -> std::io::Result<()> {
     let path = project_hub_session_path(engine_root);
     let json = serde_json::to_string_pretty(session)

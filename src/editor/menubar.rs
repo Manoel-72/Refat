@@ -238,8 +238,15 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
 
                     ui.separator();
                     section_label(ui, "BUILD");
-                    if menu_item(ui, "🖥", "Build Standalone PC", "Preparação inicial para exportação desktop").clicked() {
-                        app.status_msg = "ℹ Build Standalone PC ainda será implementado. Menu já preparado no editor.".to_string();
+                    if menu_item(ui, "🖥", "Build Standalone PC", "Compila a engine em release e empacota o projeto atual").clicked() {
+                        match app.build_standalone_pc() {
+                            Ok(path) => {
+                                app.status_msg = format!("✅ Build Standalone PC concluído: {}", path.display());
+                            }
+                            Err(error) => {
+                                app.status_msg = format!("❌ {}", error);
+                            }
+                        }
                         ui.close_menu();
                     }
                 });
