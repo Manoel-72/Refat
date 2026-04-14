@@ -5,7 +5,6 @@
 pub mod core;
 pub mod assets;
 pub mod serialization;
-pub mod engine;
 pub mod runtime;
 pub mod editor;
 pub mod renderer;

@@ -11,17 +11,17 @@ use crate::{entity::Entity, scene::Scene};
 use super::{EditorApp, EditorPlayState};
 
 // Cores do tema
-const ACCENT:    egui::Color32 = egui::Color32::from_rgb(112, 196, 255);
-const WARN:      egui::Color32 = egui::Color32::from_rgb(255, 208, 102);
-const TEXT_DIM:  egui::Color32 = egui::Color32::from_rgb(188, 208, 236);
-const PLAY_BG:   egui::Color32 = egui::Color32::from_rgb(74, 196, 108);
-const PAUSE_BG:  egui::Color32 = egui::Color32::from_rgb(245, 152, 57);
-const STOP_BG:   egui::Color32 = egui::Color32::from_rgb(239, 96, 74);
+const ACCENT:    egui::Color32 = egui::Color32::from_rgb(88,  166, 255);
+const WARN:      egui::Color32 = egui::Color32::from_rgb(255, 180, 50);
+const TEXT_DIM:  egui::Color32 = egui::Color32::from_rgb(139, 148, 158);
+const PLAY_BG:   egui::Color32 = egui::Color32::from_rgb(35,  134, 54);
+const PAUSE_BG:  egui::Color32 = egui::Color32::from_rgb(88,  100, 50);
+const STOP_BG:   egui::Color32 = egui::Color32::from_rgb(110, 40,  40);
 
 pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
     egui::TopBottomPanel::top("menubar")
         .frame(egui::Frame::none()
-            .fill(egui::Color32::from_rgb(18, 41, 88))
+            .fill(egui::Color32::from_rgb(22, 27, 34))
             .inner_margin(egui::Margin { left: 4.0, right: 4.0, top: 2.0, bottom: 0.0 }))
         .show(ctx, |ui| {
         ui.vertical(|ui| {
@@ -235,6 +235,13 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         app.request_delete_selected();
                         ui.close_menu();
                     }
+
+                    ui.separator();
+                    section_label(ui, "BUILD");
+                    if menu_item(ui, "🖥", "Build Standalone PC", "Preparação inicial para exportação desktop").clicked() {
+                        app.status_msg = "ℹ Build Standalone PC ainda será implementado. Menu já preparado no editor.".to_string();
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("❓ Ajuda", |ui| {
@@ -295,7 +302,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         let play_btn = egui::Button::new(
                             egui::RichText::new("  ▶  Play  ").color(egui::Color32::WHITE).strong()
                         )
-                        .fill(if is_playing { PLAY_BG } else { egui::Color32::from_rgb(44, 79, 149) })
+                        .fill(if is_playing { PLAY_BG } else { egui::Color32::from_rgb(46, 52, 63) })
                         .min_size(egui::vec2(80.0, 26.0));
                         if ui.add(play_btn).on_hover_text("Inicia o jogo em janela separada (F5)").clicked() {
                             app.play_state = EditorPlayState::Playing;
@@ -317,7 +324,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         let pause_btn = egui::Button::new(
                             egui::RichText::new("  ⏸  ").color(egui::Color32::WHITE)
                         )
-                        .fill(if is_paused { PAUSE_BG } else { egui::Color32::from_rgb(44, 79, 149) })
+                        .fill(if is_paused { PAUSE_BG } else { egui::Color32::from_rgb(46, 52, 63) })
                         .min_size(egui::vec2(40.0, 26.0));
                         if ui.add_enabled(is_playing, pause_btn)
                             .on_hover_text("Pausa a simulação sem fechar o jogo")
@@ -331,7 +338,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         let stop_btn = egui::Button::new(
                             egui::RichText::new("  ⏹  Parar  ").color(egui::Color32::WHITE)
                         )
-                        .fill(if !is_playing && !is_paused { egui::Color32::from_rgb(44, 79, 149) } else { STOP_BG })
+                        .fill(if !is_playing && !is_paused { egui::Color32::from_rgb(46, 52, 63) } else { STOP_BG })
                         .min_size(egui::vec2(70.0, 26.0));
                         if ui.add(stop_btn).on_hover_text("Para o jogo e volta ao modo de edição").clicked() {
                             app.play_state = EditorPlayState::Edit;

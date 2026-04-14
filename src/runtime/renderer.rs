@@ -114,9 +114,8 @@ pub fn draw_runtime_entity(
             button);
     }
 
-    if let Some(collider) = entity.components.iter().find_map(|c| if let Component::BoxCollider(c) = c { Some(c) } else { None }) {
-        draw_runtime_collider(painter, world_screen_pos, screen_space_pos, entity, collider, camera);
-    }
+    // Runtime final: não desenha colliders por padrão para evitar ruído visual
+    // e custo extra de renderização em tempo de jogo.
 
     if let Some(sprite_comp) = sprite {
         let sprite_pos = if sprite_comp.screen_space { screen_space_pos } else { world_screen_pos };

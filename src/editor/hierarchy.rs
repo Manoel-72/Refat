@@ -34,27 +34,24 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     ui.separator();
 
     // ── Botão Nova Entidade + info de seleção ──
-    ui.horizontal_wrapped(|ui| {
+    ui.vertical(|ui| {
         if ui.add(
             egui::Button::new(egui::RichText::new("➕ Nova Entidade").size(12.0))
-                .min_size(egui::vec2(130.0, 24.0))
+                .min_size(egui::vec2(ui.available_width().min(170.0), 26.0))
         ).on_hover_text("Cria uma entidade vazia na cena (ou use clique direito)").clicked() {
             app.new_entity_dialog = Some("Entidade".to_string());
         }
 
         if !app.selected_entity_ids.is_empty() {
             ui.label(
-                egui::RichText::new(format!(
-                    "✔ {} selecionado(s)",
-                    app.selected_entity_ids.len()
-                ))
-                .small()
-                .color(egui::Color32::from_rgb(88, 166, 255)),
+                egui::RichText::new(format!("Seleção atual: {}", app.selected_entity_ids.len()))
+                    .small()
+                    .color(egui::Color32::from_rgb(88, 166, 255)),
             );
         }
     });
 
-    ui.add_space(2.0);
+    ui.add_space(4.0);
     ui.label(
         egui::RichText::new("💡 Clique direito para mais opções")
             .small()

@@ -40,6 +40,19 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     ui.separator();
 
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Buscar:").small());
+        ui.add(
+            egui::TextEdit::singleline(&mut app.inspector_search)
+                .hint_text("transform, sprite, collider...")
+                .desired_width((ui.available_width() - 34.0).max(80.0)),
+        );
+        if ui.small_button("✖").on_hover_text("Limpar busca do inspector").clicked() {
+            app.inspector_search.clear();
+        }
+    });
+    ui.add_space(4.0);
+
     egui::ScrollArea::vertical()
         .id_source("inspector_scroll")
         .auto_shrink([false; 2])
@@ -243,8 +256,14 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
     let mut to_remove: Option<usize> = None;
     let mut updated_components: Vec<(usize, Component)> = Vec::new();
 
+    let inspector_filter = app.inspector_search.trim().to_lowercase();
+
     for (i, component) in components.iter().enumerate() {
-        let header_text = format!("⚙ {}", component.display_name());
+        let component_name = component.display_name();
+        if !inspector_filter.is_empty() && !component_name.to_lowercase().contains(&inspector_filter) {
+            continue;
+        }
+        let header_text = format!("⚙ {}", component_name);
 
         egui::CollapsingHeader::new(&header_text)
             .id_source(format!("comp_{}_{}_{}", selected_id, i, component.display_name()))

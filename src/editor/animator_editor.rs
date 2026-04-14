@@ -205,7 +205,7 @@ fn draw_state_sidebar(
                 ui.label(egui::RichText::new("Estados").strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("+ Estado").clicked() {
-                        let mut new_name = unique_state_name(animator, "novo");
+                        let mut new_name = unique_state_name(animator, "estado");
                         update_animator(app, entity_id, animator_index, |animator| {
                             animator.states.insert(
                                 new_name.clone(),
@@ -236,72 +236,52 @@ fn draw_state_sidebar(
                 .max_height(260.0)
                 .show(ui, |ui| {
                     for state_name in state_names {
-                        ui.horizontal(|ui| {
-                            let selected = app.animator_selected_state == *state_name;
-                            let response = ui.add_sized(
-                                [ui.available_width() - 30.0, 24.0],
-                                egui::SelectableLabel::new(selected, state_name),
-                            );
-                            if response.clicked() {
-                                app.animator_selected_state = state_name.clone();
-                                app.animator_state_rename_buffer = state_name.clone();
-                            }
-                            if response.double_clicked() {
-                                let target = state_name.clone();
+                        let selected = app.animator_selected_state == *state_name;
+                        let response = ui.selectable_label(selected, state_name);
+                        if response.clicked() {
+                            app.animator_selected_state = state_name.clone();
+                            app.animator_state_rename_buffer = state_name.clone();
+                        }
+                        if response.double_clicked() {
+                            let target = state_name.clone();
+                            update_animator(app, entity_id, animator_index, move |animator| {
+                                animator.current_state = target.clone();
+                                if let Some(state) = animator.states.get(&target) {
+                                    animator.current = state.clip.clone();
+                                    animator.looped = state.looped;
+                                }
+                            });
+                        }
+
+                        let source_name = state_name.clone();
+                        response.context_menu(|ui| {
+                            ui.label(format!("Estado: {}", source_name));
+                            ui.separator();
+                            if ui.button("Limpar ligação → saída").clicked() {
+                                let source = source_name.clone();
                                 update_animator(app, entity_id, animator_index, move |animator| {
-                                    animator.current_state = target.clone();
-                                    if let Some(state) = animator.states.get(&target) {
-                                        animator.current = state.clip.clone();
-                                        animator.looped = state.looped;
+                                    if let Some(state) = animator.states.get_mut(&source) {
+                                        state.next_state.clear();
                                     }
                                 });
+                                ui.close_menu();
                             }
-
-                            let delete_clicked = ui
-                                .add_sized(
-                                    [24.0, 24.0],
-                                    egui::Button::new(egui::RichText::new("🗑").size(12.0)),
-                                )
-                                .on_hover_text("Deletar estado")
-                                .clicked();
-                            if delete_clicked {
-                                delete_state(app, entity_id, animator_index, state_name);
-                            }
-
-                            let source_name = state_name.clone();
-                            response.context_menu(|ui| {
-                                ui.label(format!("Estado: {}", source_name));
-                                ui.separator();
-                                if ui.button("Limpar ligação → saída").clicked() {
+                            ui.separator();
+                            ui.label("Ligar com:");
+                            for target_name in state_names {
+                                if target_name != &source_name
+                                    && ui.button(format!("→ {}", target_name)).clicked()
+                                {
                                     let source = source_name.clone();
+                                    let target = target_name.clone();
                                     update_animator(app, entity_id, animator_index, move |animator| {
                                         if let Some(state) = animator.states.get_mut(&source) {
-                                            state.next_state.clear();
+                                            state.next_state = target.clone();
                                         }
                                     });
                                     ui.close_menu();
                                 }
-                                if ui.button("🗑 Deletar estado").clicked() {
-                                    delete_state(app, entity_id, animator_index, &source_name);
-                                    ui.close_menu();
-                                }
-                                ui.separator();
-                                ui.label("Ligar com:");
-                                for target_name in state_names {
-                                    if target_name != &source_name
-                                        && ui.button(format!("→ {}", target_name)).clicked()
-                                    {
-                                        let source = source_name.clone();
-                                        let target = target_name.clone();
-                                        update_animator(app, entity_id, animator_index, move |animator| {
-                                            if let Some(state) = animator.states.get_mut(&source) {
-                                                state.next_state = target.clone();
-                                            }
-                                        });
-                                        ui.close_menu();
-                                    }
-                                }
-                            });
+                            }
                         });
                     }
                 });
@@ -371,7 +351,7 @@ fn draw_empty_animator_setup(
             ui.label("Clique no botão abaixo para criar seu primeiro estado vazio. Depois arraste os sprites para a área de frames e ajuste FPS.");
             ui.add_space(10.0);
             if ui.button("+ Criar primeiro estado").clicked() {
-                let new_name = "idle".to_string();
+                let new_name = "walk".to_string();
                 let selected_name = new_name.clone();
                 update_animator(app, entity_id, animator_index, move |animator| {
                     animator.states.insert(
@@ -905,136 +885,16 @@ fn draw_state_rename_row(
         ui.label("Nome do estado:");
         let response = ui.add(
             egui::TextEdit::singleline(&mut app.animator_state_rename_buffer)
-                .desired_width(220.0)
+                .desired_width(180.0)
                 .hint_text("idle, run, attack..."),
         );
         let confirm = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let clicked = ui.button("Salvar nome").clicked();
+        let clicked = ui.button("Renomear").clicked();
         if confirm || clicked {
             rename_selected_state(app, entity_id, animator_index, selected_name);
         }
-        if ui
-            .add(egui::Button::new(egui::RichText::new("🗑 Deletar estado").size(12.0)))
-            .on_hover_text("Remove o estado atual com segurança")
-            .clicked()
-        {
-            delete_state(app, entity_id, animator_index, selected_name);
-        }
     });
     ui.label(egui::RichText::new("Exemplo: idle, run, attack, jump, slide.").small().weak());
-}
-
-fn delete_state(
-    app: &mut EditorApp,
-    entity_id: &str,
-    animator_index: usize,
-    state_name: &str,
-) {
-    let state_to_delete = state_name.trim().to_string();
-    if state_to_delete.is_empty() {
-        app.status_msg = "❌ Nenhum estado selecionado para deletar.".to_string();
-        return;
-    }
-
-    let mut delete_result: Result<String, String> = Err("Estado inválido.".to_string());
-    update_animator(app, entity_id, animator_index, |animator| {
-        if !animator.states.contains_key(&state_to_delete) {
-            delete_result = Err(format!("Estado '{}' não encontrado.", state_to_delete));
-            return;
-        }
-
-        let removed_state = animator.states.remove(&state_to_delete).unwrap_or_default();
-        let removed_clip_name = removed_state.clip.clone();
-
-        for state in animator.states.values_mut() {
-            if state.next_state == state_to_delete {
-                state.next_state.clear();
-            }
-        }
-
-        if animator.current_state == state_to_delete {
-            animator.current_state = if !animator.default_state.is_empty()
-                && animator.states.contains_key(&animator.default_state)
-            {
-                animator.default_state.clone()
-            } else {
-                animator.states.keys().next().cloned().unwrap_or_default()
-            };
-        }
-        if animator.default_state == state_to_delete {
-            animator.default_state = animator.states.keys().next().cloned().unwrap_or_default();
-        }
-        if animator.queued_state == state_to_delete {
-            animator.queued_state.clear();
-        }
-
-        let clip_still_used = animator
-            .states
-            .values()
-            .any(|state| !removed_clip_name.is_empty() && state.clip == removed_clip_name);
-
-        if !removed_clip_name.is_empty() && !clip_still_used {
-            animator.clips.remove(&removed_clip_name);
-            if animator.current == removed_clip_name {
-                animator.current = if animator.current_state.is_empty() {
-                    String::new()
-                } else {
-                    animator
-                        .states
-                        .get(&animator.current_state)
-                        .map(|state| state.clip.clone())
-                        .unwrap_or_default()
-                };
-            }
-            if animator.prev_clip == removed_clip_name {
-                animator.prev_clip.clear();
-            }
-        }
-
-        if animator.states.is_empty() {
-            animator.current_state.clear();
-            animator.default_state.clear();
-            animator.current.clear();
-        } else if animator.current.is_empty() {
-            animator.current = if animator.current_state.is_empty() {
-                String::new()
-            } else {
-                animator
-                    .states
-                    .get(&animator.current_state)
-                    .map(|state| state.clip.clone())
-                    .unwrap_or_default()
-            };
-        }
-
-        delete_result = Ok(removed_clip_name);
-    });
-
-    match delete_result {
-        Ok(_) => {
-            app.animator_node_positions.remove(&state_to_delete);
-            let remaining_states: Vec<String> = app
-                .scene
-                .find_entity(entity_id)
-                .and_then(|entity| entity.components.get(animator_index))
-                .and_then(|component| match component {
-                    Component::Animator(animator) => Some(sorted_state_names(animator)),
-                    _ => None,
-                })
-                .unwrap_or_default();
-
-            app.animator_selected_state = remaining_states.first().cloned().unwrap_or_default();
-            app.animator_state_rename_buffer = app.animator_selected_state.clone();
-            if remaining_states.is_empty() {
-                app.status_msg = format!("✅ Estado '{}' removido. O Animator ficou sem estados.", state_to_delete);
-            } else {
-                app.status_msg = format!("✅ Estado '{}' removido com sucesso.", state_to_delete);
-            }
-        }
-        Err(error) => {
-            app.status_msg = format!("❌ {}", error);
-        }
-    }
 }
 
 fn rename_selected_state(

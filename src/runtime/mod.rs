@@ -65,21 +65,8 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                 });
             }
 
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none().fill(egui::Color32::from_rgb(12, 30, 70)))
-                .show(ctx, |ui| {
-                egui::Frame::none()
-                    .fill(egui::Color32::from_rgb(24, 54, 112))
-                    .rounding(12.0)
-                    .inner_margin(egui::Margin::same(10.0))
-                    .show(ui, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(egui::RichText::new("▶ Runtime").strong().color(egui::Color32::WHITE));
-                            ui.separator();
-                            ui.label(egui::RichText::new("Visual atualizado v0.95.7").small().color(egui::Color32::from_rgb(188, 208, 236)));
-                        });
-                        ui.add_space(6.0);
-                        ui.horizontal_wrapped(|ui| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal(|ui| {
                     if ui.button("▶ Novo jogo").clicked() {
                         host.set_play_state(RuntimePlayState::Playing);
                         runtime.window_open = true;
@@ -100,10 +87,6 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                             }
                         }
                     }
-                    if ui.button("⏸ Pause").clicked() {
-                        host.set_play_state(RuntimePlayState::Paused);
-                        host.set_status("⏸ Runtime pausado".to_string());
-                    }
                     if ui.button("⏹ Parar").clicked() {
                         host.set_play_state(RuntimePlayState::Edit);
                         runtime.stop();
@@ -122,10 +105,8 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                         runtime.window_open = false;
                         host.set_status("Runtime fechado".to_string());
                     }
-                        });
-                    });
+                });
 
-                ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
                     let scene_candidates = host.scene_file_candidates();
                     let count = scene_candidates.len();
@@ -180,61 +161,34 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     };
 
     if play_state != RuntimePlayState::Edit {
-        ui.ctx().request_repaint();
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
     }
 
-    egui::Frame::none()
-        .fill(egui::Color32::from_rgb(22, 47, 98))
-        .rounding(12.0)
-        .inner_margin(egui::Margin::same(10.0))
-        .show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.heading(egui::RichText::new("▶ Runtime Preview").color(egui::Color32::WHITE));
-                ui.separator();
-                ui.label(egui::RichText::new(format!("📌 {}", runtime_scene.name)).color(egui::Color32::from_rgb(226, 236, 248)));
-                ui.separator();
-                ui.label(egui::RichText::new(format!("⏱ {:.2}s", runtime.elapsed_time)).color(egui::Color32::from_rgb(188, 208, 236)));
-                ui.separator();
-                ui.label(egui::RichText::new(format!("FPS ~ {:.0}", runtime.estimated_fps())).color(egui::Color32::from_rgb(188, 208, 236)));
-                ui.separator();
-                ui.label(match play_state {
-                    RuntimePlayState::Playing => "Status: Executando",
-                    RuntimePlayState::Paused  => "Status: Pausado",
-                    RuntimePlayState::Edit    => "Status: Edição",
-                });
-                ui.separator();
-                ui.label(format!("Flow: {:?}", runtime.game_state.flow));
-                ui.separator();
-                ui.label(format!("Etapa: {:?}", runtime.last_stage));
-            });
+    // ── HUD de debug ─────────────────────────────────────────
+    ui.horizontal_wrapped(|ui| {
+        ui.heading("▶ Runtime Preview");
+        ui.separator();
+        ui.label(format!("📌 {}", runtime_scene.name));
+        ui.separator();
+        ui.label(format!("⏱ {:.2}s", runtime.elapsed_time));
+        ui.separator();
+        ui.label(format!("FPS ~ {:.0}", runtime.estimated_fps()));
+        ui.separator();
+        ui.label(match play_state {
+            RuntimePlayState::Playing => "Status: Executando",
+            RuntimePlayState::Paused  => "Status: Pausado",
+            RuntimePlayState::Edit    => "Status: Edição",
+        });
+        ui.separator();
+        ui.label(format!("Flow: {:?}", runtime.game_state.flow));
+        ui.separator();
+        ui.label(format!("Etapa: {:?}", runtime.last_stage));
+    });
 
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new("WASD = player_controller | Setas = câmera | Q/E ou scroll = zoom | ESC = pause | Novo jogo limpa session/state").small().color(egui::Color32::from_rgb(188, 208, 236)));
-            ui.separator();
+    ui.label("WASD = player | Setas = câmera | Q/E ou scroll = zoom | ESC = pausa/continua");
+    ui.separator();
 
-            ui.horizontal_wrapped(|ui| {
-        if ui.button("Spawn Enemy").clicked() {
-            let x = 120.0 + (runtime.frame_count % 5) as f32 * 36.0;
-            runtime.queue_spawn("enemy", x, 48.0);
-            runtime.game_state.score += 1;
-            host.set_status("Spawn agendado".to_string());
-        }
-        if ui.button("Destroy Last Spawn").clicked() {
-            let ok = runtime.queue_destroy_last_spawned();
-            host.set_status(if ok {
-                "Destroy agendado".to_string()
-            } else {
-                "Nada para destruir".to_string()
-            });
-        }
-        if ui.button("Pause/Resume").clicked() {
-            let next = match play_state {
-                RuntimePlayState::Playing => RuntimePlayState::Paused,
-                RuntimePlayState::Paused  => RuntimePlayState::Playing,
-                other => other,
-            };
-            host.set_play_state(next);
-        }
+    ui.horizontal_wrapped(|ui| {
         if ui.button("💾 Salvar").clicked() {
             match runtime.save_game(&project_root) {
                 Ok(_)  => host.set_status("💾 Jogo salvo".to_string()),
@@ -248,9 +202,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
                 host.set_status("ℹ Nenhum save encontrado".to_string());
             }
         }
-            });
-        });
-    ui.add_space(6.0);
+    });
+    ui.separator();
 
     // ── render ───────────────────────────────────────────────
     let available = ui.available_rect_before_wrap();
@@ -354,7 +307,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
             runtime.delta_time * 1000.0,
         ),
         egui::FontId::proportional(11.0),
-        egui::Color32::from_rgb(226, 236, 248),
+        egui::Color32::from_rgb(220, 220, 220),
     );
 
     painter.text(
@@ -368,7 +321,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
             runtime.particles.len(),
         ),
         egui::FontId::proportional(11.0),
-        egui::Color32::from_rgb(132, 224, 154),
+        egui::Color32::from_rgb(180, 235, 180),
     );
 }
 
