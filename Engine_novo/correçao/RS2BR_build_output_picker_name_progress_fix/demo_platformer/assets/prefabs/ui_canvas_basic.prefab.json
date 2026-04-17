@@ -1,0 +1,71 @@
+{
+  "name": "ui_canvas_basic",
+  "root_entity": {
+    "id": "prefab-ui-canvas-root",
+    "name": "UICanvasBasic",
+    "visible": true,
+    "children": [
+      {
+        "id": "prefab-ui-title",
+        "name": "UICanvasTitle",
+        "visible": true,
+        "children": [],
+        "components": [
+          {
+            "Transform": {
+              "x": 0.0,
+              "y": 24.0,
+              "rotation": 0.0,
+              "scale_x": 1.0,
+              "scale_y": 1.0
+            }
+          },
+          {
+            "TextLabel": {
+              "text": "UI Canvas",
+              "font_size": 18.0,
+              "color_r": 0.95,
+              "color_g": 0.95,
+              "color_b": 0.98,
+              "color_a": 1.0,
+              "screen_space": true
+            }
+          }
+        ]
+      }
+    ],
+    "components": [
+      {
+        "Transform": {
+          "x": 0.0,
+          "y": 225.0,
+          "rotation": 0.0,
+          "scale_x": 1.0,
+          "scale_y": 1.0
+        }
+      },
+      {
+        "Sprite": {
+          "texture_path": "",
+          "color_r": 0.06,
+          "color_g": 0.07,
+          "color_b": 0.1,
+          "color_a": 0.94,
+          "screen_space": true
+        }
+      },
+      {
+        "BoxCollider": {
+          "width": 860.0,
+          "height": 140.0,
+          "offset_x": 0.0,
+          "offset_y": 0.0,
+          "is_trigger": true,
+          "collision_enabled": false,
+          "layer": 0,
+          "mask": 0
+        }
+      }
+    ]
+  }
+}
