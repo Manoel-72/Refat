@@ -1,0 +1,95 @@
+{
+  "name": "V0.9.1 Test - Time/API",
+  "_comment": "Teste isolado de tempo/API oficial.",
+  "background_color": [
+    0.06,
+    0.08,
+    0.12
+  ],
+  "entities": [
+    {
+      "id": "ent-camera",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-time-hud",
+      "name": "TimeHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -360.0,
+            "y": 235.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "[TIME] aguardando...",
+            "font_size": 14.0,
+            "color_r": 0.95,
+            "color_g": 0.95,
+            "color_b": 0.95,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/validation_time_api.lua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ent-time-legend",
+      "name": "LegendHUD",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -360.0,
+            "y": 205.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Teste TIME/API. Esperado: dt varia e elapsed cresce. Cena isolada, sem colisão/event/timer.",
+            "font_size": 11.0,
+            "color_r": 0.78,
+            "color_g": 0.84,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ]
+    }
+  ]
+}

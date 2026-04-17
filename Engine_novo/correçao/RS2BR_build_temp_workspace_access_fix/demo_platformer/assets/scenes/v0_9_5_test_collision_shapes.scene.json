@@ -1,0 +1,166 @@
+{
+  "name": "V0.9.5 Test - Collision Shapes",
+  "_comment": "Valida box vs box, circle vs circle, box vs circle, collider disabled e layer/mask.",
+  "background_color": [0.07, 0.08, 0.11],
+  "entities": [
+    {
+      "id": "cam-main",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Camera2D": { "zoom": 1.0, "is_main": true } }
+      ]
+    },
+    {
+      "id": "player-box",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": -280.0, "y": -200.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.25, "color_g": 0.70, "color_b": 1.0, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 1.0, "is_static": false, "grounded": false } },
+        { "Velocity": { "x": 0.0, "y": 0.0 } },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 48.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 1,
+            "mask": 2,
+            "body_type": "kinematic",
+            "shape": { "kind": "box", "width": 32.0, "height": 48.0 }
+          }
+        },
+        { "LuaScript": { "file_path": "assets/scripts/player_platformer.lua" } },
+        { "LuaScript": { "file_path": "assets/scripts/validation_collision_only.lua" } }
+      ]
+    },
+    {
+      "id": "ground-box",
+      "name": "Ground",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 0.0, "y": -320.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.25, "color_g": 0.42, "color_b": 0.26, "color_a": 1.0 } },
+        { "RigidBody2D": { "gravity_scale": 0.0, "is_static": true, "grounded": true } },
+        {
+          "BoxCollider": {
+            "width": 980.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 2,
+            "mask": 1,
+            "body_type": "static",
+            "shape": { "kind": "box", "width": 980.0, "height": 32.0 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "solid-box",
+      "name": "SolidBox",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 10.0, "y": -220.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.92, "color_g": 0.55, "color_b": 0.22, "color_a": 1.0 } },
+        {
+          "BoxCollider": {
+            "width": 84.0,
+            "height": 84.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 2,
+            "mask": 1,
+            "body_type": "static",
+            "shape": { "kind": "box", "width": 84.0, "height": 84.0 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "trigger-circle",
+      "name": "TriggerCircle",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 180.0, "y": -220.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.75, "color_g": 0.25, "color_b": 0.85, "color_a": 0.9 } },
+        {
+          "BoxCollider": {
+            "width": 72.0,
+            "height": 72.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 4,
+            "mask": 1,
+            "body_type": "trigger",
+            "shape": { "kind": "circle", "radius": 36.0 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "disabled-box",
+      "name": "DisabledBox",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 320.0, "y": -220.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.35, "color_g": 0.35, "color_b": 0.35, "color_a": 1.0 } },
+        {
+          "BoxCollider": {
+            "width": 84.0,
+            "height": 84.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": false,
+            "layer": 2,
+            "mask": 1,
+            "body_type": "static",
+            "shape": { "kind": "box", "width": 84.0, "height": 84.0 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "masked-out-circle",
+      "name": "MaskedOutCircle",
+      "visible": true,
+      "children": [],
+      "components": [
+        { "Transform": { "x": 470.0, "y": -220.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0 } },
+        { "Sprite": { "texture_path": "", "color_r": 0.95, "color_g": 0.95, "color_b": 0.25, "color_a": 0.9 } },
+        {
+          "BoxCollider": {
+            "width": 80.0,
+            "height": 80.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 8,
+            "mask": 16,
+            "body_type": "static",
+            "shape": { "kind": "circle", "radius": 40.0 }
+          }
+        }
+      ]
+    }
+  ]
+}
