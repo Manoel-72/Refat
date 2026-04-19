@@ -8,6 +8,13 @@ pub struct ProjectConfig {
     pub initial_scene: String,
     #[serde(default)]
     pub engine_version: String,
+    /// Se `true`, o executável standalone abre em tela cheia (pode editar em `project.json`).
+    #[serde(default = "default_start_fullscreen")]
+    pub start_fullscreen: bool,
+}
+
+fn default_start_fullscreen() -> bool {
+    true
 }
 
 impl Default for ProjectConfig {
@@ -16,6 +23,7 @@ impl Default for ProjectConfig {
             name: "RS2BR Project".to_string(),
             initial_scene: "assets/scenes/main.scene.json".to_string(),
             engine_version: crate::core::version::ENGINE_VERSION.to_string(),
+            start_fullscreen: default_start_fullscreen(),
         }
     }
 }
@@ -72,6 +80,7 @@ pub fn create_basic_project_template_at(project_root: &Path, project_name: &str)
         name: name.to_string(),
         initial_scene: format!("assets/scenes/{}", scene_file),
         engine_version: crate::core::version::ENGINE_VERSION.to_string(),
+        start_fullscreen: default_start_fullscreen(),
     };
     save_project_config(project_root, &config)?;
 

@@ -4,6 +4,8 @@
 // ============================================================
 
 pub mod core;
+/// Reexportações legadas; modelo de dados canônico está em [`core`].
+pub mod engine;
 pub mod assets;
 pub mod serialization;
 pub mod runtime;
@@ -57,19 +59,38 @@ fn main() {
     env_logger::init();
 
     let standalone_root = standalone::detect_standalone_project_root();
-    let window_title = if let Some(root) = &standalone_root {
-        let cfg = crate::core::project::ProjectConfig::load_or_create(root);
-        format!("{}", cfg.name)
-    } else {
-        format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION)
+
+    let (window_title, standalone_fullscreen) = match &standalone_root {
+        Some(root) => {
+            let cfg = crate::core::project::ProjectConfig::load_or_create(root);
+            (cfg.name.clone(), cfg.start_fullscreen)
+        }
+        None => (
+            format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION),
+            false,
+        ),
     };
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title(&window_title)
+        .with_inner_size([1280.0, 720.0])
+        .with_min_inner_size([800.0, 600.0])
+        .with_icon(
+            load_app_icon().unwrap_or_else(|| egui::IconData {
+                rgba: vec![255, 255, 255, 255],
+                width: 1,
+                height: 1,
+            }),
+        );
+
+    if standalone_root.is_some() && standalone_fullscreen {
+        viewport = viewport.with_fullscreen(true);
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title(&window_title)
-            .with_inner_size([1280.0, 720.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_icon(load_app_icon().unwrap_or_else(|| egui::IconData { rgba: vec![255,255,255,255], width: 1, height: 1 })),
+        viewport,
+        // Limita FPS ao refresh do monitor; alinha com request_repaint no loop de jogo.
+        vsync: true,
         ..Default::default()
     };
 

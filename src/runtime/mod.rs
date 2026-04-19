@@ -155,20 +155,29 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     // captura input egui → RuntimeInput
     apply_egui_inputs(runtime, ui.ctx());
 
-    let Some(runtime_scene) = runtime.active_scene.clone() else {
+    if runtime.active_scene.is_none() {
         ui.centered_and_justified(|ui| { ui.label("Runtime inativo."); });
         return;
-    };
-
-    if play_state != RuntimePlayState::Edit {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
     }
+
+    if play_state == RuntimePlayState::Playing {
+        ui.ctx().request_repaint();
+    }
+
+    let (scene_name, ent_count, script_count) = {
+        let s = runtime.active_scene.as_ref().expect("checked above");
+        (
+            s.name.clone(),
+            renderer::count_entities(&s.entities),
+            renderer::count_scripts(&s.entities),
+        )
+    };
 
     // ── HUD de debug ─────────────────────────────────────────
     ui.horizontal_wrapped(|ui| {
         ui.heading("▶ Runtime Preview");
         ui.separator();
-        ui.label(format!("📌 {}", runtime_scene.name));
+        ui.label(format!("📌 {}", scene_name));
         ui.separator();
         ui.label(format!("⏱ {:.2}s", runtime.elapsed_time));
         ui.separator();
@@ -217,46 +226,50 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     let _response = game_response;
     let painter = ui.painter_at(available);
 
-    let bg = runtime_scene.background_color;
-    painter.rect_filled(
-        available,
-        0.0,
-        egui::Color32::from_rgb(
-            (bg[0] * 255.0) as u8,
-            (bg[1] * 255.0) as u8,
-            (bg[2] * 255.0) as u8,
-        ),
-    );
-
-    let center = available.center();
-    let mut camera = camera::find_main_camera(&runtime_scene.entities);
-    if let Some(zoom) = runtime.camera_zoom_override {
-        camera.zoom = zoom.clamp(0.2, 4.0);
-    }
-    if runtime.camera_shake_time > f32::EPSILON && runtime.camera_shake_intensity > f32::EPSILON {
-        let phase = runtime.elapsed_time * 40.0;
-        let shake = runtime.camera_shake_intensity * runtime.camera_shake_time.clamp(0.0, 1.0);
-        camera.x += phase.sin() * shake;
-        camera.y += (phase * 1.37).cos() * shake;
-    }
-
-    let current_scene_path = runtime.scene_manager.current_path.clone();
     let mut pending_ui_action = None;
 
-    renderer::draw_runtime_particles(&painter, center, camera, &runtime.particles);
+    {
+        let scene = runtime.active_scene.as_ref().expect("checked above");
+        let bg = scene.background_color;
+        painter.rect_filled(
+            available,
+            0.0,
+            egui::Color32::from_rgb(
+                (bg[0] * 255.0) as u8,
+                (bg[1] * 255.0) as u8,
+                (bg[2] * 255.0) as u8,
+            ),
+        );
 
-    for entity in &runtime_scene.entities {
-        if let Some(action) = renderer::draw_runtime_entity(
-            ui,
-            &painter,
-            &project_root,
-            current_scene_path.as_deref(),
-            host.sprite_textures(),
-            entity,
-            center,
-            camera,
-        ) {
-            pending_ui_action = Some(action);
+        let center = available.center();
+        let mut camera = camera::find_main_camera(&scene.entities);
+        if let Some(zoom) = runtime.camera_zoom_override {
+            camera.zoom = zoom.clamp(0.2, 4.0);
+        }
+        if runtime.camera_shake_time > f32::EPSILON && runtime.camera_shake_intensity > f32::EPSILON {
+            let phase = runtime.elapsed_time * 40.0;
+            let shake = runtime.camera_shake_intensity * runtime.camera_shake_time.clamp(0.0, 1.0);
+            camera.x += phase.sin() * shake;
+            camera.y += (phase * 1.37).cos() * shake;
+        }
+
+        let current_scene_path = runtime.scene_manager.current_path.clone();
+
+        renderer::draw_runtime_particles(&painter, center, camera, &runtime.particles);
+
+        for entity in &scene.entities {
+            if let Some(action) = renderer::draw_runtime_entity(
+                ui,
+                &painter,
+                &project_root,
+                current_scene_path.as_deref(),
+                host.sprite_textures(),
+                entity,
+                center,
+                camera,
+            ) {
+                pending_ui_action = Some(action);
+            }
         }
     }
 
@@ -302,8 +315,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         egui::Align2::LEFT_TOP,
         format!(
             "Entidades: {}  •  Scripts: {}  •  Delta: {:.3} ms",
-            renderer::count_entities(&runtime_scene.entities),
-            renderer::count_scripts(&runtime_scene.entities),
+            ent_count,
+            script_count,
             runtime.delta_time * 1000.0,
         ),
         egui::FontId::proportional(11.0),
@@ -315,7 +328,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         egui::Align2::RIGHT_TOP,
         format!(
             "HUD/UI  •  Cena: {}  •  Score: {}  •  Flow: {:?}  •  Partículas: {}",
-            runtime_scene.name,
+            scene_name,
             runtime.game_state.score,
             runtime.game_state.flow,
             runtime.particles.len(),

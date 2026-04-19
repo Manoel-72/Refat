@@ -274,15 +274,29 @@ fn draw_text_label(
         color);
 }
 
+/// Chave estável para cache de texturas (evita entradas duplicadas por espaços ou barras).
+fn texture_cache_key(relative_path: &str) -> String {
+    relative_path.trim().replace('\\', "/")
+}
+
 fn load_texture_from_relative_path(
     ctx: &egui::Context,
     project_root: &Path,
     sprite_textures: &mut HashMap<String, egui::TextureHandle>,
     relative_path: &str) -> Option<egui::TextureHandle> {
-    let key = relative_path.replace('\\', "/");
+    let key = texture_cache_key(relative_path);
 
     if let Some(texture) = sprite_textures.get(&key) {
         return Some(texture.clone());
+    }
+
+    #[cfg(windows)]
+    {
+        for (k, tex) in sprite_textures.iter() {
+            if k.eq_ignore_ascii_case(&key) {
+                return Some(tex.clone());
+            }
+        }
     }
 
     let candidates = [

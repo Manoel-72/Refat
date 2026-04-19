@@ -820,10 +820,19 @@ impl EditorApp {
         ctx: &egui::Context,
         relative_path: &str,
     ) -> Option<egui::TextureHandle> {
-        let key = relative_path.replace('\\', "/");
+        let key = relative_path.trim().replace('\\', "/");
 
         if let Some(texture) = self.sprite_textures.get(&key) {
             return Some(texture.clone());
+        }
+
+        #[cfg(windows)]
+        {
+            for (k, tex) in self.sprite_textures.iter() {
+                if k.eq_ignore_ascii_case(&key) {
+                    return Some(tex.clone());
+                }
+            }
         }
 
         let candidates = [

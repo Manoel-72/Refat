@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::{Path, PathBuf}, time::Duration};
+use std::{collections::HashMap, env, path::{Path, PathBuf}};
 
 use eframe::egui;
 
@@ -111,13 +111,13 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     host.runtime.sync_with_mode(&play_state, &scene_snap, &project_root, -260.0);
     apply_egui_inputs(&mut host.runtime, ui.ctx());
 
-    let Some(runtime_scene) = host.runtime.active_scene.clone() else {
+    if host.runtime.active_scene.is_none() {
         ui.centered_and_justified(|ui| ui.label("Nenhuma cena ativa."));
         return;
-    };
+    }
 
-    if play_state != RuntimePlayState::Edit {
-        ui.ctx().request_repaint_after(Duration::from_secs_f32(1.0 / 60.0));
+    if play_state == RuntimePlayState::Playing {
+        ui.ctx().request_repaint();
     }
 
     let available = ui.available_rect_before_wrap();
@@ -127,7 +127,15 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     }
     let painter = ui.painter_at(available);
 
-    let bg = runtime_scene.background_color;
+    let mut pending_ui_action = None;
+
+    // Snapshot só das entidades para desenho: `sprite_textures` exige `&mut host`, incompatível
+    // com emprestar `host.runtime` ao mesmo tempo. Mais barato que clonar a `Scene` inteira.
+    let (bg, entities_snapshot) = {
+        let scene = host.runtime.active_scene.as_ref().expect("checked above");
+        (scene.background_color, scene.entities.clone())
+    };
+
     painter.rect_filled(
         available,
         0.0,
@@ -139,7 +147,7 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     );
 
     let center = available.center();
-    let mut camera_state = camera::find_main_camera(&runtime_scene.entities);
+    let mut camera_state = camera::find_main_camera(&entities_snapshot);
     if let Some(zoom) = host.runtime.camera_zoom_override {
         camera_state.zoom = zoom.clamp(0.2, 4.0);
     }
@@ -151,11 +159,10 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     }
 
     let current_scene_path = host.runtime.scene_manager.current_path.clone();
-    let mut pending_ui_action = None;
 
     renderer::draw_runtime_particles(&painter, center, camera_state, &host.runtime.particles);
 
-    for entity in &runtime_scene.entities {
+    for entity in &entities_snapshot {
         if let Some(action) = renderer::draw_runtime_entity(
             ui,
             &painter,
