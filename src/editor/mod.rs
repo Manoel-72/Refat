@@ -1232,12 +1232,6 @@ impl EditorApp {
 
         let project_name = self.current_project_name();
         let safe_project_name = sanitize_filename(&project_name);
-        let mut game_exe_name = if cfg!(target_os = "windows") {
-            format!("{}.exe", safe_project_name)
-        } else {
-            safe_project_name.clone()
-        };
-
         let default_output = if cfg!(target_os = "windows") {
             format!("{}.exe", safe_project_name)
         } else {
@@ -1263,7 +1257,7 @@ impl EditorApp {
 
         let export_root = selected_parent.join(&chosen_stem);
         let build_cache_root = unique_temp_build_dir_in_parent(&selected_parent, &chosen_stem);
-        game_exe_name = if cfg!(target_os = "windows") {
+        let game_exe_name = if cfg!(target_os = "windows") {
             format!("{}.exe", chosen_stem)
         } else {
             chosen_stem.clone()
@@ -1296,23 +1290,19 @@ impl EditorApp {
 
         thread::spawn(move || {
             let send_step = |msg: &str| { let _ = tx.send(BuildWorkerMessage::Step(msg.to_string())); };
-            let send_log = |msg: String| { let _ = tx.send(BuildWorkerMessage::Log(msg)); };
             let finish = |result: Result<PathBuf, String>| { let _ = tx.send(BuildWorkerMessage::Finished(result)); };
 
             let run = || -> Result<PathBuf, String> {
-                send_step("Preparando pasta de saída...");
-                if export_root.exists() {
-                    fs::remove_dir_all(&export_root)
-                        .map_err(|e| format!("Falha ao limpar build anterior: {}", e))?;
-                }
-                fs::create_dir_all(&export_root)
-                    .map_err(|e| format!("Falha ao criar pasta de build: {}", e))?;
-
                 if build_cache_root.exists() {
                     let _ = fs::remove_dir_all(&build_cache_root);
                 }
                 fs::create_dir_all(&build_cache_root)
                     .map_err(|e| format!("Falha ao preparar cache temporário da build: {}", e))?;
+
+                send_step("Preparando pasta de saída...");
+                let staged_export_root = build_cache_root.join("final_bundle");
+                fs::create_dir_all(&staged_export_root)
+                    .map_err(|e| format!("Falha ao criar pasta temporária de saída: {}", e))?;
 
                 let temp_engine_root = build_cache_root.join("engine_workspace");
                 send_step("Preparando workspace temporário...");
@@ -1332,6 +1322,12 @@ impl EditorApp {
                     .stderr(Stdio::piped())
                     .spawn()
                     .map_err(|e| format!("Falha ao executar cargo build --release: {}", e))?;
+
+                let _ = tx.send(BuildWorkerMessage::Log(format!(
+                    "▶ comando: cargo build --release --bin {} ({})",
+                    bin_name,
+                    temp_engine_root.display()
+                )));
 
                 let stdout = child.stdout.take();
                 let stderr = child.stderr.take();
@@ -1367,7 +1363,11 @@ impl EditorApp {
                 if let Some(handle) = stderr_handle { let _ = handle.join(); }
 
                 if !status.success() {
-                    return Err("Build falhou. Veja os detalhes no console/log da janela de build.".to_string());
+                    return Err(format!(
+                        "Build falhou (status: {}). Veja os detalhes no console/log da janela de build. Cache preservado em {}",
+                        status,
+                        build_cache_root.display()
+                    ));
                 }
 
                 send_step("Montando pasta final do jogo...");
@@ -1380,27 +1380,27 @@ impl EditorApp {
                     ));
                 }
 
-                fs::copy(&exe_src, export_root.join(&game_exe_name))
+                fs::copy(&exe_src, staged_export_root.join(&game_exe_name))
                     .map_err(|e| format!("Falha ao copiar executável do jogo: {}", e))?;
 
                 if project_json_src.exists() {
-                    fs::copy(&project_json_src, export_root.join("project.json"))
+                    fs::copy(&project_json_src, staged_export_root.join("project.json"))
                         .map_err(|e| format!("Falha ao copiar project.json: {}", e))?;
                 }
 
                 fs::write(
-                    export_root.join(crate::standalone::STANDALONE_MARKER_FILE),
+                    staged_export_root.join(crate::standalone::STANDALONE_MARKER_FILE),
                     b"standalone=true\n"
                 )
                 .map_err(|e| format!("Falha ao criar marcador standalone: {}", e))?;
 
                 if assets_src.exists() {
-                    copy_dir_recursive(&assets_src, &export_root.join("assets"))
+                    copy_dir_recursive(&assets_src, &staged_export_root.join("assets"))
                         .map_err(|e| format!("Falha ao copiar assets: {}", e))?;
                 }
 
                 if save_src.exists() {
-                    copy_dir_recursive(&save_src, &export_root.join("save"))
+                    copy_dir_recursive(&save_src, &staged_export_root.join("save"))
                         .map_err(|e| format!("Falha ao copiar save: {}", e))?;
                 }
 
@@ -1411,8 +1411,15 @@ impl EditorApp {
                     game_exe_name,
                     game_exe_name,
                 );
-                fs::write(export_root.join("LEIA-ME.txt"), readme)
+                fs::write(staged_export_root.join("LEIA-ME.txt"), readme)
                     .map_err(|e| format!("Falha ao criar LEIA-ME.txt: {}", e))?;
+
+                if export_root.exists() {
+                    fs::remove_dir_all(&export_root)
+                        .map_err(|e| format!("Falha ao limpar build anterior: {}", e))?;
+                }
+                fs::rename(&staged_export_root, &export_root)
+                    .map_err(|e| format!("Falha ao finalizar pasta da build: {}", e))?;
 
                 let _ = fs::remove_dir_all(&build_cache_root);
                 Ok(export_root)

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::{Path, PathBuf}};
+use std::{collections::HashMap, env, path::{Path, PathBuf}, time::Duration};
 
 use eframe::egui;
 
@@ -117,7 +117,7 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     };
 
     if play_state != RuntimePlayState::Edit {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+        ui.ctx().request_repaint_after(Duration::from_secs_f32(1.0 / 60.0));
     }
 
     let available = ui.available_rect_before_wrap();
@@ -220,6 +220,14 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
             egui::Color32::WHITE,
         );
     }
+
+    painter.text(
+        egui::pos2(available.right() - 12.0, available.top() + 12.0),
+        egui::Align2::RIGHT_TOP,
+        format!("FPS: {:.0}", host.runtime.estimated_fps()),
+        egui::FontId::proportional(16.0),
+        egui::Color32::from_rgb(220, 255, 220),
+    );
 }
 
 fn apply_egui_inputs(runtime: &mut RuntimeState, ctx: &egui::Context) {

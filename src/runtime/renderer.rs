@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::{Path, PathBuf}};
 use eframe::egui;
 
 use crate::core::{
-    component::{BoxCollider, Component, Shape2D, Sprite, TextLabel, UIButton},
+    component::{Component, Sprite, TextLabel, UIButton},
     entity::Entity,
 };
 use crate::renderer::gfx::paint_rotated_placeholder;

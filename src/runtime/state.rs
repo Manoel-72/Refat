@@ -951,7 +951,9 @@ fn rebuild_collision_events(&mut self) {
         } else {
             1.0 / 60.0
         };
-        self.delta_time = dt.clamp(1.0 / 240.0, 0.1);
+        // Evita salto gigante após travas, mas não força dt mínimo.
+        // Forçar mínimo acelera o jogo em máquinas com FPS muito alto.
+        self.delta_time = dt.min(0.1);
         self.elapsed_time += self.delta_time;
         self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
 
