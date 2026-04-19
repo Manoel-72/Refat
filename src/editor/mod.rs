@@ -2342,6 +2342,8 @@ fn copy_minimal_engine_workspace(src_root: &Path, dst_root: &Path) -> std::io::R
     copy_file_if_exists(src_root, dst_root, "Cargo.toml")?;
     copy_file_if_exists(src_root, dst_root, "Cargo.lock")?;
     copy_file_if_exists(src_root, dst_root, "build.rs")?;
+    copy_file_if_exists(src_root, dst_root, "assets/icon/rs2br_engine_icon.ico")?;
+    copy_file_if_exists(src_root, dst_root, "assets/icon/rs2br_engine_icon.png")?;
 
     let cargo_dir = src_root.join(".cargo");
     if cargo_dir.is_dir() {

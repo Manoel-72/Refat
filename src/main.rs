@@ -17,6 +17,17 @@ pub use crate::core::{component, entity, prefab, project, scene, version};
 
 
 fn load_app_icon() -> Option<egui::IconData> {
+    const EMBEDDED_PNG: &[u8] = include_bytes!("../assets/icon/rs2br_engine_icon.png");
+    if let Ok(image) = image::load_from_memory(EMBEDDED_PNG) {
+        let image = image.into_rgba8();
+        let (width, height) = image.dimensions();
+        return Some(egui::IconData {
+            rgba: image.into_raw(),
+            width,
+            height,
+        });
+    }
+
     let cwd = std::env::current_dir().ok();
     let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf()));
     let candidates = [
