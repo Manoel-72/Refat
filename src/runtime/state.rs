@@ -37,6 +37,8 @@ const SAVE_KEY_PLAYER_Y: &str = "continue.player.y";
 const SAVE_KEY_PLAYER_VX: &str = "continue.player.vx";
 const SAVE_KEY_PLAYER_VY: &str = "continue.player.vy";
 const SAVE_KEY_CHECKPOINT_SCENE: &str = "continue.checkpoint.scene";
+/// Runtime alvo: 120 FPS (intervalo mínimo ~8.33ms entre updates).
+const MIN_FRAME_DT: f32 = 1.0 / 120.0;
 
 #[derive(Debug, Clone)]
 pub enum PendingSpawnKind {
@@ -879,7 +881,7 @@ fn rebuild_collision_events(&mut self) {
             return 0.0;
         }
         let avg_dt = sum / self.fps_samples.len() as f32;
-        1.0 / avg_dt
+        (1.0 / avg_dt).min(120.0)
     }
 
     pub fn queue_spawn(&mut self, template: impl Into<String>, x: f32, y: f32) {
@@ -952,14 +954,21 @@ fn rebuild_collision_events(&mut self) {
 
 
     pub fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
-        self.frame_count = self.frame_count.saturating_add(1);
-
         let now = Instant::now();
-        let dt = if let Some(last) = self.last_frame_at.replace(now) {
+        let dt = if let Some(last) = self.last_frame_at {
             (now - last).as_secs_f32()
         } else {
             1.0 / 60.0
         };
+
+        // Limita update do runtime a no máximo 120 FPS.
+        // Se ainda não bateu o orçamento do frame, não simula neste tick.
+        if self.last_frame_at.is_some() && dt < MIN_FRAME_DT {
+            return;
+        }
+        self.last_frame_at = Some(now);
+        self.frame_count = self.frame_count.saturating_add(1);
+
         // Evita salto gigante após travas, mas não força dt mínimo.
         // Forçar mínimo acelera o jogo em máquinas com FPS muito alto.
         self.delta_time = dt.min(0.1);
