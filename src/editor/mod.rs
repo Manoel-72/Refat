@@ -147,6 +147,8 @@ struct BuildJobState {
     started_at: Instant,
     progress: f32,
     estimated_total: f32,
+    min_visible_until: Instant,
+    pending_result: Option<Result<PathBuf, String>>,
 }
 
 pub struct EditorApp {
@@ -1274,6 +1276,9 @@ impl EditorApp {
         let assets_src = self.project_root.join("assets");
         let save_src = self.project_root.join("save");
         let project_json_src = self.project_root.join("project.json");
+        let prebuilt_runtime_exe = find_prebuilt_runtime_exe(&engine_root, &engine_exe_name);
+        let cargo_available = detect_command_available("cargo");
+        let use_prebuilt_runtime = prebuilt_runtime_exe.is_some();
         let saved_scene_name = saved_scene_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -1288,6 +1293,8 @@ impl EditorApp {
             started_at: Instant::now(),
             progress: 0.05,
             estimated_total: 90.0,
+            min_visible_until: Instant::now() + Duration::from_millis(1200),
+            pending_result: None,
         });
 
         self.status_msg = format!("🔧 Build em andamento: {}", project_name);
@@ -1296,6 +1303,15 @@ impl EditorApp {
             project_name,
             export_root.display()
         ));
+        if use_prebuilt_runtime {
+            self.push_console_message("ℹ Runtime pré-compilado detectado. Build seguirá sem depender de Rust/Cargo instalados.".to_string());
+        } else if !cargo_available {
+            return Err(
+                "Rust/Cargo não encontrado e não há runtime pré-compilado disponível. \
+                 Para exportar sem Rust instalado, adicione um executável em standalone_runtime/windows/ na raiz da engine."
+                    .to_string(),
+            );
+        }
 
         thread::spawn(move || {
             let send_step = |msg: &str| { let _ = tx.send(BuildWorkerMessage::Step(msg.to_string())); };
@@ -1313,84 +1329,101 @@ impl EditorApp {
                 fs::create_dir_all(&staged_export_root)
                     .map_err(|e| format!("Falha ao criar pasta temporária de saída: {}", e))?;
 
-                let temp_engine_root = build_cache_root.join("engine_workspace");
-                send_step("Preparando workspace temporário...");
-                copy_minimal_engine_workspace(&engine_root, &temp_engine_root)
-                    .map_err(|e| format!("Falha ao preparar workspace temporário: {}", e))?;
+                let exe_src = if let Some(prebuilt_path) = prebuilt_runtime_exe.as_ref() {
+                    send_step("Usando runtime pré-compilado (sem Cargo)...");
+                    let _ = tx.send(BuildWorkerMessage::Log(format!(
+                        "▶ runtime pré-compilado: {}",
+                        prebuilt_path.display()
+                    )));
+                    prebuilt_path.clone()
+                } else {
+                    let temp_engine_root = build_cache_root.join("engine_workspace");
+                    send_step("Preparando workspace temporário...");
+                    copy_minimal_engine_workspace(&engine_root, &temp_engine_root)
+                        .map_err(|e| format!("Falha ao preparar workspace temporário: {}", e))?;
 
-                send_step("Compilando jogo standalone em release...");
+                    send_step("Compilando jogo standalone em release...");
 
-                let mut child = Command::new("cargo")
-                    .arg("build")
-                    .arg("--release")
-                    .arg("--bin")
-                    .arg(&bin_name)
-                    .env("CARGO_TARGET_DIR", build_cache_root.join("target"))
-                    .current_dir(&temp_engine_root)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .map_err(|e| format!("Falha ao executar cargo build --release: {}", e))?;
+                    let mut child = Command::new("cargo")
+                        .arg("build")
+                        .arg("--release")
+                        .arg("--bin")
+                        .arg(&bin_name)
+                        .env("CARGO_TARGET_DIR", build_cache_root.join("target"))
+                        .current_dir(&temp_engine_root)
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
+                        .spawn()
+                        .map_err(|e| {
+                            format!(
+                                "Falha ao executar cargo build --release: {}. \
+                                 Dica: instale Rust/Cargo ou configure runtime pré-compilado em standalone_runtime/windows/.",
+                                e
+                            )
+                        })?;
 
-                let _ = tx.send(BuildWorkerMessage::Log(format!(
-                    "▶ comando: cargo build --release --bin {} ({})",
-                    bin_name,
-                    temp_engine_root.display()
-                )));
+                    let _ = tx.send(BuildWorkerMessage::Log(format!(
+                        "▶ comando: cargo build --release --bin {} ({})",
+                        bin_name,
+                        temp_engine_root.display()
+                    )));
 
-                let stdout = child.stdout.take();
-                let stderr = child.stderr.take();
+                    let stdout = child.stdout.take();
+                    let stderr = child.stderr.take();
 
-                let stdout_handle = stdout.map(|pipe| {
-                    let tx_out = tx.clone();
-                    thread::spawn(move || {
-                        let reader = BufReader::new(pipe);
-                        for line in reader.lines().map_while(Result::ok) {
-                            let trimmed = line.trim();
-                            if !trimmed.is_empty() {
-                                let _ = tx_out.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                    let stdout_handle = stdout.map(|pipe| {
+                        let tx_out = tx.clone();
+                        thread::spawn(move || {
+                            let reader = BufReader::new(pipe);
+                            for line in reader.lines().map_while(Result::ok) {
+                                let trimmed = line.trim();
+                                if !trimmed.is_empty() {
+                                    let _ = tx_out.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                                }
                             }
-                        }
-                    })
-                });
+                        })
+                    });
 
-                let stderr_handle = stderr.map(|pipe| {
-                    let tx_err = tx.clone();
-                    thread::spawn(move || {
-                        let reader = BufReader::new(pipe);
-                        for line in reader.lines().map_while(Result::ok) {
-                            let trimmed = line.trim();
-                            if !trimmed.is_empty() {
-                                let _ = tx_err.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                    let stderr_handle = stderr.map(|pipe| {
+                        let tx_err = tx.clone();
+                        thread::spawn(move || {
+                            let reader = BufReader::new(pipe);
+                            for line in reader.lines().map_while(Result::ok) {
+                                let trimmed = line.trim();
+                                if !trimmed.is_empty() {
+                                    let _ = tx_err.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                                }
                             }
-                        }
-                    })
-                });
+                        })
+                    });
 
-                let status = child.wait().map_err(|e| format!("Falha ao aguardar término da build: {}", e))?;
-                if let Some(handle) = stdout_handle { let _ = handle.join(); }
-                if let Some(handle) = stderr_handle { let _ = handle.join(); }
+                    let status = child.wait().map_err(|e| format!("Falha ao aguardar término da build: {}", e))?;
+                    if let Some(handle) = stdout_handle { let _ = handle.join(); }
+                    if let Some(handle) = stderr_handle { let _ = handle.join(); }
 
-                if !status.success() {
-                    return Err(format!(
-                        "Build falhou (status: {}). Veja os detalhes no console/log da janela de build. Cache preservado em {}",
-                        status,
-                        build_cache_root.display()
-                    ));
-                }
+                    if !status.success() {
+                        return Err(format!(
+                            "Build falhou (status: {}). Veja os detalhes no console/log da janela de build. Cache preservado em {}",
+                            status,
+                            build_cache_root.display()
+                        ));
+                    }
+
+                    build_cache_root.join("target").join("release").join(&engine_exe_name)
+                };
 
                 send_step("Montando pasta final do jogo...");
 
-                let exe_src = build_cache_root.join("target").join("release").join(&engine_exe_name);
                 if !exe_src.exists() {
                     return Err(format!(
-                        "Build concluída, mas o executável não foi encontrado em {}",
+                        "Build concluída, mas o executável não foi encontrado em {}. \
+                         Verifique se o runtime pré-compilado está no local esperado ou se o cargo build gerou o binário.",
                         exe_src.display()
                     ));
                 }
 
-                fs::copy(&exe_src, staged_export_root.join(&game_exe_name))
-                    .map_err(|e| format!("Falha ao copiar executável do jogo: {}", e))?;
+                copy_runtime_binary_set(&exe_src, &staged_export_root, &game_exe_name)
+                    .map_err(|e| format!("Falha ao copiar executável/dependências do jogo: {}", e))?;
 
                 if project_json_src.exists() {
                     fs::copy(&project_json_src, staged_export_root.join("project.json"))
@@ -1414,10 +1447,11 @@ impl EditorApp {
                 }
 
                 let readme = format!(
-                    "RS2BR Engine - Build Standalone PC\n\nProjeto: {}\nCena inicial salva: {}\nExecutável do jogo: {}\n\nPara rodar:\n1. Deixe esta pasta inteira junta.\n2. Execute {}\n3. O executável abre direto o jogo standalone.\n4. O jogo usará os arquivos de assets e project.json ao lado do executável.\n",
+                    "RS2BR Engine - Build Standalone PC\n\nProjeto: {}\nCena inicial salva: {}\nExecutável do jogo: {}\nModo de exportação: {}\n\nPara rodar (usuário final):\n1. Deixe esta pasta inteira junta.\n2. Execute {}.\n3. O executável abre direto o jogo standalone.\n4. O jogo usará os arquivos de assets e project.json ao lado do executável.\n\nRequisitos no PC do jogador:\n- Não precisa instalar Rust, Cargo ou bibliotecas de desenvolvimento.\n- Se o Windows reclamar de runtime C++, instale Microsoft Visual C++ Redistributable 2015-2022 (x64).\n",
                     project_name,
                     saved_scene_name,
                     game_exe_name,
+                    if prebuilt_runtime_exe.is_some() { "Runtime pré-compilado" } else { "Compilado via Cargo local" },
                     game_exe_name,
                 );
                 fs::write(staged_export_root.join("LEIA-ME.txt"), readme)
@@ -1441,7 +1475,7 @@ impl EditorApp {
     }
 
     fn poll_build_job(&mut self, ctx: &egui::Context) {
-        let mut finished_result = None;
+        let mut ready_result = None;
         let mut drained_messages: Vec<BuildWorkerMessage> = Vec::new();
 
         if let Some(job) = &mut self.build_job {
@@ -1482,12 +1516,30 @@ impl EditorApp {
                     self.push_console_message(line);
                 }
                 BuildWorkerMessage::Finished(result) => {
-                    finished_result = Some(result);
+                    if let Some(job) = &mut self.build_job {
+                        job.current_step = "Finalizando pacote...".to_string();
+                        job.progress = 1.0;
+                        job.pending_result = Some(result);
+                    }
                 }
             }
         }
 
-        if let Some(result) = finished_result {
+        // Mantém a barra viva mesmo quando não entram novas linhas de log.
+        // Evita sensação de "travou" durante compilação/linkedição.
+        if let Some(job) = &mut self.build_job {
+            let elapsed = job.started_at.elapsed().as_secs_f32();
+            let (predicted_progress, estimated_total) =
+                estimate_build_progress(&job.current_step, elapsed, &job.log_lines);
+            job.estimated_total = estimated_total;
+            let hard_cap = if job.pending_result.is_some() { 1.0 } else { 0.99 };
+            job.progress = job.progress.max(predicted_progress).clamp(0.0, hard_cap);
+            if job.pending_result.is_some() && Instant::now() >= job.min_visible_until {
+                ready_result = job.pending_result.take();
+            }
+        }
+
+        if let Some(result) = ready_result {
             self.build_job = None;
             match result {
                 Ok(path) => {
@@ -1522,6 +1574,12 @@ impl EditorApp {
                 ui.label(format!("Etapa atual: {}", job.current_step));
                 let elapsed = job.started_at.elapsed().as_secs_f32();
                 let remaining = (job.estimated_total - elapsed).max(0.0);
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new());
+                    ui.label("Build em andamento...");
+                });
+                ui.label(format!("Progresso: {:.0}%", (job.progress.clamp(0.0, 1.0) * 100.0)));
+                ui.label(format!("Tempo decorrido: {:.0}s", elapsed.ceil()));
                 ui.label(format!("Tempo estimado restante: {:.0}s", remaining.ceil()));
                 ui.add_space(6.0);
                 ui.add(
@@ -2382,6 +2440,8 @@ fn estimate_build_progress(current_step: &str, elapsed: f32, log_lines: &[String
 
     let mut progress = if step.contains("preparando pasta") {
         0.10
+    } else if step.contains("runtime pré-compilado") {
+        0.55
     } else if step.contains("workspace temporário") {
         0.20
     } else if step.contains("compilando") {
@@ -2461,6 +2521,56 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+fn detect_command_available(command: &str) -> bool {
+    let result = Command::new(command)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    matches!(result, Ok(status) if status.success())
+}
+
+fn find_prebuilt_runtime_exe(engine_root: &Path, engine_exe_name: &str) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    candidates.push(engine_root.join("standalone_runtime").join("windows").join(engine_exe_name));
+    candidates.push(engine_root.join("standalone_runtime").join(engine_exe_name));
+    candidates.push(engine_root.join("build").join("standalone_runtime").join("windows").join(engine_exe_name));
+    candidates.push(engine_root.join("build").join("standalone_runtime").join(engine_exe_name));
+    candidates.push(engine_root.join("target").join("release").join(engine_exe_name));
+    if let Ok(custom_dir) = std::env::var("RS2BR_STANDALONE_RUNTIME_DIR") {
+        let trimmed = custom_dir.trim();
+        if !trimmed.is_empty() {
+            candidates.push(PathBuf::from(trimmed).join(engine_exe_name));
+        }
+    }
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+fn copy_runtime_binary_set(exe_src: &Path, dst_root: &Path, game_exe_name: &str) -> std::io::Result<()> {
+    fs::create_dir_all(dst_root)?;
+    fs::copy(exe_src, dst_root.join(game_exe_name))?;
+    let Some(runtime_dir) = exe_src.parent() else {
+        return Ok(());
+    };
+    for entry in fs::read_dir(runtime_dir)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if !ty.is_file() {
+            continue;
+        }
+        let path = entry.path();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        if ext == "dll" {
+            fs::copy(&path, dst_root.join(entry.file_name()))?;
         }
     }
     Ok(())

@@ -215,6 +215,37 @@ cargo build --release
 
 ---
 
+## Exportar Standalone (Windows)
+
+O menu **Build Standalone PC** gera uma pasta pronta para distribuir.
+
+### Resultado para o jogador final
+
+- O jogador executa apenas o `.exe` exportado.
+- **Nao precisa instalar Rust, Cargo ou SDKs de desenvolvimento**.
+- O jogo abre em modo standalone usando `project.json` + `assets` da pasta exportada.
+
+### Modos de build no editor
+
+1. **Runtime pre-compilado (recomendado para pipeline profissional)**
+   - Coloque o executavel base da engine em:
+     - `standalone_runtime/windows/rs2br-engine.exe` (raiz da engine), ou
+     - configure `RS2BR_STANDALONE_RUNTIME_DIR` apontando para a pasta do runtime.
+   - Nesse modo, o export **nao depende de Rust instalado** na maquina que exporta.
+
+2. **Compilacao local via Cargo (fallback)**
+   - Se nao houver runtime pre-compilado, o editor usa `cargo build --release`.
+   - Exige Rust/Cargo instalados na maquina de export.
+
+### Erros comuns e como resolver
+
+- **"Rust/Cargo nao encontrado e nao ha runtime pre-compilado disponivel"**
+  - Solucao: configurar runtime pre-compilado (`standalone_runtime/windows/`) ou instalar Rust.
+- **Windows pedindo runtime C++ no PC do jogador**
+  - Instalar [Microsoft Visual C++ Redistributable 2015-2022 (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+
+---
+
 ## Roadmap
 
 ### V0.9 — MVP (atual)
@@ -284,7 +315,6 @@ O projeto está em desenvolvimento ativo. Contribuições são bem-vindas.
 - Spawn usa template interno simples, não prefab completo
 - HUD e menu são overlays mínimos sem sistema de UI com âncoras
 - Loading é textual (sem tela de loading com arte)
-- Sem exportação standalone de jogo ainda
 - Sem tilemap
 
 ---

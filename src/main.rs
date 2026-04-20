@@ -73,7 +73,8 @@ fn main() {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(&window_title)
-        .with_inner_size([1280.0, 720.0])
+        .with_maximized(standalone_root.is_none())
+        .with_inner_size([1366.0, 768.0])
         .with_min_inner_size([800.0, 600.0])
         .with_icon(
             load_app_icon().unwrap_or_else(|| egui::IconData {
