@@ -57,10 +57,8 @@ impl StandaloneApp {
 impl eframe::App for StandaloneApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if ctx.input(|i| i.viewport().close_requested()) {
-            // Para apenas o áudio (não-bloqueante) antes de fechar.
-            // Não chamamos runtime.stop() completo aqui pois limpar Lua VMs
-            // pode travar o thread principal. O OS vai destruir o processo logo.
-            self.runtime.audio_runtime.stop_all();
+            // Encerra o runtime Lua/áudio antes de fechar para evitar tela preta
+            self.runtime.stop();
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }

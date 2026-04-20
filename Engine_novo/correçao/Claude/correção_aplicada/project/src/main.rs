@@ -73,6 +73,9 @@ fn main() {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(&window_title)
+        // Standalone: abre maximizado para cobrir o monitor inteiro.
+        // with_inner_size é o fallback caso o WM ignore maximized.
+        .with_maximized(standalone_root.is_some())
         .with_inner_size([1366.0, 768.0])
         .with_min_inner_size([800.0, 600.0])
         .with_icon(
@@ -82,13 +85,6 @@ fn main() {
                 height: 1,
             }),
         );
-
-    if standalone_root.is_some() {
-        // Standalone sempre abre maximizado para cobrir o monitor inteiro,
-        // independente da resolução (1440x900, 1920x1080, 2560x1440, etc.).
-        // with_maximized garante cobertura total sem bordas do WM.
-        viewport = viewport.with_maximized(true);
-    }
 
     if standalone_root.is_some() && standalone_fullscreen {
         viewport = viewport.with_fullscreen(true);

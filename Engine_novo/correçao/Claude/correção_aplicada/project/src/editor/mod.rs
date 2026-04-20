@@ -139,13 +139,6 @@ enum BuildWorkerMessage {
     Finished(Result<PathBuf, String>),
 }
 
-/// Resultado do diálogo de escolha de destino da build, recebido via canal.
-#[derive(Debug)]
-enum BuildDialogMessage {
-    Selected(PathBuf),
-    Cancelled,
-}
-
 #[derive(Debug)]
 struct BuildJobState {
     receiver: Receiver<BuildWorkerMessage>,
@@ -156,21 +149,6 @@ struct BuildJobState {
     estimated_total: f32,
     min_visible_until: Instant,
     pending_result: Option<Result<PathBuf, String>>,
-}
-
-/// Estado enquanto o diálogo de destino ainda não respondeu.
-struct BuildDialogPending {
-    receiver: Receiver<BuildDialogMessage>,
-    /// Dados pré-computados antes de abrir o diálogo (para não bloquear nada)
-    engine_root: PathBuf,
-    bin_name: String,
-    engine_exe_name: String,
-    project_name: String,
-    safe_project_name: String,
-    assets_src: PathBuf,
-    save_src: PathBuf,
-    project_json_src: PathBuf,
-    saved_scene_name: String,
 }
 
 pub struct EditorApp {
@@ -280,8 +258,6 @@ pub struct EditorApp {
     pub animator_state_rename_buffer: String,
     /// Build standalone em execução no momento
     build_job: Option<BuildJobState>,
-    /// Diálogo de escolha de destino em aberto (não bloqueia o editor)
-    build_dialog_pending: Option<BuildDialogPending>,
 }
 
 
@@ -372,7 +348,6 @@ impl EditorApp {
             animator_link_drag_source: None,
             animator_state_rename_buffer: String::new(),
             build_job: None,
-            build_dialog_pending: None,
         }
     }
 
@@ -1252,9 +1227,6 @@ impl EditorApp {
         if self.build_job.is_some() {
             return Err("Já existe uma build em andamento. Aguarde terminar a atual.".to_string());
         }
-        if self.build_dialog_pending.is_some() {
-            return Err("Diálogo de build já está aberto.".to_string());
-        }
 
         let saved_scene_path = self.save_active_scene()?;
 
@@ -1276,84 +1248,23 @@ impl EditorApp {
         } else {
             safe_project_name.clone()
         };
+        let selected_output = rfd::FileDialog::new()
+            .set_title("Escolher pasta e nome do executável do jogo")
+            .set_directory(self.project_root.join("build"))
+            .set_file_name(&default_output)
+            .save_file()
+            .ok_or_else(|| "Build cancelada: nenhuma pasta/nome de saída foi escolhida.".to_string())?;
 
-        let saved_scene_name = saved_scene_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("main.scene.json")
-            .to_string();
-
-        let assets_src = self.project_root.join("assets");
-        let save_src = self.project_root.join("save");
-        let project_json_src = self.project_root.join("project.json");
-
-        let cargo_available = detect_command_available("cargo");
-        let prebuilt_runtime_exe = find_prebuilt_runtime_exe(&engine_root, &engine_exe_name);
-
-        if prebuilt_runtime_exe.is_none() && !cargo_available {
-            return Err(
-                "Rust/Cargo não encontrado e não há runtime pré-compilado disponível. \
-                 Para exportar sem Rust instalado, adicione um executável em standalone_runtime/windows/ na raiz da engine."
-                    .to_string(),
-            );
-        }
-
-        // Abre o diálogo de arquivo em thread separado para NÃO bloquear o editor.
-        let (dialog_tx, dialog_rx) = mpsc::channel::<BuildDialogMessage>();
-        let build_dir = self.project_root.join("build");
-        let default_output_clone = default_output.clone();
-        thread::spawn(move || {
-            let result = rfd::FileDialog::new()
-                .set_title("Escolher pasta e nome do executável do jogo")
-                .set_directory(&build_dir)
-                .set_file_name(&default_output_clone)
-                .save_file();
-            let msg = match result {
-                Some(path) => BuildDialogMessage::Selected(path),
-                None => BuildDialogMessage::Cancelled,
-            };
-            let _ = dialog_tx.send(msg);
-        });
-
-        self.build_dialog_pending = Some(BuildDialogPending {
-            receiver: dialog_rx,
-            engine_root,
-            bin_name,
-            engine_exe_name,
-            project_name: project_name.clone(),
-            safe_project_name,
-            assets_src,
-            save_src,
-            project_json_src,
-            saved_scene_name,
-        });
-
-        self.status_msg = format!("🔧 Aguardando escolha de destino para build '{}'...", project_name);
-        Ok(())
-    }
-
-    /// Dispara a build real depois que o diálogo respondeu com o caminho.
-    fn launch_build_after_dialog(&mut self, selected_output: PathBuf) {
-        let pending = match self.build_dialog_pending.take() {
-            Some(p) => p,
-            None => return,
-        };
-
-        let safe_project_name = pending.safe_project_name.clone();
+        let selected_parent = selected_output
+            .parent()
+            .ok_or_else(|| "Caminho de saída inválido.".to_string())?
+            .to_path_buf();
         let chosen_stem = selected_output
             .file_stem()
             .and_then(|s| s.to_str())
             .map(sanitize_filename)
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| safe_project_name.clone());
-
-        let selected_parent = match selected_output.parent() {
-            Some(p) => p.to_path_buf(),
-            None => {
-                self.status_msg = "❌ Caminho de saída inválido.".to_string();
-                return;
-            }
-        };
 
         let export_root = selected_parent.join(&chosen_stem);
         let build_cache_root = unique_temp_build_dir_in_parent(&selected_parent, &chosen_stem);
@@ -1362,18 +1273,17 @@ impl EditorApp {
         } else {
             chosen_stem.clone()
         };
-
-        let engine_root = pending.engine_root;
-        let bin_name = pending.bin_name;
-        let engine_exe_name = pending.engine_exe_name;
-        let project_name = pending.project_name;
-        let assets_src = pending.assets_src;
-        let save_src = pending.save_src;
-        let project_json_src = pending.project_json_src;
-        let saved_scene_name = pending.saved_scene_name;
-
+        let assets_src = self.project_root.join("assets");
+        let save_src = self.project_root.join("save");
+        let project_json_src = self.project_root.join("project.json");
         let prebuilt_runtime_exe = find_prebuilt_runtime_exe(&engine_root, &engine_exe_name);
+        let cargo_available = detect_command_available("cargo");
         let use_prebuilt_runtime = prebuilt_runtime_exe.is_some();
+        let saved_scene_name = saved_scene_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("main.scene.json")
+            .to_string();
 
         let (tx, rx) = mpsc::channel();
         self.build_job = Some(BuildJobState {
@@ -1383,7 +1293,7 @@ impl EditorApp {
             started_at: Instant::now(),
             progress: 0.05,
             estimated_total: 90.0,
-            min_visible_until: Instant::now() + Duration::from_millis(800),
+            min_visible_until: Instant::now() + Duration::from_millis(1200),
             pending_result: None,
         });
 
@@ -1394,8 +1304,12 @@ impl EditorApp {
             export_root.display()
         ));
         if use_prebuilt_runtime {
-            self.push_console_message(
-                "ℹ Runtime pré-compilado detectado. Build seguirá sem Rust/Cargo instalados.".to_string(),
+            self.push_console_message("ℹ Runtime pré-compilado detectado. Build seguirá sem depender de Rust/Cargo instalados.".to_string());
+        } else if !cargo_available {
+            return Err(
+                "Rust/Cargo não encontrado e não há runtime pré-compilado disponível. \
+                 Para exportar sem Rust instalado, adicione um executável em standalone_runtime/windows/ na raiz da engine."
+                    .to_string(),
             );
         }
 
@@ -1489,7 +1403,7 @@ impl EditorApp {
 
                     if !status.success() {
                         return Err(format!(
-                            "Build falhou (status: {}). Veja os detalhes no console. Cache em {}",
+                            "Build falhou (status: {}). Veja os detalhes no console/log da janela de build. Cache preservado em {}",
                             status,
                             build_cache_root.display()
                         ));
@@ -1502,7 +1416,8 @@ impl EditorApp {
 
                 if !exe_src.exists() {
                     return Err(format!(
-                        "Build concluída, mas o executável não foi encontrado em {}.",
+                        "Build concluída, mas o executável não foi encontrado em {}. \
+                         Verifique se o runtime pré-compilado está no local esperado ou se o cargo build gerou o binário.",
                         exe_src.display()
                     ));
                 }
@@ -1517,7 +1432,7 @@ impl EditorApp {
 
                 fs::write(
                     staged_export_root.join(crate::standalone::STANDALONE_MARKER_FILE),
-                    b"standalone=true\n",
+                    b"standalone=true\n"
                 )
                 .map_err(|e| format!("Falha ao criar marcador standalone: {}", e))?;
 
@@ -1532,11 +1447,11 @@ impl EditorApp {
                 }
 
                 let readme = format!(
-                    "RS2BR Engine - Build Standalone PC\n\nProjeto: {}\nCena inicial: {}\nExecutável: {}\nModo: {}\n\nPara rodar:\n1. Deixe esta pasta inteira junta.\n2. Execute {}.\n\nRequisitos:\n- Não precisa de Rust ou Cargo.\n- Se o Windows reclamar de runtime C++, instale o Microsoft Visual C++ Redistributable 2015-2022 (x64).\n",
+                    "RS2BR Engine - Build Standalone PC\n\nProjeto: {}\nCena inicial salva: {}\nExecutável do jogo: {}\nModo de exportação: {}\n\nPara rodar (usuário final):\n1. Deixe esta pasta inteira junta.\n2. Execute {}.\n3. O executável abre direto o jogo standalone.\n4. O jogo usará os arquivos de assets e project.json ao lado do executável.\n\nRequisitos no PC do jogador:\n- Não precisa instalar Rust, Cargo ou bibliotecas de desenvolvimento.\n- Se o Windows reclamar de runtime C++, instale Microsoft Visual C++ Redistributable 2015-2022 (x64).\n",
                     project_name,
                     saved_scene_name,
                     game_exe_name,
-                    if use_prebuilt_runtime { "Runtime pré-compilado" } else { "Compilado via Cargo local" },
+                    if prebuilt_runtime_exe.is_some() { "Runtime pré-compilado" } else { "Compilado via Cargo local" },
                     game_exe_name,
                 );
                 fs::write(staged_export_root.join("LEIA-ME.txt"), readme)
@@ -1555,31 +1470,8 @@ impl EditorApp {
 
             finish(run());
         });
-    }
 
-    /// Verifica se o diálogo de destino já respondeu; se sim, dispara a build.
-    fn poll_build_dialog(&mut self, ctx: &egui::Context) {
-        if self.build_dialog_pending.is_none() {
-            return;
-        }
-        let msg = match self.build_dialog_pending.as_ref() {
-            Some(p) => p.receiver.try_recv().ok(),
-            None => return,
-        };
-        match msg {
-            Some(BuildDialogMessage::Selected(path)) => {
-                self.launch_build_after_dialog(path);
-                ctx.request_repaint();
-            }
-            Some(BuildDialogMessage::Cancelled) => {
-                self.build_dialog_pending = None;
-                self.status_msg = "Build cancelada.".to_string();
-            }
-            None => {
-                // Ainda aguardando — repaint rápido para checar logo
-                ctx.request_repaint_after(Duration::from_millis(50));
-            }
-        }
+        Ok(())
     }
 
     fn poll_build_job(&mut self, ctx: &egui::Context) {
@@ -2412,7 +2304,6 @@ impl eframe::App for EditorApp {
 
         // Processa build cedo no frame para a janela de progresso aparecer
         // imediatamente após clicar em "Build Standalone PC".
-        self.poll_build_dialog(ctx);
         self.poll_build_job(ctx);
         self.show_build_progress_window(ctx);
 

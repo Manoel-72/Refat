@@ -334,7 +334,7 @@
         },
         {
           "LuaScript": {
-            "file_path": "assets/scripts/walk_demo.lua"
+            "file_path": "assets/scripts/movimentacao_basica.lua"
           }
         }
       ],
