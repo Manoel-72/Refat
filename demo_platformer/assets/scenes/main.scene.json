@@ -704,6 +704,28 @@
       "hp": 100.0,
       "max_hp": 100.0,
       "is_dead": false
+    },
+    {
+      "id": "c3bd73e2-72ac-4b44-8aaf-c7137916c6c6",
+      "name": "Entidade",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     }
   ],
   "background_color": [

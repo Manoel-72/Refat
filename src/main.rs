@@ -73,7 +73,9 @@ fn main() {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(&window_title)
-        .with_maximized(standalone_root.is_none())
+        // Abre adaptado ao monitor (16:9, 16:10, ultrawide, etc).
+        // Em standalone também inicia maximizado para evitar área útil pequena.
+        .with_maximized(true)
         .with_inner_size([1366.0, 768.0])
         .with_min_inner_size([800.0, 600.0])
         .with_icon(

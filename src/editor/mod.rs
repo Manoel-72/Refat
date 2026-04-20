@@ -1554,7 +1554,7 @@ impl EditorApp {
         }
 
         if self.build_job.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(100));
+            ctx.request_repaint_after(Duration::from_millis(16));
         }
     }
 
@@ -2267,6 +2267,11 @@ impl eframe::App for EditorApp {
             self.animator_detached = open;
         }
 
+        // Processa build cedo no frame para a janela de progresso aparecer
+        // imediatamente após clicar em "Build Standalone PC".
+        self.poll_build_job(ctx);
+        self.show_build_progress_window(ctx);
+
         egui::CentralPanel::default().show(ctx, |ui| {
             scene_view::show(self, ui);
         });
@@ -2325,8 +2330,6 @@ impl eframe::App for EditorApp {
         self.show_rename_entity_dialog(ctx);
         self.show_delete_confirmation_dialog(ctx);
         self.show_version_popup(ctx);
-        self.poll_build_job(ctx);
-        self.show_build_progress_window(ctx);
 
         {
             // Desacopla runtime do editor via RuntimeContext — V0.9
