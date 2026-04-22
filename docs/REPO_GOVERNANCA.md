@@ -39,6 +39,20 @@ Antes de finalizar uma mudanca:
 2. `cargo test`
 3. Atualizar documentacao quando houver mudanca de fluxo/comportamento
 
+### CI local (gratis, na sua maquina)
+
+Mesmo check basico do workflow (`cargo build` + `cargo test`), sem depender do GitHub:
+
+- **Windows:** na raiz do repositorio:
+
+  `powershell -ExecutionPolicy Bypass -File scripts/ci.ps1`
+
+- **Linux / macOS:**
+
+  `bash scripts/ci.sh`
+
+  (Opcional: `chmod +x scripts/ci.sh` e entao `./scripts/ci.sh`.)
+
 ### CI (GitHub Actions)
 
 No GitHub, o workflow `.github/workflows/ci.yml` roda em **push** e **pull request** para `main` ou `master`: `cargo build` e `cargo test` em **Ubuntu**, com pacotes de sistema para audio (`libasound2`) e dependencias comuns de linking para OpenGL/X11.
