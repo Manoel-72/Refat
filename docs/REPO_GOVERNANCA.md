@@ -71,3 +71,6 @@ Uma mudanca so e considerada pronta quando:
 ## 6) Objetivo
 
 Manter o projeto com baixa ambiguidade operacional: todo mundo sabe onde mexer, como validar e o que pode (ou nao) entrar em release.
+
+Roteiro do primeiro mes: `docs/PLANO_0_30_DIAS.md`.
+

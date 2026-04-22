@@ -3,6 +3,9 @@
 //  Base da colisão 2D: shapes, layers/masks e overlap helpers.
 // ============================================================
 
+use std::cell::RefCell;
+use std::collections::HashSet;
+
 use crate::core::{
     component::{BodyType, Component, Shape2D},
     entity::Entity,
@@ -60,6 +63,10 @@ impl RuntimeCollider {
     }
 }
 
+thread_local! {
+    /// Reutiliza memoria entre chamadas a `collect_candidates` (um thread = game loop tipico).
+    static CANDIDATE_SEEN: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct SpatialHashGrid {
@@ -105,18 +112,25 @@ impl SpatialHashGrid {
         let min_cell_y = (min_y / self.cell_size).floor() as i32;
         let max_cell_y = (max_y / self.cell_size).floor() as i32;
 
-        for cell_y in min_cell_y..=max_cell_y {
-            for cell_x in min_cell_x..=max_cell_x {
-                let Some(bucket) = self.buckets.get(&(cell_x, cell_y)) else {
-                    continue;
-                };
-                for &index in bucket {
-                    if !out.contains(&index) {
-                        out.push(index);
+        CANDIDATE_SEEN.with(|seen| {
+            let mut seen = seen.borrow_mut();
+            seen.clear();
+            // `out` costuma manter capacidade entre frames; alinha o set ao mesmo patamar.
+            seen.reserve(out.capacity());
+
+            for cell_y in min_cell_y..=max_cell_y {
+                for cell_x in min_cell_x..=max_cell_x {
+                    let Some(bucket) = self.buckets.get(&(cell_x, cell_y)) else {
+                        continue;
+                    };
+                    for &index in bucket {
+                        if seen.insert(index) {
+                            out.push(index);
+                        }
                     }
                 }
             }
-        }
+        });
     }
 }
 
