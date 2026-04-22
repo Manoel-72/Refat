@@ -2,3 +2,12 @@
 Cargo.lock
 *.swp
 .DS_Store
+
+# Arquivos de backup / export acidental (nao versionar)
+*.zip
+*.7z
+*.rar
+*_backup*
+*.bak
+*~
+Thumbs.db

@@ -2109,7 +2109,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let save   = SaveData::new();
         let src    = "function on_update(dt) entity.set_velocity(100, 0) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
     }
 
@@ -2120,11 +2120,11 @@ mod tests {
         let save   = SaveData::new();
         let src    = "function on_start() entity.set_position(10, 20) end \
                       function on_update(dt) end";
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, false, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
 
         // segunda chamada com started=true → on_start não roda
-        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
+        let r2 = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.016, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         assert_eq!(r2.set_position, None);
     }
 
@@ -2134,7 +2134,7 @@ mod tests {
         let input  = RuntimeInput::default();
         let mut save = SaveData::new();
         let src    = r#"function on_update(dt) save.set("score", 99) end"#;
-        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
+        let r = run_lua_script(src, &entity, &input, &save, &std::collections::HashMap::new(), None, 0.016, 0.0, true, &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], &[], None, None, (0.0, 0.0, 1.0)).unwrap();
         apply_save_ops(&mut save, &r.save_ops);
         assert_eq!(save.get_int("score"), Some(99));
     }

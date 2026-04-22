@@ -64,6 +64,33 @@ rs2br-engine/
 
 ---
 
+## Fonte Oficial do Código
+
+Para evitar divergência entre versões e reduzir retrabalho, este repositório adota **fonte única de verdade**.
+
+### Código vivo (oficial)
+
+Considere como código oficial para desenvolvimento e release apenas:
+
+- `src/`
+- `assets/`
+- `docs/`
+- `Cargo.toml`
+- `build.rs`
+- `README.md`
+
+### Arquivo histórico (não usar para desenvolvimento)
+
+Pastas e arquivos de snapshot/backup (ex.: `Backup/`, `Engine_novo/`, `vald/`, `.zip` antigos) devem ser tratados como histórico e não como base de feature nova.
+
+### Regra prática
+
+- Correções e features novas entram somente na base oficial.
+- Documentação e pipeline devem sempre apontar para a base oficial.
+- Em caso de dúvida sobre onde alterar, use apenas os caminhos oficiais listados acima.
+
+---
+
 ## Funcionalidades da V0.9 (MVP atual)
 
 ### Editor Visual
