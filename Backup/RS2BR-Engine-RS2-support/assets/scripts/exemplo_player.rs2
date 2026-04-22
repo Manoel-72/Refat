@@ -1,4 +1,0 @@
-// Script RS2BR-Engine
-@start_message Player iniciado
-@player_controller 220
-@camera_follow

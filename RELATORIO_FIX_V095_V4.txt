@@ -1,4 +1,0 @@
-Correções v4
-- src/runtime/mod.rs: sync_with_mode agora recebe &play_state
-- src/editor/inspector.rs: stop_audio_by_name retorna bool, então a checagem virou `if stopped {`
-Warnings de unused imports não impedem compilação.

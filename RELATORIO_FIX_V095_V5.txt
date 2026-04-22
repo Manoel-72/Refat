@@ -1,7 +1,0 @@
-Correções v5
-- RuntimeState recebeu os métodos ausentes:
-  - update_frame(&mut self, project_root: &Path, ground_y: f32)
-  - queue_destroy(&mut self, entity_id: impl Into<String>)
-- update_frame foi ligado à atualização real do runtime.
-- queue_destroy volta a enfileirar destruição de entidade.
-Os warnings de imports não usados continuam não bloqueando compilação.

@@ -1,3 +1,0 @@
-// Portal da fase 2 para voltar ao começo
-@start_message Portal da Fase 2 pronto
-@on_collision change_scene assets/scenes/fase1.scene.json
