@@ -19,7 +19,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🌳 Hierarquia").strong().size(13.0));
+                ui.label(egui::RichText::new("Hierarchy").strong().size(13.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let count = app.scene.entities.len();
                     ui.label(
@@ -36,7 +36,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Botão Nova Entidade + info de seleção ──
     ui.vertical(|ui| {
         if ui.add(
-            egui::Button::new(egui::RichText::new("➕ Nova Entidade").size(12.0))
+            egui::Button::new(egui::RichText::new("+ New Entity").size(12.0))
                 .min_size(egui::vec2(ui.available_width().min(170.0), 26.0))
         ).on_hover_text("Cria uma entidade vazia na cena (ou use clique direito)").clicked() {
             app.new_entity_dialog = Some("Entidade".to_string());
@@ -53,7 +53,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     ui.add_space(4.0);
     ui.label(
-        egui::RichText::new("💡 Clique direito para mais opções")
+        egui::RichText::new("Right-click for more options")
             .small()
             .color(egui::Color32::from_rgb(100, 112, 130)),
     );

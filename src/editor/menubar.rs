@@ -11,9 +11,9 @@ use crate::{entity::Entity, scene::Scene};
 use super::{EditorApp, EditorPlayState};
 
 // Cores do tema
-const ACCENT:    egui::Color32 = egui::Color32::from_rgb(88,  166, 255);
+const ACCENT:    egui::Color32 = egui::Color32::from_rgb(88, 166, 255);
 const WARN:      egui::Color32 = egui::Color32::from_rgb(255, 180, 50);
-const TEXT_DIM:  egui::Color32 = egui::Color32::from_rgb(139, 148, 158);
+const TEXT_DIM:  egui::Color32 = egui::Color32::from_rgb(146, 158, 176);
 const PLAY_BG:   egui::Color32 = egui::Color32::from_rgb(35,  134, 54);
 const PAUSE_BG:  egui::Color32 = egui::Color32::from_rgb(88,  100, 50);
 const STOP_BG:   egui::Color32 = egui::Color32::from_rgb(110, 40,  40);
@@ -32,7 +32,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
             egui::menu::bar(ui, |ui| {
 
                 // ── Menus esquerda ──
-                ui.menu_button("📁 Arquivo", |ui| {
+                ui.menu_button("File", |ui| {
                     ui.set_min_width(240.0);
 
                     section_label(ui, "PROJETO");
@@ -111,7 +111,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                 });
 
-                ui.menu_button("🎮 Criar", |ui| {
+                ui.menu_button("Create", |ui| {
                     ui.set_min_width(210.0);
                     section_label(ui, "ENTIDADES");
                     if menu_item(ui, "🔷", "Entidade Vazia", "Objeto básico sem componentes").clicked() {
@@ -168,7 +168,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                 });
 
-                ui.menu_button("🎬 Cena", |ui| {
+                ui.menu_button("Scene", |ui| {
                     ui.set_min_width(220.0);
                     ui.label(egui::RichText::new(format!("Cena ativa: {}", app.scene.name)).strong());
                     ui.label(egui::RichText::new(format!("{} entidade(s) | {} aba(s) aberta(s)",
@@ -195,7 +195,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     ui.painter().rect_filled(r, 3.0, preview);
                 });
 
-                ui.menu_button("✏ Editor", |ui| {
+                ui.menu_button("Editor", |ui| {
                     ui.set_min_width(210.0);
                     section_label(ui, "HISTÓRICO");
                     if menu_item(ui, "↶", "Desfazer  Ctrl+Z", "Desfaz a última ação").clicked() {
@@ -246,7 +246,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                 });
 
-                ui.menu_button("❓ Ajuda", |ui| {
+                ui.menu_button("Help", |ui| {
                     ui.set_min_width(300.0);
 
                     ui.label(egui::RichText::new(format!(
@@ -295,17 +295,16 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 });
 
                 // ── Centro: Play / Pause / Stop ──
-                ui.with_layout(egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space((ui.available_width() * 0.16).clamp(32.0, 220.0));
                     ui.horizontal(|ui| {
                         let is_playing = app.play_state == EditorPlayState::Playing;
                         let is_paused  = app.play_state == EditorPlayState::Paused;
 
                         // Play
-                        let play_btn = egui::Button::new(
-                            egui::RichText::new("  ▶  Play  ").color(egui::Color32::WHITE).strong()
-                        )
+                        let play_btn = egui::Button::new(egui::RichText::new("Play").color(egui::Color32::WHITE).strong())
                         .fill(if is_playing { PLAY_BG } else { egui::Color32::from_rgb(46, 52, 63) })
-                        .min_size(egui::vec2(80.0, 26.0));
+                        .min_size(egui::vec2(72.0, 24.0));
                         if ui.add(play_btn).on_hover_text("Inicia o jogo em janela separada (F5)").clicked() {
                             app.play_state = EditorPlayState::Playing;
                             app.runtime.window_open = true;
@@ -323,11 +322,9 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
 
                         // Pause
-                        let pause_btn = egui::Button::new(
-                            egui::RichText::new("  ⏸  ").color(egui::Color32::WHITE)
-                        )
+                        let pause_btn = egui::Button::new(egui::RichText::new("Pause").color(egui::Color32::WHITE))
                         .fill(if is_paused { PAUSE_BG } else { egui::Color32::from_rgb(46, 52, 63) })
-                        .min_size(egui::vec2(40.0, 26.0));
+                        .min_size(egui::vec2(72.0, 24.0));
                         if ui.add_enabled(is_playing, pause_btn)
                             .on_hover_text("Pausa a simulação sem fechar o jogo")
                             .clicked()
@@ -337,11 +334,9 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
 
                         // Stop
-                        let stop_btn = egui::Button::new(
-                            egui::RichText::new("  ⏹  Parar  ").color(egui::Color32::WHITE)
-                        )
+                        let stop_btn = egui::Button::new(egui::RichText::new("Stop").color(egui::Color32::WHITE))
                         .fill(if !is_playing && !is_paused { egui::Color32::from_rgb(46, 52, 63) } else { STOP_BG })
-                        .min_size(egui::vec2(70.0, 26.0));
+                        .min_size(egui::vec2(72.0, 24.0));
                         if ui.add(stop_btn).on_hover_text("Para o jogo e volta ao modo de edição").clicked() {
                             app.play_state = EditorPlayState::Edit;
                             app.runtime.stop();
@@ -349,6 +344,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                             app.status_msg = "⏹ Runtime parado.".to_string();
                         }
                     });
+                    ui.add_space(14.0);
                 });
 
                 // ── Direita: Info da cena ──
@@ -359,15 +355,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         ui.label(egui::RichText::new(format!("⚠ {}", warn_count)).color(WARN).small());
                         ui.separator();
                     }
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "🌐 {}  |  {} aba(s)",
-                            app.scene.name,
-                            app.open_scenes.len()
-                        ))
-                        .color(TEXT_DIM)
-                        .small(),
-                    );
+                    ui.label(egui::RichText::new(format!("{} | {} tabs", app.scene.name, app.open_scenes.len())).color(TEXT_DIM).small());
                 });
             });
 
@@ -404,7 +392,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 for (index, label) in tabs {
                     let selected = app.active_scene_index == index;
                     let tab_color = if selected { ACCENT } else { TEXT_DIM };
-                    let tab_text = egui::RichText::new(format!("🎬 {}", label))
+                    let tab_text = egui::RichText::new(label)
                         .color(tab_color)
                         .small();
 

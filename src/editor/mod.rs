@@ -2162,17 +2162,17 @@ impl eframe::App for EditorApp {
         // ── Tema escuro profundo — v0.9 ──
         let mut visuals = egui::Visuals::dark();
         visuals.override_text_color = Some(egui::Color32::from_rgb(220, 227, 236));
-        visuals.panel_fill              = egui::Color32::from_rgb(22, 27, 34);
-        visuals.faint_bg_color          = egui::Color32::from_rgb(30, 36, 46);
-        visuals.extreme_bg_color        = egui::Color32::from_rgb(13, 17, 23);
-        visuals.code_bg_color           = egui::Color32::from_rgb(20, 26, 35);
-        visuals.window_fill             = egui::Color32::from_rgb(28, 33, 42);
+        visuals.panel_fill              = egui::Color32::from_rgb(16, 23, 36);
+        visuals.faint_bg_color          = egui::Color32::from_rgb(24, 33, 50);
+        visuals.extreme_bg_color        = egui::Color32::from_rgb(11, 16, 28);
+        visuals.code_bg_color           = egui::Color32::from_rgb(18, 26, 40);
+        visuals.window_fill             = egui::Color32::from_rgb(20, 29, 45);
         visuals.widgets.noninteractive.bg_fill      = egui::Color32::from_rgb(30, 36, 46);
         visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(35, 42, 54);
-        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(40, 47, 60);
-        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(44, 52, 66);
-        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(52, 62, 80);
-        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(56, 67, 85);
+        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(30, 40, 58);
+        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(36, 46, 66);
+        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(42, 54, 78);
+        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(47, 60, 85);
         visuals.widgets.active.bg_fill              = egui::Color32::from_rgb(56, 106, 188);
         visuals.widgets.active.weak_bg_fill         = egui::Color32::from_rgb(46, 92, 168);
         visuals.widgets.open.bg_fill                = egui::Color32::from_rgb(38, 46, 60);
@@ -2186,13 +2186,13 @@ impl eframe::App for EditorApp {
         visuals.widgets.active.bg_stroke.color              = egui::Color32::from_rgb(120, 190, 255);
         visuals.widgets.open.bg_stroke.color                = egui::Color32::from_rgb(60, 72, 90);
         visuals.widgets.noninteractive.fg_stroke.color      = egui::Color32::from_rgb(48, 56, 70);
-        visuals.window_rounding                             = 6.0.into();
-        visuals.menu_rounding                               = 5.0.into();
-        visuals.widgets.noninteractive.rounding             = 4.0.into();
-        visuals.widgets.inactive.rounding                   = 4.0.into();
-        visuals.widgets.hovered.rounding                    = 4.0.into();
-        visuals.widgets.active.rounding                     = 4.0.into();
-        visuals.widgets.open.rounding                       = 4.0.into();
+        visuals.window_rounding                             = 2.0.into();
+        visuals.menu_rounding                               = 2.0.into();
+        visuals.widgets.noninteractive.rounding             = 2.0.into();
+        visuals.widgets.inactive.rounding                   = 2.0.into();
+        visuals.widgets.hovered.rounding                    = 2.0.into();
+        visuals.widgets.active.rounding                     = 2.0.into();
+        visuals.widgets.open.rounding                       = 2.0.into();
         ctx.set_visuals(visuals);
 
         if self.app_screen == EditorScreen::ProjectHub {
@@ -2323,10 +2323,58 @@ impl eframe::App for EditorApp {
             });
         self.layout.inspector_width = inspector_response.response.rect.width().clamp(260.0, 380.0);
 
+        // Barra de status no rodapé — deve vir ANTES do painel de assets e sempre antes do
+        // CentralPanel (egui: o painel central deve ser o último entre os painéis principais).
+        egui::TopBottomPanel::bottom("status_bar")
+            .resizable(false)
+            .exact_height(22.0)
+            .show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let level = infer_status_level(&self.status_msg);
+                let (icon, color) = status_visuals(level);
+                let trimmed_message = self
+                    .status_msg
+                    .trim_start_matches(|c: char| matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' '));
+                ui.colored_label(color, format!("{} {}", icon, trimmed_message));
+                ui.separator();
+
+                let mode_label = match self.play_state {
+                    EditorPlayState::Edit => "Modo: Edição",
+                    EditorPlayState::Playing => "Modo: Play",
+                    EditorPlayState::Paused => "Modo: Pausado",
+                };
+                ui.label(mode_label);
+
+                let warning_count = self.warning_count();
+                ui.separator();
+                if warning_count == 0 {
+                    ui.label("Warnings: 0");
+                } else {
+                    ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
+                }
+
+                if let Some(asset) = self.selected_asset.as_ref() {
+                    let record = self.assets.asset_record_for(asset);
+                    ui.separator();
+                    let asset_color = if record.validation.is_valid {
+                        egui::Color32::from_rgb(120, 220, 140)
+                    } else {
+                        egui::Color32::from_rgb(255, 120, 120)
+                    };
+                    ui.colored_label(asset_color, format!("Asset: {}", record.name));
+                }
+
+                if !self.selected_entity_ids.is_empty() {
+                    ui.separator();
+                    ui.label(format!("Seleção: {}", self.selected_entity_ids.len()));
+                }
+            });
+        });
+
         let asset_response = egui::TopBottomPanel::bottom("asset_panel")
-            .default_height(self.layout.asset_height.clamp(190.0, 420.0).max(220.0))
+            .default_height(self.layout.asset_height.clamp(150.0, 900.0).max(180.0))
             .resizable(true)
-            .min_height(170.0)
+            .min_height(130.0)
             .max_height(900.0)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -2394,7 +2442,7 @@ impl eframe::App for EditorApp {
                     }
                 }
             });
-        self.layout.asset_height = asset_response.response.rect.height().clamp(190.0, 420.0);
+        self.layout.asset_height = asset_response.response.rect.height().clamp(130.0, 900.0);
 
 
 
@@ -2421,49 +2469,6 @@ impl eframe::App for EditorApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             scene_view::show(self, ui);
-        });
-
-        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                let level = infer_status_level(&self.status_msg);
-                let (icon, color) = status_visuals(level);
-                let trimmed_message = self
-                    .status_msg
-                    .trim_start_matches(|c: char| matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' '));
-                ui.colored_label(color, format!("{} {}", icon, trimmed_message));
-                ui.separator();
-
-                let mode_label = match self.play_state {
-                    EditorPlayState::Edit => "Modo: Edição",
-                    EditorPlayState::Playing => "Modo: Play",
-                    EditorPlayState::Paused => "Modo: Pausado",
-                };
-                ui.label(mode_label);
-
-                let warning_count = self.warning_count();
-                ui.separator();
-                if warning_count == 0 {
-                    ui.label("Warnings: 0");
-                } else {
-                    ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
-                }
-
-                if let Some(asset) = self.selected_asset.as_ref() {
-                    let record = self.assets.asset_record_for(asset);
-                    ui.separator();
-                    let asset_color = if record.validation.is_valid {
-                        egui::Color32::from_rgb(120, 220, 140)
-                    } else {
-                        egui::Color32::from_rgb(255, 120, 120)
-                    };
-                    ui.colored_label(asset_color, format!("Asset: {}", record.name));
-                }
-
-                if !self.selected_entity_ids.is_empty() {
-                    ui.separator();
-                    ui.label(format!("Seleção: {}", self.selected_entity_ids.len()));
-                }
-            });
         });
 
         self.show_new_project_dialog(ctx);

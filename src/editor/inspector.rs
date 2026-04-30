@@ -19,7 +19,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🔍 Inspector").strong().size(13.0));
+                ui.label(egui::RichText::new("Inspector").strong().size(13.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if app.selected_entity_id.is_some() {
                         ui.label(
@@ -41,7 +41,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     ui.separator();
 
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Buscar:").small());
+        ui.label(egui::RichText::new("Search:").small());
         ui.add(
             egui::TextEdit::singleline(&mut app.inspector_search)
                 .hint_text("transform, sprite, collider...")

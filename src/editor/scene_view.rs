@@ -32,13 +32,9 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 4.0, bottom: 3.0 })
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(egui::RichText::new("🎬 Cena 2D").strong().size(13.0));
+                ui.label(egui::RichText::new("Scene").strong().size(13.0));
                 ui.separator();
-                ui.label(
-                    egui::RichText::new(format!("📌 {}", app.scene.name))
-                        .color(egui::Color32::from_rgb(88, 166, 255))
-                        .size(12.0),
-                );
+                ui.label(egui::RichText::new(app.scene.name.clone()).color(egui::Color32::from_rgb(88, 166, 255)).size(12.0));
                 ui.separator();
                 ui.label(
                     egui::RichText::new(format!("{:.0}%", app.scene_zoom * 100.0))
@@ -46,11 +42,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                         .size(12.0),
                 );
                 ui.separator();
-                ui.label(
-                    egui::RichText::new(format!("🎯 {} obj", entity_count))
-                        .color(egui::Color32::from_rgb(139, 148, 158))
-                        .size(12.0),
-                );
+                ui.label(egui::RichText::new(format!("{} objects", entity_count)).color(egui::Color32::from_rgb(139, 148, 158)).size(12.0));
 
                 if app.play_state != EditorPlayState::Edit {
                     ui.separator();
@@ -61,11 +53,11 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 }
 
                 ui.separator();
-                ui.checkbox(&mut app.show_entity_names, "🏷 Nomes")
+                ui.checkbox(&mut app.show_entity_names, "Names")
                     .on_hover_text("Exibe o nome de cada entidade na viewport");
-                ui.checkbox(&mut app.show_colliders, "📐 Colliders")
+                ui.checkbox(&mut app.show_colliders, "Colliders")
                     .on_hover_text("Mostra os box colliders como bordas verdes");
-                ui.checkbox(&mut app.snap_to_grid, "📏 Snap 32px")
+                ui.checkbox(&mut app.snap_to_grid, "Snap 32px")
                     .on_hover_text("Encaixa entidades na grade de 32px ao mover");
 
                 if ui.small_button("🎯 Resetar Visão")
