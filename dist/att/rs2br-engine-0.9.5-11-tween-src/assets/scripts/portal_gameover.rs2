@@ -1,0 +1,3 @@
+// Portal do gameplay para game over
+@start_message Portal Game Over pronto
+@on_collision change_scene assets/scenes/gameover.scene.json

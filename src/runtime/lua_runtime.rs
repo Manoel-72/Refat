@@ -14,6 +14,7 @@
 //    input.key_held(name), input.key_pressed(name), input.mouse_pos()
 //    game.delta_time(), game.elapsed_time(), game.log(msg)
 //    game.change_scene(path)
+//    game.fade_in(duration), game.fade_out(duration), game.flash_screen(r,g,b,duration)
 //    game.get_collisions() → lista de nomes das entidades em contato
 //    game.collision_enter(name) → bool, true apenas no frame de entrada
 //    game.collision_stay(name)  → bool, true enquanto continuar em contato
@@ -28,21 +29,28 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    rc::Rc,
     hash::{Hash, Hasher},
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 use mlua::{Function, Lua, Table, Value as LuaValue, Variadic};
 
 use crate::{
     core::{component::Component, entity::Entity},
+    effects::tween::TweenEntry,
     runtime::{
+        camera::CameraController,
         input::key_code::KeyCode,
         save::{SaveData, SaveValue},
         state::RuntimeInput,
+        systems::RuntimeCommand,
     },
 };
 
 // ── contexto que o script pode modificar ─────────────────────
+
+static NEXT_LUA_SEQUENCE_HANDLE: AtomicU32 = AtomicU32::new(1);
 
 thread_local! {
     static DIRECT_LUA_VM_CACHE: RefCell<HashMap<String, Lua>> = RefCell::new(HashMap::new());
@@ -100,7 +108,48 @@ pub struct PendingLuaEmitter {
     pub duration: f32,
 }
 
+
+#[derive(Debug, Clone)]
+pub struct TileSetOp {
+    pub handle: u32,
+    pub layer: usize,
+    pub col: u32,
+    pub row: u32,
+    pub gid: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct TilemapColliderOp {
+    pub handle: u32,
+    pub rects: Vec<(f32, f32, f32, f32)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NavSetSolidOp {
+    pub handle: u32,
+    pub x: i32,
+    pub y: i32,
+    pub solid: bool,
+}
+
 #[derive(Debug, Default)]
+struct TilemapLuaBridge {
+    next_id: u32,
+    maps: HashMap<u32, crate::world::tilemap::TilemapNode>,
+    loaded: Vec<(u32, crate::world::tilemap::TilemapNode)>,
+    set_ops: Vec<TileSetOp>,
+    collider_ops: Vec<TilemapColliderOp>,
+}
+
+#[derive(Debug, Default)]
+struct NavGridLuaBridge {
+    next_id: u32,
+    grids: HashMap<u32, crate::world::nav_grid::NavGrid>,
+    loaded: Vec<(u32, crate::world::nav_grid::NavGrid)>,
+    set_ops: Vec<NavSetSolidOp>,
+}
+
+#[derive(Default)]
 pub struct LuaScriptResult {
     /// Posição alvo (se o script chamou entity.set_position).
     pub set_position: Option<(f32, f32)>,
@@ -124,6 +173,12 @@ pub struct LuaScriptResult {
     pub spawn_emitters: Vec<PendingLuaEmitter>,
     pub camera_shake: Option<(f32, f32)>,
     pub camera_zoom: Option<f32>,
+    pub set_camera_target: Option<(String, f32)>,
+    pub set_camera_deadzone: Option<(f32, f32)>,
+    pub set_camera_lookahead: Option<(f32, f32)>,
+    pub set_camera_limits: Option<(f32, f32, f32, f32)>,
+    pub set_camera_offset: Option<(f32, f32)>,
+    pub camera_off: bool,
     pub change_scene: Option<String>,
     pub apply_impulse: Option<(f32, f32)>,
     pub destroy_entity: bool,
@@ -132,6 +187,23 @@ pub struct LuaScriptResult {
     pub state_ops: Vec<StateOp>,
     pub event_ops: Vec<EventOp>,
     pub audio_ops: Vec<AudioOp>,
+    pub loaded_tilemaps: Vec<(u32, crate::world::tilemap::TilemapNode)>,
+    pub tile_set_ops: Vec<TileSetOp>,
+    pub tilemap_collider_ops: Vec<TilemapColliderOp>,
+    pub loaded_nav_grids: Vec<(u32, crate::world::nav_grid::NavGrid)>,
+    pub nav_set_solid_ops: Vec<NavSetSolidOp>,
+    pub tween_adds: Vec<TweenEntry>,
+    pub sequence_new_handles: Vec<u32>,
+    pub sequence_ops: Vec<SequenceLuaOp>,
+    pub runtime_commands: Vec<RuntimeCommand>,
+}
+
+#[derive(Clone)]
+pub enum SequenceLuaOp {
+    Add { handle: u32, tween: TweenEntry },
+    Wait { handle: u32, seconds: f32 },
+    Play { handle: u32 },
+    Stop { handle: u32 },
 }
 
 #[derive(Debug)]
@@ -177,6 +249,30 @@ pub enum AudioOp {
         key: String,
         volume: f32,
     },
+    PlayAt {
+        path: String,
+        world_x: f32,
+        world_y: f32,
+        max_dist: f32,
+        volume: f32,
+    },
+    CrossfadeTo {
+        key: String,
+        path: String,
+        duration_secs: f32,
+    },
+    PlayMusicLooped {
+        intro_path: String,
+        loop_path: String,
+    },
+    SetSfxVolume {
+        volume: f32,
+    },
+    SetMusicVolume {
+        volume: f32,
+    },
+    PauseMusic,
+    ResumeMusic,
 }
 
 // ── execução ─────────────────────────────────────────────────
@@ -210,7 +306,12 @@ pub fn run_lua_script(
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
-    camera_snapshot: (f32, f32, f32),
+    camera_snapshot: (f32, f32, f32, f32, f32),
+    music_playing_snapshot: bool,
+    tilemaps_snapshot: &HashMap<u32, crate::world::tilemap::TilemapNode>,
+    tilemap_next_id: u32,
+    nav_grids_snapshot: &HashMap<u32, crate::world::nav_grid::NavGrid>,
+    nav_grid_next_id: u32,
 ) -> Result<LuaScriptResult, String> {
     let cache_key = build_direct_vm_cache_key(lua_source, entity, script_path);
     DIRECT_LUA_VM_CACHE.with(|cache| {
@@ -244,6 +345,11 @@ pub fn run_lua_script(
             scene_label,
             script_path,
             camera_snapshot,
+            music_playing_snapshot,
+            tilemaps_snapshot,
+            tilemap_next_id,
+            nav_grids_snapshot,
+            nav_grid_next_id,
         )
     })
 }
@@ -276,7 +382,12 @@ pub fn run_lua_script_with_vm(
     current_runtime_events: &[crate::runtime::state::RuntimeEvent],
     scene_label: Option<&str>,
     script_path: Option<&str>,
-    camera_snapshot: (f32, f32, f32),
+    camera_snapshot: (f32, f32, f32, f32, f32),
+    music_playing_snapshot: bool,
+    tilemaps_snapshot: &HashMap<u32, crate::world::tilemap::TilemapNode>,
+    tilemap_next_id: u32,
+    nav_grids_snapshot: &HashMap<u32, crate::world::nav_grid::NavGrid>,
+    nav_grid_next_id: u32,
 ) -> Result<LuaScriptResult, String> {
     let mut result = LuaScriptResult::default();
 
@@ -483,6 +594,24 @@ pub fn run_lua_script_with_vm(
         }
 
         Ok(())
+    }
+
+    fn lua_table_to_props(table: Table) -> Result<HashMap<String, f32>, mlua::Error> {
+        let mut props = HashMap::new();
+        for pair in table.pairs::<LuaValue, LuaValue>() {
+            let (key, value) = pair?;
+            let key = match key {
+                LuaValue::String(s) => s.to_string_lossy().to_string(),
+                _ => continue,
+            };
+            let value = match value {
+                LuaValue::Integer(v) => v as f32,
+                LuaValue::Number(v) => v as f32,
+                _ => continue,
+            };
+            props.insert(key, value);
+        }
+        Ok(props)
     }
 
     fn make_vec2_callable(lua: &Lua, x: f32, y: f32) -> Result<Table, String> {
@@ -950,7 +1079,7 @@ pub fn run_lua_script_with_vm(
         let mouse_pos = make_vec2_callable(&lua, mx, my)?;
         input_tbl.set("mouse_pos", mouse_pos).ok();
 
-        let (cam_x, cam_y, zoom) = camera_snapshot;
+        let (cam_x, cam_y, zoom, _view_w, _view_h) = camera_snapshot;
         let safe_zoom = zoom.max(0.0001);
         let world_x = (mx / safe_zoom) + cam_x;
         let world_y = cam_y - (my / safe_zoom);
@@ -1079,6 +1208,20 @@ pub fn run_lua_script_with_vm(
             .set("audio", audio_tbl)
             .map_err(|e| e.to_string())?;
     }
+
+    let tilemap_bridge = Rc::new(RefCell::new(TilemapLuaBridge {
+        next_id: tilemap_next_id.max(1),
+        maps: tilemaps_snapshot.clone(),
+        loaded: Vec::new(),
+        set_ops: Vec::new(),
+        collider_ops: Vec::new(),
+    }));
+    let nav_grid_bridge = Rc::new(RefCell::new(NavGridLuaBridge {
+        next_id: nav_grid_next_id.max(1),
+        grids: nav_grids_snapshot.clone(),
+        loaded: Vec::new(),
+        set_ops: Vec::new(),
+    }));
 
     // ── tabela `game` ────────────────────────────────────────
     {
@@ -1258,6 +1401,434 @@ pub fn run_lua_script_with_vm(
                 .map_err(|e| e.to_string())?;
             game_tbl.set("camera_zoom", camera_zoom).ok();
         }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let set_camera_target = lua
+                .create_function(move |_, (entity_id, speed): (String, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_target_id", entity_id)?;
+                    cmds.set("camera_target_speed", speed.max(0.0))?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_camera_target", set_camera_target).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let set_camera_deadzone = lua
+                .create_function(move |_, (w, h): (f32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_deadzone_w", w.max(0.0))?;
+                    cmds.set("camera_deadzone_h", h.max(0.0))?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_camera_deadzone", set_camera_deadzone).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let set_camera_lookahead = lua
+                .create_function(move |_, (dist, speed): (f32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_lookahead_dist", dist.max(0.0))?;
+                    cmds.set("camera_lookahead_speed", speed.max(0.0))?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_camera_lookahead", set_camera_lookahead).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let set_camera_limits = lua
+                .create_function(move |_, (left, top, right, bottom): (f32, f32, f32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_limit_left", left)?;
+                    cmds.set("camera_limit_top", top)?;
+                    cmds.set("camera_limit_right", right)?;
+                    cmds.set("camera_limit_bottom", bottom)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_camera_limits", set_camera_limits).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let set_camera_offset = lua
+                .create_function(move |_, (x, y): (f32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_offset_x", x)?;
+                    cmds.set("camera_offset_y", y)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_camera_offset", set_camera_offset).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let camera_off = lua
+                .create_function(move |_, ()| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    cmds.set("camera_off", true)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("camera_off", camera_off).ok();
+        }
+        {
+            let (cam_x, cam_y, zoom, view_w, view_h) = camera_snapshot;
+            let camera_x_ret = cam_x;
+            let camera_y_ret = cam_y;
+            let screen_to_world = lua
+                .create_function(move |lua_ctx, (sx, sy): (f32, f32)| {
+                    let controller = CameraController {
+                        last_view_w: view_w,
+                        last_view_h: view_h,
+                        ..CameraController::default()
+                    };
+                    let (x, y) = controller.screen_to_world(
+                        sx,
+                        sy,
+                        crate::runtime::renderer::CameraView { x: cam_x, y: cam_y, zoom },
+                    );
+                    let t = lua_ctx.create_table()?;
+                    t.set("x", x)?;
+                    t.set("y", y)?;
+                    t.set(1, x)?;
+                    t.set(2, y)?;
+                    Ok(t)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("screen_to_world", screen_to_world).ok();
+
+            let camera_x = lua
+                .create_function(move |_, ()| Ok(camera_x_ret))
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("camera_x", camera_x).ok();
+
+            let camera_y = lua
+                .create_function(move |_, ()| Ok(camera_y_ret))
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("camera_y", camera_y).ok();
+        }
+
+        {
+            let bridge = Rc::clone(&tilemap_bridge);
+            let load_tilemap = lua
+                .create_function(move |_, path: String| {
+                    let tilemap = crate::world::tilemap::TilemapNode::load_tiled_json(&path)
+                        .map_err(mlua::Error::runtime)?;
+                    let mut bridge = bridge.borrow_mut();
+                    let handle = bridge.next_id.max(1);
+                    bridge.next_id = bridge.next_id.saturating_add(1);
+                    bridge.maps.insert(handle, tilemap.clone());
+                    bridge.loaded.push((handle, tilemap));
+                    Ok(handle)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("load_tilemap", load_tilemap).ok();
+        }
+        {
+            let bridge = Rc::clone(&tilemap_bridge);
+            let get_tile = lua
+                .create_function(move |_, (handle, layer, col, row): (u32, usize, u32, u32)| {
+                    Ok(bridge
+                        .borrow()
+                        .maps
+                        .get(&handle)
+                        .map(|tilemap| tilemap.get_tile(layer, col, row))
+                        .unwrap_or(0))
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("get_tile", get_tile).ok();
+        }
+        {
+            let bridge = Rc::clone(&tilemap_bridge);
+            let set_tile = lua
+                .create_function(move |_, (handle, layer, col, row, gid): (u32, usize, u32, u32, u32)| {
+                    let mut bridge = bridge.borrow_mut();
+                    if let Some(tilemap) = bridge.maps.get_mut(&handle) {
+                        tilemap.set_tile(layer, col, row, gid);
+                        bridge.set_ops.push(TileSetOp { handle, layer, col, row, gid });
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("set_tile", set_tile).ok();
+        }
+        {
+            let bridge = Rc::clone(&tilemap_bridge);
+            let build_tilemap_colliders = lua
+                .create_function(move |_, (handle, opts): (u32, Table)| {
+                    let solid_gids_table: Table = opts.get("solid_gids")?;
+                    let mut solid_gids = Vec::new();
+                    for value in solid_gids_table.sequence_values::<u32>() {
+                        solid_gids.push(value?);
+                    }
+                    let layer_idx = opts.get::<usize>("layer").unwrap_or(0);
+                    let mut bridge = bridge.borrow_mut();
+                    let Some(tilemap) = bridge.maps.get(&handle) else {
+                        return Ok(0usize);
+                    };
+                    let rects = tilemap.build_colliders(&solid_gids, layer_idx);
+                    let count = rects.len();
+                    bridge.collider_ops.push(TilemapColliderOp { handle, rects });
+                    Ok(count)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("build_tilemap_colliders", build_tilemap_colliders).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_new_grid = lua
+                .create_function(move |_, (cols, rows, cell_size): (u32, u32, f32)| {
+                    let mut bridge = bridge.borrow_mut();
+                    let handle = bridge.next_id.max(1);
+                    bridge.next_id = bridge.next_id.saturating_add(1);
+                    let grid = crate::world::nav_grid::NavGrid::new(cols, rows, cell_size);
+                    bridge.grids.insert(handle, grid.clone());
+                    bridge.loaded.push((handle, grid));
+                    Ok(handle)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_new_grid", nav_new_grid).ok();
+        }
+        {
+            let nav_bridge = Rc::clone(&nav_grid_bridge);
+            let tile_bridge = Rc::clone(&tilemap_bridge);
+            let nav_from_tilemap = lua
+                .create_function(move |_, (tilemap_handle, opts): (u32, Table)| {
+                    let solid_gids_table: Table = opts.get("solid_gids")?;
+                    let mut solid_gids = Vec::new();
+                    for value in solid_gids_table.sequence_values::<u32>() {
+                        solid_gids.push(value?);
+                    }
+                    let layer_idx = opts.get::<usize>("layer").unwrap_or(0);
+                    let Some(tilemap) = tile_bridge.borrow().maps.get(&tilemap_handle).cloned() else {
+                        return Ok(0u32);
+                    };
+                    let grid = crate::world::nav_grid::NavGrid::from_tilemap(&tilemap, &solid_gids, layer_idx);
+                    let mut nav_bridge = nav_bridge.borrow_mut();
+                    let handle = nav_bridge.next_id.max(1);
+                    nav_bridge.next_id = nav_bridge.next_id.saturating_add(1);
+                    nav_bridge.grids.insert(handle, grid.clone());
+                    nav_bridge.loaded.push((handle, grid));
+                    Ok(handle)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_from_tilemap", nav_from_tilemap).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_find_path = lua
+                .create_function(move |lua_ctx, (handle, x1, y1, x2, y2): (u32, f32, f32, f32, f32)| {
+                    let Some(path) = bridge
+                        .borrow()
+                        .grids
+                        .get(&handle)
+                        .and_then(|grid| grid.find_path((x1, y1), (x2, y2)))
+                    else {
+                        return Ok(LuaValue::Nil);
+                    };
+                    let out = lua_ctx.create_table()?;
+                    for (index, (x, y)) in path.into_iter().enumerate() {
+                        let point = lua_ctx.create_table()?;
+                        point.set("x", x)?;
+                        point.set("y", y)?;
+                        point.set(1, x)?;
+                        point.set(2, y)?;
+                        out.set(index + 1, point)?;
+                    }
+                    Ok(LuaValue::Table(out))
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_find_path", nav_find_path).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_set_solid = lua
+                .create_function(move |_, (handle, x, y, solid): (u32, i32, i32, bool)| {
+                    let mut bridge = bridge.borrow_mut();
+                    let changed = if let Some(grid) = bridge.grids.get_mut(&handle) {
+                        grid.set_solid(x, y, solid);
+                        true
+                    } else {
+                        false
+                    };
+                    if changed {
+                        bridge.set_ops.push(NavSetSolidOp { handle, x, y, solid });
+                    }
+                    Ok(changed)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_set_solid", nav_set_solid).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let tween_fn = lua
+                .create_function(move |_, args: Variadic<LuaValue>| {
+                    if args.len() < 4 {
+                        return Err(mlua::Error::runtime(
+                            "game.tween(entity_id, props, duration, easing, callback?) precisa de 4 argumentos",
+                        ));
+                    }
+                    let entity_id = match &args[0] {
+                        LuaValue::String(s) => s.to_string_lossy().to_string(),
+                        LuaValue::Integer(v) => v.to_string(),
+                        LuaValue::Number(v) => (*v as i64).to_string(),
+                        _ => return Err(mlua::Error::runtime("entity_id inválido em game.tween")),
+                    };
+                    let props = match &args[1] {
+                        LuaValue::Table(t) => t.clone(),
+                        _ => return Err(mlua::Error::runtime("props precisa ser table em game.tween")),
+                    };
+                    let duration = match &args[2] {
+                        LuaValue::Integer(v) => *v as f32,
+                        LuaValue::Number(v) => *v as f32,
+                        _ => 0.0,
+                    };
+                    let easing = match &args[3] {
+                        LuaValue::String(s) => s.to_string_lossy().to_string(),
+                        _ => "linear".to_string(),
+                    };
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("tween_seq").unwrap_or(0) + 1;
+                    cmds.set("tween_seq", seq)?;
+                    cmds.set(format!("tween_entity:{}", seq), entity_id)?;
+                    cmds.set(format!("tween_props:{}", seq), props)?;
+                    cmds.set(format!("tween_duration:{}", seq), duration.max(0.0001))?;
+                    cmds.set(format!("tween_easing:{}", seq), easing)?;
+                    if let Some(LuaValue::Function(callback)) = args.get(4) {
+                        cmds.set(format!("tween_callback:{}", seq), callback.clone())?;
+                    }
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("tween", tween_fn).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let tween_loop = lua
+                .create_function(
+                    move |_, (entity_id, props, duration, easing, yoyo): (String, Table, f32, String, bool)| {
+                        let cmds: Table = game_tbl_clone.get("_cmds")?;
+                        let seq = cmds.get::<i64>("tween_loop_seq").unwrap_or(0) + 1;
+                        cmds.set("tween_loop_seq", seq)?;
+                        cmds.set(format!("tween_loop_entity:{}", seq), entity_id)?;
+                        cmds.set(format!("tween_loop_props:{}", seq), props)?;
+                        cmds.set(format!("tween_loop_duration:{}", seq), duration.max(0.0001))?;
+                        cmds.set(format!("tween_loop_easing:{}", seq), easing)?;
+                        cmds.set(format!("tween_loop_yoyo:{}", seq), yoyo)?;
+                        Ok(())
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("tween_loop", tween_loop).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let new_sequence = lua
+                .create_function(move |_, ()| {
+                    let handle = NEXT_LUA_SEQUENCE_HANDLE.fetch_add(1, Ordering::Relaxed).max(1);
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("sequence_new_seq").unwrap_or(0) + 1;
+                    cmds.set("sequence_new_seq", seq)?;
+                    cmds.set(format!("sequence_new_handle:{}", seq), handle)?;
+                    Ok(handle)
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("new_sequence", new_sequence).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let seq_add = lua
+                .create_function(move |_, args: Variadic<LuaValue>| {
+                    if args.len() < 5 {
+                        return Err(mlua::Error::runtime(
+                            "game.seq_add(handle, entity_id, props, dur, easing, callback?) precisa de 5 argumentos",
+                        ));
+                    }
+                    let handle = match &args[0] {
+                        LuaValue::Integer(v) => *v as u32,
+                        LuaValue::Number(v) => *v as u32,
+                        _ => 0,
+                    };
+                    let entity_id = match &args[1] {
+                        LuaValue::String(s) => s.to_string_lossy().to_string(),
+                        LuaValue::Integer(v) => v.to_string(),
+                        LuaValue::Number(v) => (*v as i64).to_string(),
+                        _ => return Err(mlua::Error::runtime("entity_id inválido em game.seq_add")),
+                    };
+                    let props = match &args[2] {
+                        LuaValue::Table(t) => t.clone(),
+                        _ => return Err(mlua::Error::runtime("props precisa ser table em game.seq_add")),
+                    };
+                    let duration = match &args[3] {
+                        LuaValue::Integer(v) => *v as f32,
+                        LuaValue::Number(v) => *v as f32,
+                        _ => 0.0,
+                    };
+                    let easing = match &args[4] {
+                        LuaValue::String(s) => s.to_string_lossy().to_string(),
+                        _ => "linear".to_string(),
+                    };
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("sequence_add_seq").unwrap_or(0) + 1;
+                    cmds.set("sequence_add_seq", seq)?;
+                    cmds.set(format!("sequence_add_handle:{}", seq), handle)?;
+                    cmds.set(format!("sequence_add_entity:{}", seq), entity_id)?;
+                    cmds.set(format!("sequence_add_props:{}", seq), props)?;
+                    cmds.set(format!("sequence_add_duration:{}", seq), duration.max(0.0001))?;
+                    cmds.set(format!("sequence_add_easing:{}", seq), easing)?;
+                    if let Some(LuaValue::Function(callback)) = args.get(5) {
+                        cmds.set(format!("sequence_add_callback:{}", seq), callback.clone())?;
+                    }
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("seq_add", seq_add).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let seq_wait = lua
+                .create_function(move |_, (handle, seconds): (u32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("sequence_wait_seq").unwrap_or(0) + 1;
+                    cmds.set("sequence_wait_seq", seq)?;
+                    cmds.set(format!("sequence_wait_handle:{}", seq), handle)?;
+                    cmds.set(format!("sequence_wait_seconds:{}", seq), seconds.max(0.0))?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("seq_wait", seq_wait).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let seq_play = lua
+                .create_function(move |_, handle: u32| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("sequence_play_seq").unwrap_or(0) + 1;
+                    cmds.set("sequence_play_seq", seq)?;
+                    cmds.set(format!("sequence_play_handle:{}", seq), handle)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("seq_play", seq_play).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let seq_stop = lua
+                .create_function(move |_, handle: u32| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("sequence_stop_seq").unwrap_or(0) + 1;
+                    cmds.set("sequence_stop_seq", seq)?;
+                    cmds.set(format!("sequence_stop_handle:{}", seq), handle)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("seq_stop", seq_stop).ok();
+        }
         // game.log/msg + aliases de severidade
         let log_prefix = format_lua_context(entity, scene_label, script_path);
         let info_prefix = format!("{}[stage=log]", log_prefix);
@@ -1297,6 +1868,43 @@ pub fn run_lua_script_with_vm(
             })
             .map_err(|e| e.to_string())?;
         game_tbl.set("change_scene", change_scene).ok();
+
+        let gc_fade_in = game_cmds.clone();
+        let fade_in_fn = lua
+            .create_function(move |_, duration: f32| {
+                let seq = gc_fade_in.get::<i64>("fade_in_seq").unwrap_or(0) + 1;
+                gc_fade_in.set("fade_in_seq", seq)?;
+                gc_fade_in.set(format!("fade_in_duration:{}", seq), duration)?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("fade_in", fade_in_fn).ok();
+
+        let gc_fade_out = game_cmds.clone();
+        let fade_out_fn = lua
+            .create_function(move |_, duration: f32| {
+                let seq = gc_fade_out.get::<i64>("fade_out_seq").unwrap_or(0) + 1;
+                gc_fade_out.set("fade_out_seq", seq)?;
+                gc_fade_out.set(format!("fade_out_duration:{}", seq), duration)?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("fade_out", fade_out_fn).ok();
+
+        let gc_flash = game_cmds.clone();
+        let flash_screen_fn = lua
+            .create_function(move |_, (r, g, b, duration): (f32, f32, f32, f32)| {
+                let seq = gc_flash.get::<i64>("flash_screen_seq").unwrap_or(0) + 1;
+                gc_flash.set("flash_screen_seq", seq)?;
+                gc_flash.set(format!("flash_screen_r:{}", seq), r)?;
+                gc_flash.set(format!("flash_screen_g:{}", seq), g)?;
+                gc_flash.set(format!("flash_screen_b:{}", seq), b)?;
+                gc_flash.set(format!("flash_screen_duration:{}", seq), duration)?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+        game_tbl.set("flash_screen", flash_screen_fn).ok();
+
         game_tbl.set("_cmds", game_cmds).ok();
 
         // game.get_collisions() → lista de nomes das entidades em contato
@@ -1607,6 +2215,115 @@ pub fn run_lua_script_with_vm(
             )
             .map_err(|e| e.to_string())?;
         game_tbl.set("raycast", raycast_fn).ok();
+
+        // game.audio.* — mesma fila `_cmds` do `audio` global
+        {
+            let audio_cmds_for_game: Table = lua
+                .globals()
+                .get::<Table>("audio")
+                .map_err(|e| e.to_string())?
+                .get::<Table>("_cmds")
+                .map_err(|e| e.to_string())?;
+            let game_audio = lua.create_table().map_err(|e| e.to_string())?;
+
+            let ac = audio_cmds_for_game.clone();
+            let play_at_fn = lua
+                .create_function(
+                    move |_, (path, x, y, opts): (String, f32, f32, Option<Table>)| {
+                        let (max_dist, volume) = if let Some(t) = opts {
+                            let md = t.get::<f32>("max_dist").unwrap_or(400.0);
+                            let vol = t.get::<f32>("volume").unwrap_or(1.0);
+                            (md, vol)
+                        } else {
+                            (400.0_f32, 1.0_f32)
+                        };
+                        let seq = ac.get::<i64>("play_at_seq").unwrap_or(0) + 1;
+                        ac.set("play_at_seq", seq)?;
+                        ac.set(format!("play_at_path:{}", seq), path)?;
+                        ac.set(format!("play_at_x:{}", seq), x)?;
+                        ac.set(format!("play_at_y:{}", seq), y)?;
+                        ac.set(format!("play_at_max_dist:{}", seq), max_dist)?;
+                        ac.set(format!("play_at_volume:{}", seq), volume)?;
+                        Ok(())
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            game_audio.set("play_at", play_at_fn).ok();
+
+            let ac2 = audio_cmds_for_game.clone();
+            let crossfade_fn = lua
+                .create_function(move |_, (path, duration): (String, f32)| {
+                    let seq = ac2.get::<i64>("crossfade_seq").unwrap_or(0) + 1;
+                    ac2.set("crossfade_seq", seq)?;
+                    ac2.set(format!("crossfade_path:{}", seq), path)?;
+                    ac2.set(format!("crossfade_duration:{}", seq), duration)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("crossfade_to", crossfade_fn).ok();
+
+            let ac3 = audio_cmds_for_game.clone();
+            let play_looped_fn = lua
+                .create_function(move |_, (intro_path, loop_path): (String, String)| {
+                    let seq = ac3.get::<i64>("play_looped_seq").unwrap_or(0) + 1;
+                    ac3.set("play_looped_seq", seq)?;
+                    ac3.set(format!("play_looped_intro:{}", seq), intro_path)?;
+                    ac3.set(format!("play_looped_loop:{}", seq), loop_path)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("play_looped", play_looped_fn).ok();
+
+            let ac4 = audio_cmds_for_game.clone();
+            let set_sfx_fn = lua
+                .create_function(move |_, v: f32| {
+                    let seq = ac4.get::<i64>("sfx_vol_seq").unwrap_or(0) + 1;
+                    ac4.set("sfx_vol_seq", seq)?;
+                    ac4.set(format!("sfx_vol_value:{}", seq), v)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("set_sfx_volume", set_sfx_fn).ok();
+
+            let ac5 = audio_cmds_for_game.clone();
+            let set_music_fn = lua
+                .create_function(move |_, v: f32| {
+                    let seq = ac5.get::<i64>("music_vol_seq").unwrap_or(0) + 1;
+                    ac5.set("music_vol_seq", seq)?;
+                    ac5.set(format!("music_vol_value:{}", seq), v)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("set_music_volume", set_music_fn).ok();
+
+            let ac6 = audio_cmds_for_game.clone();
+            let pause_fn = lua
+                .create_function(move |_, ()| {
+                    let seq = ac6.get::<i64>("pause_music_seq").unwrap_or(0) + 1;
+                    ac6.set("pause_music_seq", seq)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("pause_music", pause_fn).ok();
+
+            let ac7 = audio_cmds_for_game.clone();
+            let resume_fn = lua
+                .create_function(move |_, ()| {
+                    let seq = ac7.get::<i64>("resume_music_seq").unwrap_or(0) + 1;
+                    ac7.set("resume_music_seq", seq)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_audio.set("resume_music", resume_fn).ok();
+
+            let mplay = music_playing_snapshot;
+            let music_playing_fn = lua
+                .create_function(move |_, ()| Ok(mplay))
+                .map_err(|e| e.to_string())?;
+            game_audio.set("music_playing", music_playing_fn).ok();
+
+            game_tbl.set("audio", game_audio).ok();
+        }
 
         lua.globals()
             .set("game", game_tbl)
@@ -2040,6 +2757,57 @@ pub fn run_lua_script_with_vm(
             if let Ok(path) = gcmds.get::<String>("change_scene") {
                 result.change_scene = Some(path);
             }
+
+            let fade_in_seq = gcmds.get::<i64>("fade_in_seq").unwrap_or(0);
+            for seq in 1..=fade_in_seq {
+                let d = gcmds
+                    .get::<f32>(format!("fade_in_duration:{}", seq))
+                    .unwrap_or(0.0);
+                result
+                    .runtime_commands
+                    .push(RuntimeCommand::FadeIn { duration_secs: d });
+                let _ = gcmds.raw_remove(format!("fade_in_duration:{}", seq));
+            }
+            let _ = gcmds.set("fade_in_seq", 0);
+
+            let fade_out_seq = gcmds.get::<i64>("fade_out_seq").unwrap_or(0);
+            for seq in 1..=fade_out_seq {
+                let d = gcmds
+                    .get::<f32>(format!("fade_out_duration:{}", seq))
+                    .unwrap_or(0.0);
+                result
+                    .runtime_commands
+                    .push(RuntimeCommand::FadeOut { duration_secs: d });
+                let _ = gcmds.raw_remove(format!("fade_out_duration:{}", seq));
+            }
+            let _ = gcmds.set("fade_out_seq", 0);
+
+            let flash_screen_seq = gcmds.get::<i64>("flash_screen_seq").unwrap_or(0);
+            for seq in 1..=flash_screen_seq {
+                let r = gcmds
+                    .get::<f32>(format!("flash_screen_r:{}", seq))
+                    .unwrap_or(1.0);
+                let g = gcmds
+                    .get::<f32>(format!("flash_screen_g:{}", seq))
+                    .unwrap_or(1.0);
+                let b = gcmds
+                    .get::<f32>(format!("flash_screen_b:{}", seq))
+                    .unwrap_or(1.0);
+                let d = gcmds
+                    .get::<f32>(format!("flash_screen_duration:{}", seq))
+                    .unwrap_or(0.0);
+                result.runtime_commands.push(RuntimeCommand::FlashScreen {
+                    r,
+                    g,
+                    b,
+                    duration_secs: d,
+                });
+                let _ = gcmds.raw_remove(format!("flash_screen_r:{}", seq));
+                let _ = gcmds.raw_remove(format!("flash_screen_g:{}", seq));
+                let _ = gcmds.raw_remove(format!("flash_screen_b:{}", seq));
+                let _ = gcmds.raw_remove(format!("flash_screen_duration:{}", seq));
+            }
+            let _ = gcmds.set("flash_screen_seq", 0);
             if let (Ok(intensity), Ok(duration)) = (
                 gcmds.get::<f32>("camera_shake_intensity"),
                 gcmds.get::<f32>("camera_shake_duration"),
@@ -2048,6 +2816,41 @@ pub fn run_lua_script_with_vm(
             }
             if let Ok(zoom) = gcmds.get::<f32>("camera_zoom") {
                 result.camera_zoom = Some(zoom);
+            }
+            if let (Ok(entity_id), Ok(speed)) = (
+                gcmds.get::<String>("camera_target_id"),
+                gcmds.get::<f32>("camera_target_speed"),
+            ) {
+                result.set_camera_target = Some((entity_id, speed));
+            }
+            if let (Ok(w), Ok(h)) = (
+                gcmds.get::<f32>("camera_deadzone_w"),
+                gcmds.get::<f32>("camera_deadzone_h"),
+            ) {
+                result.set_camera_deadzone = Some((w, h));
+            }
+            if let (Ok(dist), Ok(speed)) = (
+                gcmds.get::<f32>("camera_lookahead_dist"),
+                gcmds.get::<f32>("camera_lookahead_speed"),
+            ) {
+                result.set_camera_lookahead = Some((dist, speed));
+            }
+            if let (Ok(left), Ok(top), Ok(right), Ok(bottom)) = (
+                gcmds.get::<f32>("camera_limit_left"),
+                gcmds.get::<f32>("camera_limit_top"),
+                gcmds.get::<f32>("camera_limit_right"),
+                gcmds.get::<f32>("camera_limit_bottom"),
+            ) {
+                result.set_camera_limits = Some((left, top, right, bottom));
+            }
+            if let (Ok(x), Ok(y)) = (
+                gcmds.get::<f32>("camera_offset_x"),
+                gcmds.get::<f32>("camera_offset_y"),
+            ) {
+                result.set_camera_offset = Some((x, y));
+            }
+            if gcmds.get::<bool>("camera_off").unwrap_or(false) {
+                result.camera_off = true;
             }
 
             let entity_seq = gcmds.get::<i64>("spawn_entity_seq").unwrap_or(0);
@@ -2232,14 +3035,164 @@ pub fn run_lua_script_with_vm(
                 let _ = gcmds.raw_remove(format!("spawn_emitter_duration:{}", seq));
             }
 
+            let tween_seq = gcmds.get::<i64>("tween_seq").unwrap_or(0);
+            for seq in 1..=tween_seq {
+                let Ok(entity_id) = gcmds.get::<String>(format!("tween_entity:{}", seq)) else {
+                    continue;
+                };
+                let Ok(props_table) = gcmds.get::<Table>(format!("tween_props:{}", seq)) else {
+                    continue;
+                };
+                let props = lua_table_to_props(props_table).map_err(|e| e.to_string())?;
+                let duration = gcmds
+                    .get::<f32>(format!("tween_duration:{}", seq))
+                    .unwrap_or(0.0001);
+                let easing = gcmds
+                    .get::<String>(format!("tween_easing:{}", seq))
+                    .unwrap_or_else(|_| "linear".to_string());
+                let callback = gcmds
+                    .get::<Function>(format!("tween_callback:{}", seq))
+                    .ok();
+                result.tween_adds.push(TweenEntry::new(
+                    entity_id,
+                    props,
+                    duration,
+                    easing,
+                    callback,
+                ));
+                let _ = gcmds.raw_remove(format!("tween_entity:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_props:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_duration:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_easing:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_callback:{}", seq));
+            }
+
+            let tween_loop_seq = gcmds.get::<i64>("tween_loop_seq").unwrap_or(0);
+            for seq in 1..=tween_loop_seq {
+                let Ok(entity_id) = gcmds.get::<String>(format!("tween_loop_entity:{}", seq)) else {
+                    continue;
+                };
+                let Ok(props_table) = gcmds.get::<Table>(format!("tween_loop_props:{}", seq)) else {
+                    continue;
+                };
+                let props = lua_table_to_props(props_table).map_err(|e| e.to_string())?;
+                let duration = gcmds
+                    .get::<f32>(format!("tween_loop_duration:{}", seq))
+                    .unwrap_or(0.0001);
+                let easing = gcmds
+                    .get::<String>(format!("tween_loop_easing:{}", seq))
+                    .unwrap_or_else(|_| "linear".to_string());
+                let yoyo = gcmds
+                    .get::<bool>(format!("tween_loop_yoyo:{}", seq))
+                    .unwrap_or(false);
+                result.tween_adds.push(
+                    TweenEntry::new(entity_id, props, duration, easing, None).looping(yoyo),
+                );
+                let _ = gcmds.raw_remove(format!("tween_loop_entity:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_loop_props:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_loop_duration:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_loop_easing:{}", seq));
+                let _ = gcmds.raw_remove(format!("tween_loop_yoyo:{}", seq));
+            }
+
+            let sequence_new_seq = gcmds.get::<i64>("sequence_new_seq").unwrap_or(0);
+            for seq in 1..=sequence_new_seq {
+                if let Ok(handle) = gcmds.get::<u32>(format!("sequence_new_handle:{}", seq)) {
+                    result.sequence_new_handles.push(handle);
+                }
+                let _ = gcmds.raw_remove(format!("sequence_new_handle:{}", seq));
+            }
+
+            let sequence_add_seq = gcmds.get::<i64>("sequence_add_seq").unwrap_or(0);
+            for seq in 1..=sequence_add_seq {
+                let handle = gcmds
+                    .get::<u32>(format!("sequence_add_handle:{}", seq))
+                    .unwrap_or(0);
+                let Ok(entity_id) = gcmds.get::<String>(format!("sequence_add_entity:{}", seq)) else {
+                    continue;
+                };
+                let Ok(props_table) = gcmds.get::<Table>(format!("sequence_add_props:{}", seq)) else {
+                    continue;
+                };
+                let props = lua_table_to_props(props_table).map_err(|e| e.to_string())?;
+                let duration = gcmds
+                    .get::<f32>(format!("sequence_add_duration:{}", seq))
+                    .unwrap_or(0.0001);
+                let easing = gcmds
+                    .get::<String>(format!("sequence_add_easing:{}", seq))
+                    .unwrap_or_else(|_| "linear".to_string());
+                let callback = gcmds
+                    .get::<Function>(format!("sequence_add_callback:{}", seq))
+                    .ok();
+                result.sequence_ops.push(SequenceLuaOp::Add {
+                    handle,
+                    tween: TweenEntry::new(entity_id, props, duration, easing, callback),
+                });
+                let _ = gcmds.raw_remove(format!("sequence_add_handle:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_add_entity:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_add_props:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_add_duration:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_add_easing:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_add_callback:{}", seq));
+            }
+
+            let sequence_wait_seq = gcmds.get::<i64>("sequence_wait_seq").unwrap_or(0);
+            for seq in 1..=sequence_wait_seq {
+                let handle = gcmds
+                    .get::<u32>(format!("sequence_wait_handle:{}", seq))
+                    .unwrap_or(0);
+                let seconds = gcmds
+                    .get::<f32>(format!("sequence_wait_seconds:{}", seq))
+                    .unwrap_or(0.0);
+                result.sequence_ops.push(SequenceLuaOp::Wait { handle, seconds });
+                let _ = gcmds.raw_remove(format!("sequence_wait_handle:{}", seq));
+                let _ = gcmds.raw_remove(format!("sequence_wait_seconds:{}", seq));
+            }
+
+            let sequence_play_seq = gcmds.get::<i64>("sequence_play_seq").unwrap_or(0);
+            for seq in 1..=sequence_play_seq {
+                if let Ok(handle) = gcmds.get::<u32>(format!("sequence_play_handle:{}", seq)) {
+                    result.sequence_ops.push(SequenceLuaOp::Play { handle });
+                }
+                let _ = gcmds.raw_remove(format!("sequence_play_handle:{}", seq));
+            }
+
+            let sequence_stop_seq = gcmds.get::<i64>("sequence_stop_seq").unwrap_or(0);
+            for seq in 1..=sequence_stop_seq {
+                if let Ok(handle) = gcmds.get::<u32>(format!("sequence_stop_handle:{}", seq)) {
+                    result.sequence_ops.push(SequenceLuaOp::Stop { handle });
+                }
+                let _ = gcmds.raw_remove(format!("sequence_stop_handle:{}", seq));
+            }
+
             let _ = gcmds.set("spawn_entity_seq", 0);
             let _ = gcmds.set("spawn_prefab_seq", 0);
             let _ = gcmds.set("spawn_particle_seq", 0);
             let _ = gcmds.set("spawn_emitter_seq", 0);
+            let _ = gcmds.set("tween_seq", 0);
+            let _ = gcmds.set("tween_loop_seq", 0);
+            let _ = gcmds.set("sequence_new_seq", 0);
+            let _ = gcmds.set("sequence_add_seq", 0);
+            let _ = gcmds.set("sequence_wait_seq", 0);
+            let _ = gcmds.set("sequence_play_seq", 0);
+            let _ = gcmds.set("sequence_stop_seq", 0);
             let _ = gcmds.raw_remove("change_scene");
             let _ = gcmds.raw_remove("camera_shake_intensity");
             let _ = gcmds.raw_remove("camera_shake_duration");
             let _ = gcmds.raw_remove("camera_zoom");
+            let _ = gcmds.raw_remove("camera_target_id");
+            let _ = gcmds.raw_remove("camera_target_speed");
+            let _ = gcmds.raw_remove("camera_deadzone_w");
+            let _ = gcmds.raw_remove("camera_deadzone_h");
+            let _ = gcmds.raw_remove("camera_lookahead_dist");
+            let _ = gcmds.raw_remove("camera_lookahead_speed");
+            let _ = gcmds.raw_remove("camera_limit_left");
+            let _ = gcmds.raw_remove("camera_limit_top");
+            let _ = gcmds.raw_remove("camera_limit_right");
+            let _ = gcmds.raw_remove("camera_limit_bottom");
+            let _ = gcmds.raw_remove("camera_offset_x");
+            let _ = gcmds.raw_remove("camera_offset_y");
+            let _ = gcmds.raw_remove("camera_off");
         }
     }
     // ── coleta audio._cmds ───────────────────────────────────
@@ -2294,6 +3247,100 @@ pub fn run_lua_script_with_vm(
                 let _ = cmds.raw_remove(format!("volume_value:{}", seq));
             }
             let _ = cmds.set("volume_seq", 0);
+
+            let play_at_seq = cmds.get::<i64>("play_at_seq").unwrap_or(0);
+            for seq in 1..=play_at_seq {
+                let Ok(path) = cmds.get::<String>(format!("play_at_path:{}", seq)) else {
+                    continue;
+                };
+                let x = cmds.get::<f32>(format!("play_at_x:{}", seq)).unwrap_or(0.0);
+                let y = cmds.get::<f32>(format!("play_at_y:{}", seq)).unwrap_or(0.0);
+                let max_dist = cmds
+                    .get::<f32>(format!("play_at_max_dist:{}", seq))
+                    .unwrap_or(400.0);
+                let volume = cmds
+                    .get::<f32>(format!("play_at_volume:{}", seq))
+                    .unwrap_or(1.0);
+                result.audio_ops.push(AudioOp::PlayAt {
+                    path,
+                    world_x: x,
+                    world_y: y,
+                    max_dist,
+                    volume,
+                });
+                let _ = cmds.raw_remove(format!("play_at_path:{}", seq));
+                let _ = cmds.raw_remove(format!("play_at_x:{}", seq));
+                let _ = cmds.raw_remove(format!("play_at_y:{}", seq));
+                let _ = cmds.raw_remove(format!("play_at_max_dist:{}", seq));
+                let _ = cmds.raw_remove(format!("play_at_volume:{}", seq));
+            }
+            let _ = cmds.set("play_at_seq", 0);
+
+            let crossfade_seq = cmds.get::<i64>("crossfade_seq").unwrap_or(0);
+            for seq in 1..=crossfade_seq {
+                let Ok(path) = cmds.get::<String>(format!("crossfade_path:{}", seq)) else {
+                    continue;
+                };
+                let duration = cmds
+                    .get::<f32>(format!("crossfade_duration:{}", seq))
+                    .unwrap_or(0.0);
+                result.audio_ops.push(AudioOp::CrossfadeTo {
+                    key: path.clone(),
+                    path,
+                    duration_secs: duration,
+                });
+                let _ = cmds.raw_remove(format!("crossfade_path:{}", seq));
+                let _ = cmds.raw_remove(format!("crossfade_duration:{}", seq));
+            }
+            let _ = cmds.set("crossfade_seq", 0);
+
+            let play_looped_seq = cmds.get::<i64>("play_looped_seq").unwrap_or(0);
+            for seq in 1..=play_looped_seq {
+                let Ok(intro_path) = cmds.get::<String>(format!("play_looped_intro:{}", seq)) else {
+                    continue;
+                };
+                let Ok(loop_path) = cmds.get::<String>(format!("play_looped_loop:{}", seq)) else {
+                    continue;
+                };
+                result
+                    .audio_ops
+                    .push(AudioOp::PlayMusicLooped { intro_path, loop_path });
+                let _ = cmds.raw_remove(format!("play_looped_intro:{}", seq));
+                let _ = cmds.raw_remove(format!("play_looped_loop:{}", seq));
+            }
+            let _ = cmds.set("play_looped_seq", 0);
+
+            let sfx_vol_seq = cmds.get::<i64>("sfx_vol_seq").unwrap_or(0);
+            for seq in 1..=sfx_vol_seq {
+                let v = cmds
+                    .get::<f32>(format!("sfx_vol_value:{}", seq))
+                    .unwrap_or(1.0);
+                result.audio_ops.push(AudioOp::SetSfxVolume { volume: v });
+                let _ = cmds.raw_remove(format!("sfx_vol_value:{}", seq));
+            }
+            let _ = cmds.set("sfx_vol_seq", 0);
+
+            let music_vol_seq = cmds.get::<i64>("music_vol_seq").unwrap_or(0);
+            for seq in 1..=music_vol_seq {
+                let v = cmds
+                    .get::<f32>(format!("music_vol_value:{}", seq))
+                    .unwrap_or(1.0);
+                result.audio_ops.push(AudioOp::SetMusicVolume { volume: v });
+                let _ = cmds.raw_remove(format!("music_vol_value:{}", seq));
+            }
+            let _ = cmds.set("music_vol_seq", 0);
+
+            let pause_music_seq = cmds.get::<i64>("pause_music_seq").unwrap_or(0);
+            for _ in 1..=pause_music_seq {
+                result.audio_ops.push(AudioOp::PauseMusic);
+            }
+            let _ = cmds.set("pause_music_seq", 0);
+
+            let resume_music_seq = cmds.get::<i64>("resume_music_seq").unwrap_or(0);
+            for _ in 1..=resume_music_seq {
+                result.audio_ops.push(AudioOp::ResumeMusic);
+            }
+            let _ = cmds.set("resume_music_seq", 0);
         }
     }
 
@@ -2418,6 +3465,18 @@ pub fn run_lua_script_with_vm(
                 }
             }
         }
+    }
+
+    {
+        let bridge = tilemap_bridge.borrow();
+        result.loaded_tilemaps = bridge.loaded.clone();
+        result.tile_set_ops = bridge.set_ops.clone();
+        result.tilemap_collider_ops = bridge.collider_ops.clone();
+    }
+    {
+        let bridge = nav_grid_bridge.borrow();
+        result.loaded_nav_grids = bridge.loaded.clone();
+        result.nav_set_solid_ops = bridge.set_ops.clone();
     }
 
     Ok(result)
@@ -2749,7 +3808,12 @@ mod tests {
             &[],
             None,
             None,
-            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 1.0, 960.0, 640.0),
+            false,
+            &std::collections::HashMap::new(),
+            1,
+            &std::collections::HashMap::new(),
+            1,
         )
         .unwrap();
         assert_eq!(r.set_velocity, Some((100.0, 0.0)));
@@ -2786,7 +3850,12 @@ mod tests {
             &[],
             None,
             None,
-            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 1.0, 960.0, 640.0),
+            false,
+            &std::collections::HashMap::new(),
+            1,
+            &std::collections::HashMap::new(),
+            1,
         )
         .unwrap();
         assert_eq!(r.set_position, Some((10.0, 20.0)));
@@ -2816,7 +3885,12 @@ mod tests {
             &[],
             None,
             None,
-            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 1.0, 960.0, 640.0),
+            false,
+            &std::collections::HashMap::new(),
+            1,
+            &std::collections::HashMap::new(),
+            1,
         )
         .unwrap();
         assert_eq!(r2.set_position, None);
@@ -2852,7 +3926,12 @@ mod tests {
             &[],
             None,
             None,
-            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 1.0, 960.0, 640.0),
+            false,
+            &std::collections::HashMap::new(),
+            1,
+            &std::collections::HashMap::new(),
+            1,
         )
         .unwrap();
         apply_save_ops(&mut save, &r.save_ops);

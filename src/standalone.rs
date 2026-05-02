@@ -163,6 +163,15 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
 
     let mut pending_ui_action = None;
 
+    if let Some(scene) = &mut host.runtime.active_scene {
+        host.runtime.camera_controller.update(
+            &mut scene.entities,
+            host.runtime.delta_time,
+            available.width(),
+            available.height(),
+        );
+    }
+
     // Snapshot só das entidades para desenho: `sprite_textures` exige `&mut host`, incompatível
     // com emprestar `host.runtime` ao mesmo tempo. Mais barato que clonar a `Scene` inteira.
     let (bg, entities_snapshot) = {
@@ -213,6 +222,8 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
             pending_ui_action = Some(action);
         }
     }
+
+    renderer::paint_screen_fx_overlay(&painter, available, &host.runtime.screen_fx);
 
     if let Some(action) = pending_ui_action {
         match action {

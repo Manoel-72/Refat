@@ -1,0 +1,3 @@
+@start_message "Player controller ativo"
+@player_controller 25
+@camera_follow

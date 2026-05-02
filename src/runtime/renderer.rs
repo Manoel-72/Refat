@@ -602,3 +602,12 @@ pub fn draw_runtime_particles(
         painter.circle_filled(pos, radius, color);
     }
 }
+
+/// Overlay de tela cheia (flash + fade) após a cena e partículas.
+pub fn paint_screen_fx_overlay(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    fx: &crate::effects::screen_fx::ScreenFx,
+) {
+    fx.paint_egui(painter, rect);
+}

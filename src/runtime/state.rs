@@ -10,13 +10,16 @@ use crate::{
         entity::Entity,
         scene::Scene,
     },
+    effects::{screen_fx::ScreenFx, tween::TweenManager},
     runtime::context::RuntimePlayState,
     runtime::{
+        camera::CameraController,
         input::{input_state::InputState, key_code::KeyCode},
         save::{SaveData, SaveValue},
         scene_manager::SceneManager,
         systems::{self, audio_system::AudioRuntime, RuntimeCommand},
     },
+    world::{nav_grid::NavGrid, tilemap::TilemapNode},
 };
 
 pub type ScriptStateScopeKey = String;
@@ -84,6 +87,13 @@ pub struct RuntimeParticle {
     pub max_life: f32,
     pub color: [f32; 4],
     pub scale: f32,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct PendingTilemapCollider {
+    pub handle_id: u32,
+    pub rect: (f32, f32, f32, f32),
 }
 
 #[derive(Debug, Clone)]
@@ -183,6 +193,8 @@ pub struct RuntimeState {
     pub last_stage: RuntimeFrameStage,
     pub started_audio: HashSet<String>,
     pub audio_runtime: AudioRuntime,
+    pub screen_fx: ScreenFx,
+    pending_runtime_commands: Vec<RuntimeCommand>,
     pub pending_spawns: Vec<PendingSpawnRequest>,
     pub pending_destroys: Vec<PendingDestroyRequest>,
     pub last_spawned_entity_id: Option<String>,
@@ -192,6 +204,13 @@ pub struct RuntimeState {
     pub camera_shake_time: f32,
     pub camera_shake_intensity: f32,
     pub camera_zoom_override: Option<f32>,
+    pub camera_controller: CameraController,
+    pub tilemaps: HashMap<u32, TilemapNode>,
+    pub tilemap_next_id: u32,
+    pub nav_grids: HashMap<u32, NavGrid>,
+    pub nav_grid_next_id: u32,
+    pub tween_manager: TweenManager,
+    pub pending_tilemap_colliders: Vec<PendingTilemapCollider>,
     /// Estado persistente do jogo (save/load em save/save.json).
     pub save_data: SaveData,
     /// Estado temporário da sessão atual (não persistido em arquivo por padrão).
@@ -255,6 +274,8 @@ impl RuntimeState {
             last_stage: RuntimeFrameStage::Idle,
             started_audio: HashSet::new(),
             audio_runtime: AudioRuntime::new(),
+            screen_fx: ScreenFx::default(),
+            pending_runtime_commands: Vec::new(),
             pending_spawns: Vec::new(),
             pending_destroys: Vec::new(),
             last_spawned_entity_id: None,
@@ -264,6 +285,13 @@ impl RuntimeState {
             camera_shake_time: 0.0,
             camera_shake_intensity: 0.0,
             camera_zoom_override: None,
+            camera_controller: CameraController::default(),
+            tilemaps: HashMap::new(),
+            tilemap_next_id: 1,
+            nav_grids: HashMap::new(),
+            nav_grid_next_id: 1,
+            tween_manager: TweenManager::new(),
+            pending_tilemap_colliders: Vec::new(),
             save_data: SaveData::new(),
             session_state: HashMap::new(),
             script_state: ScriptState::new(),
@@ -469,6 +497,8 @@ impl RuntimeState {
         self.started_scripts.clear();
         self.started_audio.clear();
         self.audio_runtime.stop_all();
+        self.screen_fx = ScreenFx::default();
+        self.pending_runtime_commands.clear();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
         self.pending_spawns.clear();
@@ -480,6 +510,7 @@ impl RuntimeState {
         self.lua_vms.clear();
         self.scene_cache.clear();
         self.clear_lua_runtime_events();
+        self.tween_manager = TweenManager::new();
         self.clear_collision_tracking();
     }
 
@@ -493,6 +524,7 @@ impl RuntimeState {
         self.clear_lua_runtime_events();
         self.game_state.score = 0;
         self.game_state.loading_label = None;
+        self.tween_manager = TweenManager::new();
     }
 
     pub fn clear_session_state(&mut self) {
@@ -883,6 +915,8 @@ impl RuntimeState {
         self.started_scripts.clear();
         self.started_audio.clear();
         self.audio_runtime.stop_all();
+        self.screen_fx = ScreenFx::default();
+        self.pending_runtime_commands.clear();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
         self.pending_spawns.clear();
@@ -894,10 +928,17 @@ impl RuntimeState {
         self.camera_shake_time = 0.0;
         self.camera_shake_intensity = 0.0;
         self.camera_zoom_override = None;
+        self.camera_controller = CameraController::default();
+        self.tilemaps.clear();
+        self.tilemap_next_id = 1;
+        self.nav_grids.clear();
+        self.nav_grid_next_id = 1;
+        self.pending_tilemap_colliders.clear();
         self.clear_script_state();
         self.lua_vms.clear();
         self.scene_cache.clear();
         self.clear_lua_runtime_events();
+        self.tween_manager = TweenManager::new();
         self.clear_collision_tracking();
     }
 
@@ -1115,6 +1156,8 @@ impl RuntimeState {
         self.elapsed_time += self.delta_time;
         self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
 
+        self.pending_runtime_commands.clear();
+
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
 
         self.previous_collision_contacts = self.collision_contacts.clone();
@@ -1164,11 +1207,46 @@ impl RuntimeState {
                 &mut self.pending_runtime_events,
                 &mut camera_shake,
                 &mut camera_zoom,
+                &mut self.camera_controller,
+                &mut self.tilemaps,
+                &mut self.tilemap_next_id,
+                &mut self.pending_tilemap_colliders,
+                &mut self.nav_grids,
+                &mut self.nav_grid_next_id,
+                &mut self.tween_manager,
                 &mut self.audio_runtime,
+                &mut self.pending_runtime_commands,
             )
         } else {
             None
         };
+
+        for cmd in std::mem::take(&mut self.pending_runtime_commands) {
+            match cmd {
+                RuntimeCommand::FadeIn { duration_secs } => {
+                    self.screen_fx.fade_in(duration_secs);
+                }
+                RuntimeCommand::FadeOut { duration_secs } => {
+                    self.screen_fx.fade_out(duration_secs);
+                }
+                RuntimeCommand::FlashScreen {
+                    r,
+                    g,
+                    b,
+                    duration_secs,
+                } => {
+                    self.screen_fx.flash(r, g, b, duration_secs);
+                }
+                RuntimeCommand::ChangeScene(_) | RuntimeCommand::ReloadScene => {}
+            }
+        }
+
+        self.screen_fx.update(self.delta_time);
+        self.audio_runtime.maintain(self.delta_time);
+
+        if let Some(scene) = &mut self.active_scene {
+            self.tween_manager.update(&mut scene.entities, self.delta_time);
+        }
 
         if let Some((time, intensity)) = camera_shake {
             self.camera_shake_time = time.max(0.0);
@@ -1234,6 +1312,43 @@ impl RuntimeState {
             }
         }
 
+
+        if !self.pending_tilemap_colliders.is_empty() {
+            let colliders = std::mem::take(&mut self.pending_tilemap_colliders);
+            if let Some(scene) = &mut self.active_scene {
+                for (index, request) in colliders.into_iter().enumerate() {
+                    let (x, y, w, h) = request.rect;
+                    let mut entity = Entity::new(format!(
+                        "TilemapCollider_{}_{}",
+                        request.handle_id, index
+                    ));
+                    if let Some(transform) = entity.transform_mut() {
+                        transform.x = x + w * 0.5;
+                        transform.y = y + h * 0.5;
+                    }
+                    entity.add_component(Component::BoxCollider(crate::core::component::BoxCollider {
+                        width: w.max(0.0),
+                        height: h.max(0.0),
+                        offset_x: 0.0,
+                        offset_y: 0.0,
+                        is_trigger: false,
+                        collision_enabled: true,
+                        layer: 0,
+                        mask: 0,
+                        body_type: crate::core::component::BodyType::Static,
+                        shape: crate::core::component::Shape2D::Box {
+                            width: w.max(0.0),
+                            height: h.max(0.0),
+                        },
+                        one_way: false,
+                        one_way_margin: crate::core::component::BoxCollider::default().one_way_margin,
+                    }));
+                    entity.add_tag("tilemap_collider");
+                    scene.add_entity(entity);
+                }
+            }
+        }
+
         self.rebuild_collision_events();
 
         if !self.pending_particles.is_empty() {
@@ -1256,6 +1371,9 @@ impl RuntimeState {
                         self.game_state.loading_label = None;
                     }
                 }
+                RuntimeCommand::FadeIn { .. }
+                | RuntimeCommand::FadeOut { .. }
+                | RuntimeCommand::FlashScreen { .. } => {}
             }
         }
 

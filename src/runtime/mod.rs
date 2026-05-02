@@ -248,6 +248,15 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
 
     let mut pending_ui_action = None;
 
+    if let Some(scene) = &mut runtime.active_scene {
+        runtime.camera_controller.update(
+            &mut scene.entities,
+            runtime.delta_time,
+            available.width(),
+            available.height(),
+        );
+    }
+
     {
         let scene = runtime.active_scene.as_ref().expect("checked above");
         let bg = scene.background_color;
@@ -292,6 +301,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
                 pending_ui_action = Some(action);
             }
         }
+
+        renderer::paint_screen_fx_overlay(&painter, available, &runtime.screen_fx);
     }
 
     // ── ações de UI (UIButton) ───────────────────────────────

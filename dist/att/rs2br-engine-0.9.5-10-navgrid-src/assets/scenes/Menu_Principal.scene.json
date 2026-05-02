@@ -1,0 +1,203 @@
+{
+  "name": "Menu Principal",
+  "entities": [
+    {
+      "id": "camera-menu",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "title-menu",
+      "name": "MenuTitle",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 170.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "RS2BR-Engine",
+            "font_size": 40.0,
+            "color_r": 0.96,
+            "color_g": 0.98,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "subtitle-menu",
+      "name": "MenuSubtitle",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 124.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Menu de teste do novo UIButton profissional",
+            "font_size": 18.0,
+            "color_r": 0.72,
+            "color_g": 0.78,
+            "color_b": 0.86,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "button-play",
+      "name": "PlayButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 20.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "text": "▶ Play",
+            "width": 260.0,
+            "height": 64.0,
+            "font_size": 26.0,
+            "target_scene": "assets/scenes/main.scene.json",
+            "close_runtime": false,
+            "color_r": 0.06,
+            "color_g": 0.64,
+            "color_b": 0.34,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "button-exit",
+      "name": "ExitButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -68.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "text": "✕ Exit",
+            "width": 260.0,
+            "height": 64.0,
+            "font_size": 26.0,
+            "target_scene": "",
+            "close_runtime": true,
+            "color_r": 0.76,
+            "color_g": 0.18,
+            "color_b": 0.22,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "9cb060c5-10fb-4633-89fa-9c799a2ca06a",
+      "name": "Entidade",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 119.0,
+            "y": 52.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "text": "Button",
+            "width": 220.0,
+            "height": 48.0,
+            "font_size": 20.0,
+            "target_scene": "assets\\scenes/main.scene.json",
+            "close_runtime": false,
+            "color_r": 0.0046582525,
+            "color_g": 0.051240794,
+            "color_b": 0.020962138,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    }
+  ],
+  "background_color": [
+    0.06,
+    0.08,
+    0.12
+  ]
+}

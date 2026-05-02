@@ -1,0 +1,3 @@
+// Portal do menu para o gameplay
+@start_message Portal Play pronto
+@on_collision change_scene assets/scenes/gameplay.scene.json

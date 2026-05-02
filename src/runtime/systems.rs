@@ -26,10 +26,22 @@ use crate::core::{
 };
 use crate::runtime::{camera, script::ScriptAction};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum RuntimeCommand {
     ChangeScene(String),
     ReloadScene,
+    FadeIn {
+        duration_secs: f32,
+    },
+    FadeOut {
+        duration_secs: f32,
+    },
+    FlashScreen {
+        r: f32,
+        g: f32,
+        b: f32,
+        duration_secs: f32,
+    },
 }
 
 #[inline]
@@ -124,7 +136,15 @@ pub fn update_entities_runtime(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    camera_controller: &mut crate::runtime::camera::CameraController,
+    tilemaps: &mut std::collections::HashMap<u32, crate::world::tilemap::TilemapNode>,
+    tilemap_next_id: &mut u32,
+    pending_tilemap_colliders: &mut Vec<crate::runtime::state::PendingTilemapCollider>,
+    nav_grids: &mut std::collections::HashMap<u32, crate::world::nav_grid::NavGrid>,
+    nav_grid_next_id: &mut u32,
+    tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
+    pending_runtime_commands: &mut Vec<RuntimeCommand>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -133,7 +153,13 @@ pub fn update_entities_runtime(
     let mut tag_index: HashMap<String, Vec<(String, String)>> = HashMap::new();
     collect_tag_index(entities, &mut tag_index);
     let camera_view = camera::find_main_camera(entities);
-    let camera_snapshot = (camera_view.x, camera_view.y, camera_view.zoom.max(0.1));
+    let camera_snapshot = (
+        camera_view.x,
+        camera_view.y,
+        camera_view.zoom.max(0.1),
+        camera_controller.last_view_w,
+        camera_controller.last_view_h,
+    );
 
     update_entities_runtime_recursive(
         entities,
@@ -169,8 +195,16 @@ pub fn update_entities_runtime(
         pending_runtime_events,
         camera_shake,
         camera_zoom,
+        camera_controller,
+        tilemaps,
+        tilemap_next_id,
+        pending_tilemap_colliders,
+        nav_grids,
+        nav_grid_next_id,
+        tween_manager,
         audio_runtime,
         camera_snapshot,
+        pending_runtime_commands,
     )
 }
 
@@ -208,8 +242,16 @@ fn update_entities_runtime_recursive(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    camera_controller: &mut crate::runtime::camera::CameraController,
+    tilemaps: &mut std::collections::HashMap<u32, crate::world::tilemap::TilemapNode>,
+    tilemap_next_id: &mut u32,
+    pending_tilemap_colliders: &mut Vec<crate::runtime::state::PendingTilemapCollider>,
+    nav_grids: &mut std::collections::HashMap<u32, crate::world::nav_grid::NavGrid>,
+    nav_grid_next_id: &mut u32,
+    tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
-    camera_snapshot: (f32, f32, f32),
+    camera_snapshot: (f32, f32, f32, f32, f32),
+    pending_runtime_commands: &mut Vec<RuntimeCommand>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data =
@@ -330,8 +372,16 @@ fn update_entities_runtime_recursive(
             pending_runtime_events,
             camera_shake,
             camera_zoom,
+            camera_controller,
+            tilemaps,
+            tilemap_next_id,
+            pending_tilemap_colliders,
+            nav_grids,
+            nav_grid_next_id,
+            tween_manager,
             audio_runtime,
             camera_snapshot,
+            pending_runtime_commands,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -414,8 +464,16 @@ fn update_entities_runtime_recursive(
             pending_runtime_events,
             camera_shake,
             camera_zoom,
+            camera_controller,
+            tilemaps,
+            tilemap_next_id,
+            pending_tilemap_colliders,
+            nav_grids,
+            nav_grid_next_id,
+            tween_manager,
             audio_runtime,
             camera_snapshot,
+            pending_runtime_commands,
         ) {
             return Some(command);
         }

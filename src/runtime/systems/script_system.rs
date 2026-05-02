@@ -162,8 +162,16 @@ pub fn run_lua_scripts_for_entity(
     pending_runtime_events: &mut Vec<crate::runtime::state::RuntimeEvent>,
     camera_shake: &mut Option<(f32, f32)>,
     camera_zoom: &mut Option<f32>,
+    camera_controller: &mut crate::runtime::camera::CameraController,
+    tilemaps: &mut std::collections::HashMap<u32, crate::world::tilemap::TilemapNode>,
+    tilemap_next_id: &mut u32,
+    pending_tilemap_colliders: &mut Vec<crate::runtime::state::PendingTilemapCollider>,
+    nav_grids: &mut std::collections::HashMap<u32, crate::world::nav_grid::NavGrid>,
+    nav_grid_next_id: &mut u32,
+    tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
-    camera_snapshot: (f32, f32, f32),
+    camera_snapshot: (f32, f32, f32, f32, f32),
+    pending_runtime_commands: &mut Vec<crate::runtime::systems::RuntimeCommand>,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -275,6 +283,8 @@ pub fn run_lua_scripts_for_entity(
         let script_key = format!("lua::{}::{}", entity.id, file_path);
         let already_started = !started_scripts.insert(script_key);
 
+        let music_playing_snapshot = audio_runtime.music_playing();
+
         match lua_runtime::run_lua_script_with_vm(
             lua,
             &source,
@@ -305,6 +315,11 @@ pub fn run_lua_scripts_for_entity(
             scene_label,
             Some(&file_path),
             camera_snapshot,
+            music_playing_snapshot,
+            tilemaps,
+            *tilemap_next_id,
+            nav_grids,
+            *nav_grid_next_id,
         ) {
             Ok(result) => {
                 let change_scene = result.change_scene.clone();
@@ -315,6 +330,60 @@ pub fn run_lua_scripts_for_entity(
                     crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
+
+                for (handle, tilemap) in &result.loaded_tilemaps {
+                    tilemaps.insert(*handle, tilemap.clone());
+                    if *handle >= *tilemap_next_id {
+                        *tilemap_next_id = handle.saturating_add(1);
+                    }
+                }
+                for op in &result.tile_set_ops {
+                    if let Some(tilemap) = tilemaps.get_mut(&op.handle) {
+                        tilemap.set_tile(op.layer, op.col, op.row, op.gid);
+                    }
+                }
+                for op in &result.tilemap_collider_ops {
+                    for rect in &op.rects {
+                        pending_tilemap_colliders.push(crate::runtime::state::PendingTilemapCollider {
+                            handle_id: op.handle,
+                            rect: *rect,
+                        });
+                    }
+                }
+                for (handle, grid) in &result.loaded_nav_grids {
+                    nav_grids.insert(*handle, grid.clone());
+                    if *handle >= *nav_grid_next_id {
+                        *nav_grid_next_id = handle.saturating_add(1);
+                    }
+                }
+                for op in &result.nav_set_solid_ops {
+                    if let Some(grid) = nav_grids.get_mut(&op.handle) {
+                        grid.set_solid(op.x, op.y, op.solid);
+                    }
+                }
+                for tween in &result.tween_adds {
+                    tween_manager.add_tween(tween.clone());
+                }
+                for handle in &result.sequence_new_handles {
+                    tween_manager.ensure_sequence(*handle);
+                }
+                for op in &result.sequence_ops {
+                    match op {
+                        lua_runtime::SequenceLuaOp::Add { handle, tween } => {
+                            tween_manager.seq_add(*handle, tween.clone());
+                        }
+                        lua_runtime::SequenceLuaOp::Wait { handle, seconds } => {
+                            tween_manager.seq_wait(*handle, *seconds);
+                        }
+                        lua_runtime::SequenceLuaOp::Play { handle } => {
+                            tween_manager.seq_play(*handle);
+                        }
+                        lua_runtime::SequenceLuaOp::Stop { handle } => {
+                            tween_manager.seq_stop(*handle);
+                        }
+                    }
+                }
+                let (cam_x, cam_y, _, _, _) = camera_snapshot;
                 for audio_op in &result.audio_ops {
                     match audio_op {
                         lua_runtime::AudioOp::Play {
@@ -354,6 +423,127 @@ pub fn run_lua_scripts_for_entity(
                         }
                         lua_runtime::AudioOp::SetVolume { key, volume } => {
                             let _ = audio_runtime.set_volume_by_name(key, *volume);
+                        }
+                        lua_runtime::AudioOp::PlayAt {
+                            path,
+                            world_x,
+                            world_y,
+                            max_dist,
+                            volume,
+                        } => {
+                            if let Some(audio_path) =
+                                audio_system::resolve_audio_path(project_root, path)
+                            {
+                                let key = audio_runtime.alloc_play_key();
+                                if let Err(error) = audio_runtime.play_at(
+                                    &key,
+                                    &audio_path,
+                                    *world_x,
+                                    *world_y,
+                                    cam_x,
+                                    cam_y,
+                                    *max_dist,
+                                    *volume,
+                                ) {
+                                    lua_stage_log(
+                                        scene_label,
+                                        entity,
+                                        &file_path,
+                                        "audio_play_at",
+                                        "runtime_error",
+                                        error,
+                                    );
+                                }
+                            } else {
+                                lua_stage_log(
+                                    scene_label,
+                                    entity,
+                                    &file_path,
+                                    "audio_play_at",
+                                    "file_not_found",
+                                    path,
+                                );
+                            }
+                        }
+                        lua_runtime::AudioOp::CrossfadeTo {
+                            key,
+                            path,
+                            duration_secs,
+                        } => {
+                            if let Some(audio_path) =
+                                audio_system::resolve_audio_path(project_root, path)
+                            {
+                                if let Err(error) = audio_runtime.crossfade_to(
+                                    key,
+                                    &audio_path,
+                                    *duration_secs,
+                                ) {
+                                    lua_stage_log(
+                                        scene_label,
+                                        entity,
+                                        &file_path,
+                                        "audio_crossfade",
+                                        "runtime_error",
+                                        error,
+                                    );
+                                }
+                            } else {
+                                lua_stage_log(
+                                    scene_label,
+                                    entity,
+                                    &file_path,
+                                    "audio_crossfade",
+                                    "file_not_found",
+                                    path,
+                                );
+                            }
+                        }
+                        lua_runtime::AudioOp::PlayMusicLooped {
+                            intro_path,
+                            loop_path,
+                        } => {
+                            let intro_res =
+                                audio_system::resolve_audio_path(project_root, intro_path);
+                            let loop_res =
+                                audio_system::resolve_audio_path(project_root, loop_path);
+                            if let (Some(ip), Some(lp)) = (intro_res, loop_res) {
+                                if let Err(error) = audio_runtime.play_music_looped(
+                                    intro_path,
+                                    &ip,
+                                    loop_path,
+                                    &lp,
+                                ) {
+                                    lua_stage_log(
+                                        scene_label,
+                                        entity,
+                                        &file_path,
+                                        "audio_play_looped",
+                                        "runtime_error",
+                                        error,
+                                    );
+                                }
+                            } else {
+                                lua_stage_log(
+                                    scene_label,
+                                    entity,
+                                    &file_path,
+                                    "audio_play_looped",
+                                    "file_not_found",
+                                    intro_path,
+                                );
+                            }
+                        }
+                        lua_runtime::AudioOp::SetSfxVolume { volume } => {
+                            audio_runtime.set_sfx_volume(*volume);
+                        }
+                        lua_runtime::AudioOp::SetMusicVolume { volume } => {
+                            audio_runtime.set_music_volume(*volume);
+                        }
+                        lua_runtime::AudioOp::PauseMusic => {
+                            audio_runtime.pause_music();
+                        }
+                        lua_runtime::AudioOp::ResumeMusic => {
+                            audio_runtime.resume_music();
                         }
                     }
                 }
@@ -415,6 +605,25 @@ pub fn run_lua_scripts_for_entity(
                 if let Some(zoom) = result.camera_zoom {
                     *camera_zoom = Some(zoom);
                 }
+                if let Some((entity_id, speed)) = result.set_camera_target {
+                    camera_controller.set_target(entity_id, speed);
+                }
+                if let Some((w, h)) = result.set_camera_deadzone {
+                    camera_controller.set_deadzone(w, h);
+                }
+                if let Some((dist, speed)) = result.set_camera_lookahead {
+                    camera_controller.set_lookahead(dist, speed);
+                }
+                if let Some((left, top, right, bottom)) = result.set_camera_limits {
+                    camera_controller.set_limits(left, top, right, bottom);
+                }
+                if let Some((x, y)) = result.set_camera_offset {
+                    camera_controller.set_offset(x, y);
+                }
+                if result.camera_off {
+                    camera_controller.camera_off();
+                }
+                pending_runtime_commands.extend(result.runtime_commands.iter().cloned());
                 if result.destroy_entity {
                     pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
                         entity_id: entity.id.clone(),

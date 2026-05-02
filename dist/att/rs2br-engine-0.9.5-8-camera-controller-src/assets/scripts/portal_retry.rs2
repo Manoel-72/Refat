@@ -1,0 +1,3 @@
+// Portal para reiniciar o teste
+@start_message Portal Retry pronto
+@on_collision change_scene assets/scenes/menu.scene.json
