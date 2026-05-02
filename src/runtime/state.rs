@@ -6,9 +6,9 @@ use std::{
 
 use crate::{
     core::{
-        scene::Scene,
-        entity::Entity,
         component::{Component, Velocity},
+        entity::Entity,
+        scene::Scene,
     },
     runtime::context::RuntimePlayState,
     runtime::{
@@ -165,7 +165,6 @@ pub struct RuntimeGameState {
     pub score: i32,
     pub loading_label: Option<String>,
 }
-
 
 pub struct RuntimeState {
     pub active_scene: Option<Scene>,
@@ -335,7 +334,11 @@ impl RuntimeState {
     /// - save_data: mantido/restaurado do arquivo de save
     /// - session_state: limpo
     /// - script_state: limpo
-    pub fn continue_from_save(&mut self, project_root: &Path, fallback_scene: &Scene) -> Result<(), String> {
+    pub fn continue_from_save(
+        &mut self,
+        project_root: &Path,
+        fallback_scene: &Scene,
+    ) -> Result<(), String> {
         let Some(data) = SaveData::load_from_project(project_root) else {
             return Err("Nenhum save encontrado para continuar.".to_string());
         };
@@ -349,11 +352,11 @@ impl RuntimeState {
         self.game_state.score = 0;
         self.game_state.loading_label = None;
 
-        let saved_scene = self
-            .save_data
-            .current_scene
-            .clone()
-            .or_else(|| self.save_data.get_text(SAVE_KEY_CHECKPOINT_SCENE).map(str::to_string));
+        let saved_scene = self.save_data.current_scene.clone().or_else(|| {
+            self.save_data
+                .get_text(SAVE_KEY_CHECKPOINT_SCENE)
+                .map(str::to_string)
+        });
 
         if let Some(saved_scene) = saved_scene {
             if let Some(scene_path) = Self::resolve_saved_scene_path(project_root, &saved_scene) {
@@ -387,8 +390,16 @@ impl RuntimeState {
         candidates.push(project_root.join("assets/scenes").join(&normalized));
 
         if raw.extension().is_none() && !trimmed.ends_with(".scene") {
-            candidates.push(project_root.join("assets/scenes").join(format!("{}.scene.json", trimmed)));
-            candidates.push(project_root.join("assets/scenes").join(format!("{}.json", trimmed)));
+            candidates.push(
+                project_root
+                    .join("assets/scenes")
+                    .join(format!("{}.scene.json", trimmed)),
+            );
+            candidates.push(
+                project_root
+                    .join("assets/scenes")
+                    .join(format!("{}.json", trimmed)),
+            );
         }
 
         candidates.into_iter().find(|path| path.exists())
@@ -514,7 +525,8 @@ impl RuntimeState {
 
     pub fn clear_script_state_for_entity(&mut self, entity_id: &str) {
         let prefix = script_scope_prefix(entity_id);
-        self.script_state.retain(|scope_key, _| !scope_key.starts_with(&prefix));
+        self.script_state
+            .retain(|scope_key, _| !scope_key.starts_with(&prefix));
     }
 
     pub fn clear_script_state_for_scope(&mut self, entity_id: &str, script_path: &str) {
@@ -547,7 +559,12 @@ impl RuntimeState {
             .unwrap_or(false)
     }
 
-    pub fn script_remove(&mut self, entity_id: &str, script_path: &str, key: &str) -> Option<SaveValue> {
+    pub fn script_remove(
+        &mut self,
+        entity_id: &str,
+        script_path: &str,
+        key: &str,
+    ) -> Option<SaveValue> {
         let scope_key = make_script_state_scope_key(entity_id, script_path);
         let removed = self
             .script_state
@@ -585,8 +602,7 @@ impl RuntimeState {
         self.collision_exit_contact_ids.clear();
     }
 
-    
-fn rebuild_collision_events(&mut self) {
+    fn rebuild_collision_events(&mut self) {
         self.collision_enter_contacts.clear();
         self.collision_stay_contacts.clear();
         self.collision_exit_contacts.clear();
@@ -605,7 +621,14 @@ fn rebuild_collision_events(&mut self) {
             previous_names: &[String],
             current_ids: &[String],
             previous_ids: &[String],
-        ) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
+        ) -> (
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+        ) {
             let mut enter_names = Vec::new();
             let mut stay_names = Vec::new();
             let mut exit_names = Vec::new();
@@ -614,7 +637,10 @@ fn rebuild_collision_events(&mut self) {
             let mut exit_ids = Vec::new();
 
             for (index, current_id) in current_ids.iter().enumerate() {
-                let current_name = current_names.get(index).cloned().unwrap_or_else(|| current_id.clone());
+                let current_name = current_names
+                    .get(index)
+                    .cloned()
+                    .unwrap_or_else(|| current_id.clone());
                 if previous_ids.iter().any(|id| id == current_id) {
                     stay_ids.push(current_id.clone());
                     stay_names.push(current_name);
@@ -628,7 +654,8 @@ fn rebuild_collision_events(&mut self) {
                 if current_ids.iter().any(|id| id == previous_id) {
                     continue;
                 }
-                let previous_name = previous_ids.iter()
+                let previous_name = previous_ids
+                    .iter()
                     .position(|id| id == previous_id)
                     .and_then(|index| previous_names.get(index))
                     .cloned()
@@ -637,7 +664,14 @@ fn rebuild_collision_events(&mut self) {
                 exit_names.push(previous_name);
             }
 
-            (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids)
+            (
+                enter_names,
+                stay_names,
+                exit_names,
+                enter_ids,
+                stay_ids,
+                exit_ids,
+            )
         }
 
         fn diff_maps(
@@ -653,32 +687,68 @@ fn rebuild_collision_events(&mut self) {
             exit_ids_out: &mut HashMap<String, Vec<String>>,
         ) {
             for (entity_id, current_ids) in current_ids_map {
-                let current_names = current_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
-                let previous_names = previous_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
-                let previous_ids = previous_ids_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let current_names = current_names_map
+                    .get(entity_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                let previous_names = previous_names_map
+                    .get(entity_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                let previous_ids = previous_ids_map
+                    .get(entity_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
                 let (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids) =
                     diff_names_and_ids(current_names, previous_names, current_ids, previous_ids);
-                if !enter_names.is_empty() { enter_names_out.insert(entity_id.clone(), enter_names); }
-                if !stay_names.is_empty() { stay_names_out.insert(entity_id.clone(), stay_names); }
-                if !exit_names.is_empty() { exit_names_out.insert(entity_id.clone(), exit_names); }
-                if !enter_ids.is_empty() { enter_ids_out.insert(entity_id.clone(), enter_ids); }
-                if !stay_ids.is_empty() { stay_ids_out.insert(entity_id.clone(), stay_ids); }
-                if !exit_ids.is_empty() { exit_ids_out.insert(entity_id.clone(), exit_ids); }
+                if !enter_names.is_empty() {
+                    enter_names_out.insert(entity_id.clone(), enter_names);
+                }
+                if !stay_names.is_empty() {
+                    stay_names_out.insert(entity_id.clone(), stay_names);
+                }
+                if !exit_names.is_empty() {
+                    exit_names_out.insert(entity_id.clone(), exit_names);
+                }
+                if !enter_ids.is_empty() {
+                    enter_ids_out.insert(entity_id.clone(), enter_ids);
+                }
+                if !stay_ids.is_empty() {
+                    stay_ids_out.insert(entity_id.clone(), stay_ids);
+                }
+                if !exit_ids.is_empty() {
+                    exit_ids_out.insert(entity_id.clone(), exit_ids);
+                }
             }
 
             for (entity_id, previous_ids) in previous_ids_map {
                 if current_ids_map.contains_key(entity_id) {
                     continue;
                 }
-                let previous_names = previous_names_map.get(entity_id).map(Vec::as_slice).unwrap_or(&[]);
+                let previous_names = previous_names_map
+                    .get(entity_id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
                 let (enter_names, stay_names, exit_names, enter_ids, stay_ids, exit_ids) =
                     diff_names_and_ids(&[], previous_names, &[], previous_ids);
-                if !enter_names.is_empty() { enter_names_out.insert(entity_id.clone(), enter_names); }
-                if !stay_names.is_empty() { stay_names_out.insert(entity_id.clone(), stay_names); }
-                if !exit_names.is_empty() { exit_names_out.insert(entity_id.clone(), exit_names); }
-                if !enter_ids.is_empty() { enter_ids_out.insert(entity_id.clone(), enter_ids); }
-                if !stay_ids.is_empty() { stay_ids_out.insert(entity_id.clone(), stay_ids); }
-                if !exit_ids.is_empty() { exit_ids_out.insert(entity_id.clone(), exit_ids); }
+                if !enter_names.is_empty() {
+                    enter_names_out.insert(entity_id.clone(), enter_names);
+                }
+                if !stay_names.is_empty() {
+                    stay_names_out.insert(entity_id.clone(), stay_names);
+                }
+                if !exit_names.is_empty() {
+                    exit_names_out.insert(entity_id.clone(), exit_names);
+                }
+                if !enter_ids.is_empty() {
+                    enter_ids_out.insert(entity_id.clone(), enter_ids);
+                }
+                if !stay_ids.is_empty() {
+                    stay_ids_out.insert(entity_id.clone(), stay_ids);
+                }
+                if !exit_ids.is_empty() {
+                    exit_ids_out.insert(entity_id.clone(), exit_ids);
+                }
             }
         }
 
@@ -708,7 +778,11 @@ fn rebuild_collision_events(&mut self) {
             &mut self.trigger_exit_contact_ids,
         );
 
-        fn emit_pair_events(prefix: &str, map: &HashMap<String, Vec<String>>, pending: &mut Vec<RuntimeEvent>) {
+        fn emit_pair_events(
+            prefix: &str,
+            map: &HashMap<String, Vec<String>>,
+            pending: &mut Vec<RuntimeEvent>,
+        ) {
             for (entity_id, names) in map {
                 for other in names {
                     pending.push(RuntimeEvent {
@@ -719,12 +793,36 @@ fn rebuild_collision_events(&mut self) {
             }
         }
 
-        emit_pair_events("collision_enter", &self.collision_enter_contacts, &mut self.pending_runtime_events);
-        emit_pair_events("collision_stay", &self.collision_stay_contacts, &mut self.pending_runtime_events);
-        emit_pair_events("collision_exit", &self.collision_exit_contacts, &mut self.pending_runtime_events);
-        emit_pair_events("trigger_enter", &self.trigger_enter_contacts, &mut self.pending_runtime_events);
-        emit_pair_events("trigger_stay", &self.trigger_stay_contacts, &mut self.pending_runtime_events);
-        emit_pair_events("trigger_exit", &self.trigger_exit_contacts, &mut self.pending_runtime_events);
+        emit_pair_events(
+            "collision_enter",
+            &self.collision_enter_contacts,
+            &mut self.pending_runtime_events,
+        );
+        emit_pair_events(
+            "collision_stay",
+            &self.collision_stay_contacts,
+            &mut self.pending_runtime_events,
+        );
+        emit_pair_events(
+            "collision_exit",
+            &self.collision_exit_contacts,
+            &mut self.pending_runtime_events,
+        );
+        emit_pair_events(
+            "trigger_enter",
+            &self.trigger_enter_contacts,
+            &mut self.pending_runtime_events,
+        );
+        emit_pair_events(
+            "trigger_stay",
+            &self.trigger_stay_contacts,
+            &mut self.pending_runtime_events,
+        );
+        emit_pair_events(
+            "trigger_exit",
+            &self.trigger_exit_contacts,
+            &mut self.pending_runtime_events,
+        );
     }
 
     fn update_emitters(&mut self, dt: f32) {
@@ -755,7 +853,8 @@ fn rebuild_collision_events(&mut self) {
                 });
             }
         }
-        self.emitters.retain(|emitter| emitter.duration > 0.0 && emitter.rate > 0.0);
+        self.emitters
+            .retain(|emitter| emitter.duration > 0.0 && emitter.rate > 0.0);
         if !spawned.is_empty() {
             self.particles.extend(spawned);
         }
@@ -772,7 +871,8 @@ fn rebuild_collision_events(&mut self) {
             particle.life -= dt;
         }
 
-        self.particles.retain(|particle| particle.life > 0.0 && particle.scale > 0.0);
+        self.particles
+            .retain(|particle| particle.life > 0.0 && particle.scale > 0.0);
     }
 
     fn reset_timing_state(&mut self) {
@@ -806,25 +906,55 @@ fn rebuild_collision_events(&mut self) {
             return;
         };
 
-        let saved_player_id = self.save_data.get_text(SAVE_KEY_PLAYER_ID).map(str::to_string);
-        let saved_player_name = self.save_data.get_text(SAVE_KEY_PLAYER_NAME).map(str::to_string);
-        let saved_x = self.save_data.get_float(SAVE_KEY_PLAYER_X).map(|v| v as f32);
-        let saved_y = self.save_data.get_float(SAVE_KEY_PLAYER_Y).map(|v| v as f32);
-        let saved_vx = self.save_data.get_float(SAVE_KEY_PLAYER_VX).map(|v| v as f32);
-        let saved_vy = self.save_data.get_float(SAVE_KEY_PLAYER_VY).map(|v| v as f32);
+        let saved_player_id = self
+            .save_data
+            .get_text(SAVE_KEY_PLAYER_ID)
+            .map(str::to_string);
+        let saved_player_name = self
+            .save_data
+            .get_text(SAVE_KEY_PLAYER_NAME)
+            .map(str::to_string);
+        let saved_x = self
+            .save_data
+            .get_float(SAVE_KEY_PLAYER_X)
+            .map(|v| v as f32);
+        let saved_y = self
+            .save_data
+            .get_float(SAVE_KEY_PLAYER_Y)
+            .map(|v| v as f32);
+        let saved_vx = self
+            .save_data
+            .get_float(SAVE_KEY_PLAYER_VX)
+            .map(|v| v as f32);
+        let saved_vy = self
+            .save_data
+            .get_float(SAVE_KEY_PLAYER_VY)
+            .map(|v| v as f32);
 
-        let Some(player) = find_continue_player_mut(scene, saved_player_id.as_deref(), saved_player_name.as_deref()) else {
+        let Some(player) = find_continue_player_mut(
+            scene,
+            saved_player_id.as_deref(),
+            saved_player_name.as_deref(),
+        ) else {
             return;
         };
 
         if let Some(transform) = player.transform_mut() {
-            if let Some(x) = saved_x { transform.x = x; }
-            if let Some(y) = saved_y { transform.y = y; }
+            if let Some(x) = saved_x {
+                transform.x = x;
+            }
+            if let Some(y) = saved_y {
+                transform.y = y;
+            }
         }
 
         if let Some(velocity) = player.velocity_mut() {
-            if let Some(vx) = saved_vx { velocity.x = vx; }
-            if let Some(vy) = saved_vy { velocity.y = vy; }
+            if let Some(vx) = saved_vx {
+                velocity.x = vx;
+            }
+            if let Some(vy) = saved_vy {
+                velocity.y = vy;
+            }
         }
     }
 
@@ -837,7 +967,10 @@ fn rebuild_collision_events(&mut self) {
     ) {
         if matches!(self.scene_manager.apply_pending_change(), Ok(true)) {
             self.active_scene = self.scene_manager.current_scene.clone();
-            if let (Some(path), Some(scene)) = (self.scene_manager.current_path.clone(), self.scene_manager.current_scene.clone()) {
+            if let (Some(path), Some(scene)) = (
+                self.scene_manager.current_path.clone(),
+                self.scene_manager.current_scene.clone(),
+            ) {
                 self.scene_cache.insert(path, scene);
             }
             self.reset_timing_state();
@@ -913,14 +1046,18 @@ fn rebuild_collision_events(&mut self) {
                 .to_string_lossy()
                 .replace('\\', "/");
             self.save_data.current_scene = Some(persisted_path.clone());
-            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, persisted_path);
+            self.save_data
+                .set_text(SAVE_KEY_CHECKPOINT_SCENE, persisted_path);
         } else if let Some(scene) = &self.active_scene {
             self.save_data.current_scene = Some(scene.name.clone());
-            self.save_data.set_text(SAVE_KEY_CHECKPOINT_SCENE, scene.name.clone());
+            self.save_data
+                .set_text(SAVE_KEY_CHECKPOINT_SCENE, scene.name.clone());
         }
 
         if let Some(scene) = &self.active_scene {
-            if let Some((player_id, player_name, x, y, vx, vy)) = capture_continue_player_snapshot(scene) {
+            if let Some((player_id, player_name, x, y, vx, vy)) =
+                capture_continue_player_snapshot(scene)
+            {
                 self.save_data.set_text(SAVE_KEY_PLAYER_ID, player_id);
                 self.save_data.set_text(SAVE_KEY_PLAYER_NAME, player_name);
                 self.save_data.set_float(SAVE_KEY_PLAYER_X, x as f64);
@@ -946,12 +1083,11 @@ fn rebuild_collision_events(&mut self) {
         let stopped = self.audio_runtime.stop_by_name(name);
         if stopped > 0 {
             let lowered = name.trim().to_ascii_lowercase();
-            self.started_audio.retain(|key| !key.to_ascii_lowercase().contains(&lowered));
+            self.started_audio
+                .retain(|key| !key.to_ascii_lowercase().contains(&lowered));
         }
         stopped
     }
-
-
 
     pub fn update_frame(&mut self, project_root: &Path, ground_y: f32) {
         let now = Instant::now();
@@ -1126,17 +1262,19 @@ fn rebuild_collision_events(&mut self) {
         self.last_stage = RuntimeFrameStage::FinalizeFrame;
     }
 
-
-pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
+    pub fn queue_destroy(&mut self, entity_id: impl Into<String>) {
         let entity_id = entity_id.into();
-        if self.pending_destroys.iter().any(|request| request.entity_id == entity_id) {
+        if self
+            .pending_destroys
+            .iter()
+            .any(|request| request.entity_id == entity_id)
+        {
             return;
         }
-        self.pending_destroys.push(PendingDestroyRequest { entity_id });
+        self.pending_destroys
+            .push(PendingDestroyRequest { entity_id });
     }
 }
-
-
 
 fn capture_continue_player_snapshot(scene: &Scene) -> Option<(String, String, f32, f32, f32, f32)> {
     let player = find_continue_player(scene, None, None)?;
@@ -1152,7 +1290,11 @@ fn capture_continue_player_snapshot(scene: &Scene) -> Option<(String, String, f3
     ))
 }
 
-fn find_continue_player<'a>(scene: &'a Scene, preferred_id: Option<&str>, preferred_name: Option<&str>) -> Option<&'a Entity> {
+fn find_continue_player<'a>(
+    scene: &'a Scene,
+    preferred_id: Option<&str>,
+    preferred_name: Option<&str>,
+) -> Option<&'a Entity> {
     if let Some(id) = preferred_id {
         if let Some(entity) = scene.find_entity(id) {
             return Some(entity);
@@ -1180,7 +1322,11 @@ fn find_continue_player<'a>(scene: &'a Scene, preferred_id: Option<&str>, prefer
     match_id.as_deref().and_then(|id| scene.find_entity(id))
 }
 
-fn find_continue_player_mut<'a>(scene: &'a mut Scene, preferred_id: Option<&str>, preferred_name: Option<&str>) -> Option<&'a mut Entity> {
+fn find_continue_player_mut<'a>(
+    scene: &'a mut Scene,
+    preferred_id: Option<&str>,
+    preferred_name: Option<&str>,
+) -> Option<&'a mut Entity> {
     if let Some(id) = preferred_id {
         if scene.find_entity(id).is_some() {
             return scene.find_entity_mut(id);
@@ -1204,4 +1350,3 @@ fn find_continue_player_mut<'a>(scene: &'a mut Scene, preferred_id: Option<&str>
     }
     match_id.and_then(|id| scene.find_entity_mut(&id))
 }
-

@@ -94,7 +94,10 @@ pub struct Camera2D {
 
 impl Default for Camera2D {
     fn default() -> Self {
-        Self { zoom: 1.0, is_main: true }
+        Self {
+            zoom: 1.0,
+            is_main: true,
+        }
     }
 }
 
@@ -103,16 +106,12 @@ pub struct RigidBody2D {
     pub gravity_scale: f32,
     pub is_static: bool,
     #[serde(default)]
-    
     pub grounded: bool,
     #[serde(default)]
-    
     pub hit_ceiling: bool,
     #[serde(default)]
-    
     pub hit_left: bool,
     #[serde(default)]
-    
     pub hit_right: bool,
 }
 
@@ -166,7 +165,10 @@ pub enum Shape2D {
 
 impl Default for Shape2D {
     fn default() -> Self {
-        Self::Box { width: 32.0, height: 32.0 }
+        Self::Box {
+            width: 32.0,
+            height: 32.0,
+        }
     }
 }
 
@@ -252,7 +254,10 @@ impl Default for BoxCollider {
             layer: 0,
             mask: 0,
             body_type: BodyType::Kinematic,
-            shape: Shape2D::Box { width: 32.0, height: 32.0 },
+            shape: Shape2D::Box {
+                width: 32.0,
+                height: 32.0,
+            },
             one_way: false,
             one_way_margin: default_one_way_margin(),
         }
@@ -291,15 +296,33 @@ impl Default for Audio {
     }
 }
 
-fn default_audio_volume() -> f32 { 1.0 }
-fn default_animation_fps() -> f32 { 8.0 }
-fn default_ui_alpha() -> f32 { 1.0 }
-fn default_text_size() -> f32 { 24.0 }
-fn default_button_width() -> f32 { 220.0 }
-fn default_button_height() -> f32 { 48.0 }
-fn default_collision_enabled() -> bool { true }
-fn default_collider_size() -> f32 { 32.0 }
-fn default_one_way_margin() -> f32 { 6.0 }
+fn default_audio_volume() -> f32 {
+    1.0
+}
+fn default_animation_fps() -> f32 {
+    8.0
+}
+fn default_ui_alpha() -> f32 {
+    1.0
+}
+fn default_text_size() -> f32 {
+    24.0
+}
+fn default_button_width() -> f32 {
+    220.0
+}
+fn default_button_height() -> f32 {
+    48.0
+}
+fn default_collision_enabled() -> bool {
+    true
+}
+fn default_collider_size() -> f32 {
+    32.0
+}
+fn default_one_way_margin() -> f32 {
+    6.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationClip {
@@ -311,11 +334,16 @@ pub struct AnimationClip {
 
 impl Default for AnimationClip {
     fn default() -> Self {
-        Self { frames: Vec::new(), fps: default_animation_fps() }
+        Self {
+            frames: Vec::new(),
+            fps: default_animation_fps(),
+        }
     }
 }
 
-fn default_locomotion_threshold() -> f32 { 6.0 }
+fn default_locomotion_threshold() -> f32 {
+    6.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationState {
@@ -446,7 +474,6 @@ pub struct UIButton {
     pub text_b: f32,
     pub text_a: f32,
 }
-
 
 impl Default for UIButton {
     fn default() -> Self {

@@ -6,17 +6,25 @@
 
 use eframe::egui;
 
+use super::{DeleteTarget, EditorApp};
 use crate::{
-    component::{Animator, Audio, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, UIButton, Velocity},
+    component::{
+        Animator, Audio, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite,
+        TextLabel, UIButton, Velocity,
+    },
     entity::Entity,
 };
-use super::{DeleteTarget, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Cabeçalho da Hierarquia ──
     egui::Frame::none()
         .fill(egui::Color32::from_rgb(22, 27, 34))
-        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
+        .inner_margin(egui::Margin {
+            left: 8.0,
+            right: 8.0,
+            top: 6.0,
+            bottom: 4.0,
+        })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Hierarchy").strong().size(13.0));
@@ -35,10 +43,14 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // ── Botão Nova Entidade + info de seleção ──
     ui.vertical(|ui| {
-        if ui.add(
-            egui::Button::new(egui::RichText::new("+ New Entity").size(12.0))
-                .min_size(egui::vec2(ui.available_width().min(170.0), 26.0))
-        ).on_hover_text("Cria uma entidade vazia na cena (ou use clique direito)").clicked() {
+        if ui
+            .add(
+                egui::Button::new(egui::RichText::new("+ New Entity").size(12.0))
+                    .min_size(egui::vec2(ui.available_width().min(170.0), 26.0)),
+            )
+            .on_hover_text("Cria uma entidade vazia na cena (ou use clique direito)")
+            .clicked()
+        {
             app.new_entity_dialog = Some("Entidade".to_string());
         }
 
@@ -118,39 +130,118 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         });
 }
 
-
 fn show_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
     ui.label(egui::RichText::new("Adicionar componente").small().strong());
     ui.separator();
 
     ui.menu_button("🎮 Gameplay", |ui| {
-        component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
-        component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
-        component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
-        component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "💨 Velocity",
+            Component::Velocity(Velocity::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "⚽ RigidBody2D",
+            Component::RigidBody2D(RigidBody2D::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📐 BoxCollider",
+            Component::BoxCollider(BoxCollider::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🎞 Animator",
+            Component::Animator(Animator::default()),
+        );
     });
 
     ui.menu_button("🧠 Scripts", |ui| {
-        component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
-        component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📜 Script RS2",
+            Component::Script(Script {
+                file_path: String::new(),
+            }),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🌙 LuaScript",
+            Component::LuaScript(LuaScript {
+                file_path: String::new(),
+            }),
+        );
     });
 
     ui.menu_button("🖼 Visual", |ui| {
-        component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
-        component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
-        component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
-        component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🖼 Sprite",
+            Component::Sprite(Sprite::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔤 TextLabel",
+            Component::TextLabel(TextLabel::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔘 UIButton",
+            Component::UIButton(UIButton::default()),
+        );
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔊 Audio",
+            Component::Audio(Audio::default()),
+        );
     });
 
     ui.menu_button("📷 Cena", |ui| {
-        component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
+        component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📷 Camera2D",
+            Component::Camera2D(Camera2D::default()),
+        );
     });
 }
 
-fn component_menu_button(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str, label: &str, component: Component) {
+fn component_menu_button(
+    ui: &mut egui::Ui,
+    app: &mut EditorApp,
+    entity_id: &str,
+    label: &str,
+    component: Component,
+) {
     let already_has = app
         .find_entity_mut(entity_id)
-        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
+        .map(|entity| {
+            entity.components.iter().any(|existing| {
+                std::mem::discriminant(existing) == std::mem::discriminant(&component)
+            })
+        })
         .unwrap_or(false);
 
     let response = ui.add_enabled(!already_has, egui::Button::new(label));
@@ -211,7 +302,14 @@ fn show_entity_node(
 
         // Clique direito → menu de contexto
         response.context_menu(|ui| {
-            if ui.button(if entity.visible { "🙈 Ocultar" } else { "👁 Mostrar" }).clicked() {
+            if ui
+                .button(if entity.visible {
+                    "🙈 Ocultar"
+                } else {
+                    "👁 Mostrar"
+                })
+                .clicked()
+            {
                 app.push_undo_state();
                 if let Some(current) = app.find_entity_mut(&entity.id) {
                     current.visible = !current.visible;

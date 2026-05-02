@@ -20,11 +20,11 @@ use std::time::Duration;
 /// Intervalo mínimo entre frames: ~120 FPS (8.33 ms).
 const FRAME_BUDGET: Duration = Duration::from_micros(8_333);
 
-use crate::core::version;
 use self::{
     context::{RuntimeContext, RuntimePlayState},
     renderer::UiAction,
 };
+use crate::core::version;
 
 pub use state::{RuntimeInput, RuntimeState};
 
@@ -34,7 +34,11 @@ const GROUND_Y: f32 = -260.0;
 
 /// Exibe a janela nativa do runtime (Play/Pause).
 /// Aceita qualquer host que implemente RuntimeContext.
-pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ctx: &egui::Context) {
+pub fn show_viewport<H: RuntimeContext>(
+    host: &mut H,
+    runtime: &mut RuntimeState,
+    ctx: &egui::Context,
+) {
     if host.play_state() == RuntimePlayState::Edit || !runtime.window_open {
         return;
     }
@@ -43,7 +47,11 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
     ctx.show_viewport_immediate(
         viewport_id,
         egui::ViewportBuilder::default()
-            .with_title(&format!("▶ {} {} Runtime", version::ENGINE_TITLE, version::ENGINE_VERSION))
+            .with_title(&format!(
+                "▶ {} {} Runtime",
+                version::ENGINE_TITLE,
+                version::ENGINE_VERSION
+            ))
             .with_inner_size([960.0, 640.0])
             .with_min_inner_size([480.0, 320.0]),
         |ctx, _class| {
@@ -58,14 +66,14 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
             if !ctx.wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 let next = match host.play_state() {
                     RuntimePlayState::Playing => RuntimePlayState::Paused,
-                    RuntimePlayState::Paused  => RuntimePlayState::Playing,
-                    RuntimePlayState::Edit    => RuntimePlayState::Edit,
+                    RuntimePlayState::Paused => RuntimePlayState::Playing,
+                    RuntimePlayState::Edit => RuntimePlayState::Edit,
                 };
                 host.set_play_state(next);
                 host.set_status(match host.play_state() {
-                    RuntimePlayState::Paused  => "⏸ Runtime pausado por ESC".to_string(),
+                    RuntimePlayState::Paused => "⏸ Runtime pausado por ESC".to_string(),
                     RuntimePlayState::Playing => "▶ Runtime retomado por ESC".to_string(),
-                    RuntimePlayState::Edit    => String::new(),
+                    RuntimePlayState::Edit => String::new(),
                 });
             }
 
@@ -115,7 +123,11 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                     let scene_candidates = host.scene_file_candidates();
                     let count = scene_candidates.len();
                     if count == 0 {
-                        ui.label(egui::RichText::new("Nenhuma cena salva encontrada.").small().weak());
+                        ui.label(
+                            egui::RichText::new("Nenhuma cena salva encontrada.")
+                                .small()
+                                .weak(),
+                        );
                     } else {
                         ui.menu_button(
                             egui::RichText::new(format!("Trocar cena ({}) v", count)).small(),
@@ -135,7 +147,7 @@ pub fn show_viewport<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState
                                         ui.close_menu();
                                     }
                                 }
-                            }
+                            },
                         );
                     }
                 });
@@ -160,7 +172,9 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     apply_egui_inputs(runtime, ui.ctx());
 
     if runtime.active_scene.is_none() {
-        ui.centered_and_justified(|ui| { ui.label("Runtime inativo."); });
+        ui.centered_and_justified(|ui| {
+            ui.label("Runtime inativo.");
+        });
         return;
     }
 
@@ -190,8 +204,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         ui.separator();
         ui.label(match play_state {
             RuntimePlayState::Playing => "Status: Executando",
-            RuntimePlayState::Paused  => "Status: Pausado",
-            RuntimePlayState::Edit    => "Status: Edição",
+            RuntimePlayState::Paused => "Status: Pausado",
+            RuntimePlayState::Edit => "Status: Edição",
         });
         ui.separator();
         ui.label(format!("Flow: {:?}", runtime.game_state.flow));
@@ -205,7 +219,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     ui.horizontal_wrapped(|ui| {
         if ui.button("💾 Salvar").clicked() {
             match runtime.save_game(&project_root) {
-                Ok(_)  => host.set_status("💾 Jogo salvo".to_string()),
+                Ok(_) => host.set_status("💾 Jogo salvo".to_string()),
                 Err(e) => host.set_status(format!("❌ Erro ao salvar: {e}")),
             }
         }
@@ -226,7 +240,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     // consumi-los nos botões da barra de controle acima.
     let game_response = ui.allocate_rect(available, egui::Sense::click());
     if game_response.clicked() || game_response.hovered() {
-        ui.ctx().memory_mut(|mem| mem.request_focus(game_response.id));
+        ui.ctx()
+            .memory_mut(|mem| mem.request_focus(game_response.id));
     }
     let _response = game_response;
     let painter = ui.painter_at(available);
@@ -251,7 +266,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
         if let Some(zoom) = runtime.camera_zoom_override {
             camera.zoom = zoom.clamp(0.2, 4.0);
         }
-        if runtime.camera_shake_time > f32::EPSILON && runtime.camera_shake_intensity > f32::EPSILON {
+        if runtime.camera_shake_time > f32::EPSILON && runtime.camera_shake_intensity > f32::EPSILON
+        {
             let phase = runtime.elapsed_time * 40.0;
             let shake = runtime.camera_shake_intensity * runtime.camera_shake_time.clamp(0.0, 1.0);
             camera.x += phase.sin() * shake;
@@ -287,7 +303,8 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
                     runtime.queue_scene_change_snapshot(scene, file_path, Some(label.clone()));
                     host.set_status(format!("UIButton → cena {} (memória)", label));
                 } else {
-                    let label = path.file_name()
+                    let label = path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("cena")
                         .to_string();
@@ -305,11 +322,17 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
     }
 
     // ── overlays ─────────────────────────────────────────────
-    if matches!(runtime.game_state.flow, crate::runtime::state::RuntimeGameFlow::Loading) {
+    if matches!(
+        runtime.game_state.flow,
+        crate::runtime::state::RuntimeGameFlow::Loading
+    ) {
         painter.text(
             available.center(),
             egui::Align2::CENTER_CENTER,
-            format!("Loading... {}", runtime.game_state.loading_label.clone().unwrap_or_default()),
+            format!(
+                "Loading... {}",
+                runtime.game_state.loading_label.clone().unwrap_or_default()
+            ),
             egui::FontId::proportional(22.0),
             egui::Color32::WHITE,
         );
@@ -352,10 +375,15 @@ fn apply_egui_inputs(runtime: &mut RuntimeState, ctx: &egui::Context) {
 
     // câmera com setas
     let cam_axis = input_system::camera_axis(&runtime.input);
-    let zoom_d   = input_system::zoom_delta(ctx);
+    let zoom_d = input_system::zoom_delta(ctx);
     if let Some(scene) = &mut runtime.active_scene {
         if cam_axis != egui::Vec2::ZERO || zoom_d.abs() > f32::EPSILON {
-            crate::runtime::camera::move_main_camera(&mut scene.entities, cam_axis.x * 4.0, cam_axis.y * 4.0, zoom_d * 0.05);
+            crate::runtime::camera::move_main_camera(
+                &mut scene.entities,
+                cam_axis.x * 4.0,
+                cam_axis.y * 4.0,
+                zoom_d * 0.05,
+            );
         }
     }
 }

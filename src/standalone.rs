@@ -1,4 +1,9 @@
-use std::{collections::HashMap, env, path::{Path, PathBuf}, time::Duration};
+use std::{
+    collections::HashMap,
+    env,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 /// Intervalo mínimo entre frames no standalone: ~120 FPS (8.33 ms).
 /// Evita spin-loop ilimitado que satura a CPU e causa "não responde".
@@ -8,7 +13,12 @@ use eframe::egui;
 
 use crate::{
     core::{project::ProjectConfig, scene::Scene},
-    runtime::{RuntimeState, camera, renderer::{self, UiAction}, context::{RuntimeContext, RuntimePlayState}},
+    runtime::{
+        camera,
+        context::{RuntimeContext, RuntimePlayState},
+        renderer::{self, UiAction},
+        RuntimeState,
+    },
 };
 
 pub const STANDALONE_MARKER_FILE: &str = ".rs2br_standalone";
@@ -77,19 +87,27 @@ impl eframe::App for StandaloneApp {
             };
         }
 
-        egui::CentralPanel::default().frame(
-            egui::Frame::default().fill(egui::Color32::BLACK)
-        ).show(ctx, |ui| {
-            show_game(self, ui);
-        });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(egui::Color32::BLACK))
+            .show(ctx, |ui| {
+                show_game(self, ui);
+            });
     }
 }
 
 impl RuntimeContext for StandaloneApp {
-    fn play_state(&self) -> RuntimePlayState { self.play_state }
-    fn set_play_state(&mut self, state: RuntimePlayState) { self.play_state = state; }
-    fn project_root(&self) -> &Path { &self.project_root }
-    fn active_scene_snapshot(&self) -> &Scene { &self.scene }
+    fn play_state(&self) -> RuntimePlayState {
+        self.play_state
+    }
+    fn set_play_state(&mut self, state: RuntimePlayState) {
+        self.play_state = state;
+    }
+    fn project_root(&self) -> &Path {
+        &self.project_root
+    }
+    fn active_scene_snapshot(&self) -> &Scene {
+        &self.scene
+    }
     fn scene_file_candidates(&self) -> Vec<PathBuf> {
         let scenes_dir = self.project_root.join("assets").join("scenes");
         let mut result = Vec::new();
@@ -108,8 +126,12 @@ impl RuntimeContext for StandaloneApp {
             .ok()
             .map(|scene| (scene, Some(path.to_path_buf())))
     }
-    fn set_status(&mut self, msg: String) { self.status_msg = msg; }
-    fn sprite_textures(&mut self) -> &mut HashMap<String, egui::TextureHandle> { &mut self.sprite_textures }
+    fn set_status(&mut self, msg: String) {
+        self.status_msg = msg;
+    }
+    fn sprite_textures(&mut self) -> &mut HashMap<String, egui::TextureHandle> {
+        &mut self.sprite_textures
+    }
 }
 
 fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
@@ -117,7 +139,8 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     let scene_snap = host.active_scene_snapshot().clone();
     let project_root = host.project_root().to_path_buf();
 
-    host.runtime.sync_with_mode(&play_state, &scene_snap, &project_root, -260.0);
+    host.runtime
+        .sync_with_mode(&play_state, &scene_snap, &project_root, -260.0);
     apply_egui_inputs(&mut host.runtime, ui.ctx());
 
     if host.runtime.active_scene.is_none() {
@@ -133,7 +156,8 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     let available = ui.available_rect_before_wrap();
     let game_response = ui.allocate_rect(available, egui::Sense::click());
     if game_response.clicked() || game_response.hovered() {
-        ui.ctx().memory_mut(|mem| mem.request_focus(game_response.id));
+        ui.ctx()
+            .memory_mut(|mem| mem.request_focus(game_response.id));
     }
     let painter = ui.painter_at(available);
 
@@ -161,9 +185,12 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     if let Some(zoom) = host.runtime.camera_zoom_override {
         camera_state.zoom = zoom.clamp(0.2, 4.0);
     }
-    if host.runtime.camera_shake_time > f32::EPSILON && host.runtime.camera_shake_intensity > f32::EPSILON {
+    if host.runtime.camera_shake_time > f32::EPSILON
+        && host.runtime.camera_shake_intensity > f32::EPSILON
+    {
         let phase = host.runtime.elapsed_time * 40.0;
-        let shake = host.runtime.camera_shake_intensity * host.runtime.camera_shake_time.clamp(0.0, 1.0);
+        let shake =
+            host.runtime.camera_shake_intensity * host.runtime.camera_shake_time.clamp(0.0, 1.0);
         camera_state.x += phase.sin() * shake;
         camera_state.y += (phase * 1.37).cos() * shake;
     }
@@ -194,7 +221,8 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
                     host.scene = scene.clone();
                     host.scene_path = file_path.clone();
                     let label = scene.name.clone();
-                    host.runtime.queue_scene_change_snapshot(scene, file_path, Some(label.clone()));
+                    host.runtime
+                        .queue_scene_change_snapshot(scene, file_path, Some(label.clone()));
                     host.set_status(format!("Cena alterada: {}", label));
                 } else {
                     host.runtime.queue_scene_change(path);
@@ -208,11 +236,21 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
         }
     }
 
-    if matches!(host.runtime.game_state.flow, crate::runtime::state::RuntimeGameFlow::Loading) {
+    if matches!(
+        host.runtime.game_state.flow,
+        crate::runtime::state::RuntimeGameFlow::Loading
+    ) {
         painter.text(
             available.center(),
             egui::Align2::CENTER_CENTER,
-            format!("Loading... {}", host.runtime.game_state.loading_label.clone().unwrap_or_default()),
+            format!(
+                "Loading... {}",
+                host.runtime
+                    .game_state
+                    .loading_label
+                    .clone()
+                    .unwrap_or_default()
+            ),
             egui::FontId::proportional(22.0),
             egui::Color32::WHITE,
         );
@@ -252,12 +290,16 @@ fn apply_egui_inputs(runtime: &mut RuntimeState, ctx: &egui::Context) {
     let new_input = input_system::capture_runtime_input(ctx, &runtime.input);
     runtime.input = new_input;
 
-
     let cam_axis = input_system::camera_axis(&runtime.input);
     let zoom_d = input_system::zoom_delta(ctx);
     if let Some(scene) = &mut runtime.active_scene {
         if cam_axis != egui::Vec2::ZERO || zoom_d.abs() > f32::EPSILON {
-            crate::runtime::camera::move_main_camera(&mut scene.entities, cam_axis.x * 4.0, cam_axis.y * 4.0, zoom_d * 0.05);
+            crate::runtime::camera::move_main_camera(
+                &mut scene.entities,
+                cam_axis.x * 4.0,
+                cam_axis.y * 4.0,
+                zoom_d * 0.05,
+            );
         }
     }
 }

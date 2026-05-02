@@ -1,4 +1,7 @@
-use std::{fs, io, path::{Path, PathBuf}};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -50,8 +53,10 @@ pub fn save_project_config(project_root: &Path, config: &ProjectConfig) -> io::R
     fs::write(path, json)
 }
 
-
-pub fn create_basic_project_template_at(project_root: &Path, project_name: &str) -> io::Result<PathBuf> {
+pub fn create_basic_project_template_at(
+    project_root: &Path,
+    project_name: &str,
+) -> io::Result<PathBuf> {
     let name = if project_name.trim().is_empty() {
         "MeuProjeto"
     } else {
@@ -87,7 +92,9 @@ pub fn create_basic_project_template_at(project_root: &Path, project_name: &str)
     let lua_path = scripts_dir.join("player_base.lua");
     if !lua_path.exists() {
         let template = concat!(
-            "-- Script Lua — RS2BR-Engine V", env!("CARGO_PKG_VERSION"), "
+            "-- Script Lua — RS2BR-Engine V",
+            env!("CARGO_PKG_VERSION"),
+            "
 ",
             "--
 ",
@@ -117,7 +124,13 @@ pub fn create_basic_project_template_at(project_root: &Path, project_name: &str)
 fn sanitize_project_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if cleaned.trim_matches('_').is_empty() {
         "MeuProjeto".to_string()

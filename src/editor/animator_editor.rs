@@ -5,14 +5,16 @@ use crate::{
     editor::EditorApp,
 };
 
-
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     egui::ScrollArea::vertical()
         .id_source("animator_root_scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let Some(entity_id) = app.selected_entity_id.clone() else {
-                show_empty_state(ui, "Selecione uma entidade com Animator para abrir esta aba.");
+                show_empty_state(
+                    ui,
+                    "Selecione uma entidade com Animator para abrir esta aba.",
+                );
                 return;
             };
 
@@ -42,7 +44,14 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             ensure_node_layout(app, &state_names);
 
             if state_names.is_empty() {
-                draw_header(ui, &entity.name, &animator_snapshot, "<nenhum>", "<nenhum>", app.animator_detached);
+                draw_header(
+                    ui,
+                    &entity.name,
+                    &animator_snapshot,
+                    "<nenhum>",
+                    "<nenhum>",
+                    app.animator_detached,
+                );
                 ui.add_space(6.0);
                 draw_help_bar(ui);
                 ui.add_space(8.0);
@@ -51,9 +60,12 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             }
 
             if app.animator_selected_state.trim().is_empty()
-                || !state_names.iter().any(|name| name == &app.animator_selected_state)
+                || !state_names
+                    .iter()
+                    .any(|name| name == &app.animator_selected_state)
             {
-                app.animator_selected_state = preferred_state_name(&animator_snapshot, &state_names);
+                app.animator_selected_state =
+                    preferred_state_name(&animator_snapshot, &state_names);
             }
 
             let selected_state_name = app.animator_selected_state.clone();
@@ -93,7 +105,14 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
             let compact_layout = ui.available_width() < 980.0;
             if compact_layout {
-                draw_state_sidebar(app, ui, &entity_id, animator_index, &animator_snapshot, &state_names);
+                draw_state_sidebar(
+                    app,
+                    ui,
+                    &entity_id,
+                    animator_index,
+                    &animator_snapshot,
+                    &state_names,
+                );
                 ui.add_space(8.0);
                 draw_simple_workspace(
                     app,
@@ -109,7 +128,14 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 );
             } else {
                 ui.columns(2, |columns| {
-                    draw_state_sidebar(app, &mut columns[0], &entity_id, animator_index, &animator_snapshot, &state_names);
+                    draw_state_sidebar(
+                        app,
+                        &mut columns[0],
+                        &entity_id,
+                        animator_index,
+                        &animator_snapshot,
+                        &state_names,
+                    );
                     draw_simple_workspace(
                         app,
                         &mut columns[1],
@@ -124,7 +150,6 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                     );
                 });
             }
-
         });
 }
 
@@ -162,7 +187,11 @@ fn draw_header(
                 ui.separator();
                 ui.label("Modo: Simples");
                 ui.separator();
-                ui.label(if detached { "Janela destacada" } else { "Na aba inferior" });
+                ui.label(if detached {
+                    "Janela destacada"
+                } else {
+                    "Na aba inferior"
+                });
             });
         });
 }
@@ -216,16 +245,21 @@ fn draw_state_sidebar(
                                     next_state: String::new(),
                                 },
                             );
-                            animator.clips.entry(new_name.clone()).or_insert_with(AnimationClip::default);
+                            animator
+                                .clips
+                                .entry(new_name.clone())
+                                .or_insert_with(AnimationClip::default);
                             animator.current_state = new_name.clone();
                             animator.state_mode = true;
                         });
                         let count = state_names.len().max(1) as f32;
                         let y = (0.18 + count * 0.12).min(0.82);
-                        app.animator_node_positions.insert(new_name.clone(), [0.40, y]);
+                        app.animator_node_positions
+                            .insert(new_name.clone(), [0.40, y]);
                         app.animator_selected_state = std::mem::take(&mut new_name);
                         app.animator_state_rename_buffer = app.animator_selected_state.clone();
-                        app.status_msg = format!("✅ Estado '{}' criado.", app.animator_selected_state);
+                        app.status_msg =
+                            format!("✅ Estado '{}' criado.", app.animator_selected_state);
                     }
                 });
             });
@@ -274,11 +308,16 @@ fn draw_state_sidebar(
                                 {
                                     let source = source_name.clone();
                                     let target = target_name.clone();
-                                    update_animator(app, entity_id, animator_index, move |animator| {
-                                        if let Some(state) = animator.states.get_mut(&source) {
-                                            state.next_state = target.clone();
-                                        }
-                                    });
+                                    update_animator(
+                                        app,
+                                        entity_id,
+                                        animator_index,
+                                        move |animator| {
+                                            if let Some(state) = animator.states.get_mut(&source) {
+                                                state.next_state = target.clone();
+                                            }
+                                        },
+                                    );
                                     ui.close_menu();
                                 }
                             }
@@ -293,11 +332,17 @@ fn draw_state_sidebar(
                     let mut clip_names: Vec<String> = animator.clips.keys().cloned().collect();
                     clip_names.sort();
                     for clip_name in clip_names {
-                        animator.states.entry(clip_name.clone()).or_insert_with(|| AnimationState {
-                            clip: clip_name.clone(),
-                            looped: clip_name != "attack",
-                            interruptible: clip_name != "attack",
-                            next_state: if clip_name == "attack" { "idle".to_string() } else { String::new() },
+                        animator.states.entry(clip_name.clone()).or_insert_with(|| {
+                            AnimationState {
+                                clip: clip_name.clone(),
+                                looped: clip_name != "attack",
+                                interruptible: clip_name != "attack",
+                                next_state: if clip_name == "attack" {
+                                    "idle".to_string()
+                                } else {
+                                    String::new()
+                                },
+                            }
                         });
                     }
                     animator.state_mode = true;
@@ -307,7 +352,10 @@ fn draw_state_sidebar(
 
             ui.horizontal_wrapped(|ui| {
                 ui.label("Zoom:");
-                ui.add(egui::Slider::new(&mut app.animator_graph_zoom, 0.55..=2.4).clamp_to_range(true));
+                ui.add(
+                    egui::Slider::new(&mut app.animator_graph_zoom, 0.55..=2.4)
+                        .clamp_to_range(true),
+                );
             });
 
             if ui.small_button("Reorganizar nós").clicked() {
@@ -333,7 +381,6 @@ fn draw_state_sidebar(
             );
         });
 }
-
 
 fn draw_empty_animator_setup(
     app: &mut EditorApp,
@@ -489,39 +536,65 @@ fn draw_clip_drop_and_frames(
                 ui.label("Clip usado:");
                 let clip_names = sorted_clip_names(animator);
                 let before = clip_name.clone();
-                egui::ComboBox::from_id_source(format!("simple_workspace_clip_{}_{}", entity_id, selected_name))
-                    .selected_text(if clip_name.is_empty() { "<vazio>" } else { clip_name.as_str() })
-                    .show_ui(ui, |ui| {
-                        for clip in &clip_names {
-                            ui.selectable_value(&mut clip_name, clip.clone(), clip);
-                        }
-                    });
+                egui::ComboBox::from_id_source(format!(
+                    "simple_workspace_clip_{}_{}",
+                    entity_id, selected_name
+                ))
+                .selected_text(if clip_name.is_empty() {
+                    "<vazio>"
+                } else {
+                    clip_name.as_str()
+                })
+                .show_ui(ui, |ui| {
+                    for clip in &clip_names {
+                        ui.selectable_value(&mut clip_name, clip.clone(), clip);
+                    }
+                });
                 if clip_name != before {
                     let target = selected_name.to_string();
                     let clip = clip_name.clone();
                     update_animator(app, entity_id, animator_index, move |animator| {
-                        animator.clips.entry(clip.clone()).or_insert_with(AnimationClip::default);
+                        animator
+                            .clips
+                            .entry(clip.clone())
+                            .or_insert_with(AnimationClip::default);
                         animator.states.entry(target.clone()).or_default().clip = clip.clone();
                         animator.current = clip.clone();
                     });
-                    app.status_msg = format!("✅ Clip '{}' vinculado ao estado '{}'.", clip_name, selected_name);
+                    app.status_msg = format!(
+                        "✅ Clip '{}' vinculado ao estado '{}'.",
+                        clip_name, selected_name
+                    );
                 }
                 if ui.button("Salvar clip no estado").clicked() {
                     let target = selected_name.to_string();
                     let clip = clip_name.clone();
                     update_animator(app, entity_id, animator_index, move |animator| {
-                        animator.clips.entry(clip.clone()).or_insert_with(AnimationClip::default);
+                        animator
+                            .clips
+                            .entry(clip.clone())
+                            .or_insert_with(AnimationClip::default);
                         animator.states.entry(target.clone()).or_default().clip = clip.clone();
                         animator.current = clip.clone();
                     });
-                    app.status_msg = format!("✅ Clip '{}' salvo no estado '{}'.", clip_name, selected_name);
+                    app.status_msg = format!(
+                        "✅ Clip '{}' salvo no estado '{}'.",
+                        clip_name, selected_name
+                    );
                 }
             });
 
             ui.add_space(8.0);
             draw_frame_drop_zone(app, ui, entity_id, animator_index, &clip_name);
             ui.add_space(8.0);
-            draw_frames_list(app, ui, entity_id, animator_index, &clip_name, selected_clip);
+            draw_frames_list(
+                app,
+                ui,
+                entity_id,
+                animator_index,
+                &clip_name,
+                selected_clip,
+            );
         });
 }
 
@@ -544,7 +617,18 @@ fn draw_preview_and_settings(
             ui.add_space(8.0);
             draw_clip_preview(app, ui, selected_clip_name, selected_clip);
             ui.add_space(10.0);
-            draw_simple_settings(app, ui, entity_id, animator_index, animator, state_names, selected_name, selected_state, selected_clip_name, selected_clip);
+            draw_simple_settings(
+                app,
+                ui,
+                entity_id,
+                animator_index,
+                animator,
+                state_names,
+                selected_name,
+                selected_state,
+                selected_clip_name,
+                selected_clip,
+            );
         });
 }
 
@@ -601,7 +685,8 @@ fn draw_frame_drop_zone(
                     append_frames_to_clip(app, entity_id, animator_index, clip_name, vec![rel]);
                 }
                 Some(_) => {
-                    app.status_msg = "❌ O asset selecionado não é uma imagem compatível.".to_string();
+                    app.status_msg =
+                        "❌ O asset selecionado não é uma imagem compatível.".to_string();
                 }
                 None => {
                     app.status_msg = "❌ Nenhum asset selecionado no painel Assets.".to_string();
@@ -622,7 +707,12 @@ fn draw_frame_drop_zone(
             if had_frames {
                 let clip = clip_name.to_string();
                 update_animator(app, entity_id, animator_index, move |animator| {
-                    animator.clips.entry(clip.clone()).or_default().frames.clear();
+                    animator
+                        .clips
+                        .entry(clip.clone())
+                        .or_default()
+                        .frames
+                        .clear();
                 });
                 app.status_msg = format!("✅ Frames do clip '{}' foram limpos.", clip_name);
             } else {
@@ -664,37 +754,62 @@ fn draw_frames_list(
     ui.label(egui::RichText::new("Lista de frames").strong());
     ui.add_space(4.0);
     if clip.frames.is_empty() {
-        ui.label(egui::RichText::new("Nenhum frame ainda. Arraste sprites para a caixa acima.").small().weak());
+        ui.label(
+            egui::RichText::new("Nenhum frame ainda. Arraste sprites para a caixa acima.")
+                .small()
+                .weak(),
+        );
         return;
     }
 
-    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-        for (index, frame) in clip.frames.iter().enumerate() {
-            egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    if let Some(texture) = app.load_texture_from_relative_path(ui.ctx(), frame) {
-                        ui.image((texture.id(), egui::vec2(40.0, 40.0)));
-                    }
-                    ui.vertical(|ui| {
-                        ui.label(egui::RichText::new(format!("Frame {}", index + 1)).strong().small());
-                        ui.label(egui::RichText::new(frame).small().weak());
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("🗑").clicked() {
-                            remove_frame(app, entity_id, animator_index, clip_name, index);
+    egui::ScrollArea::vertical()
+        .max_height(320.0)
+        .show(ui, |ui| {
+            for (index, frame) in clip.frames.iter().enumerate() {
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        if let Some(texture) = app.load_texture_from_relative_path(ui.ctx(), frame)
+                        {
+                            ui.image((texture.id(), egui::vec2(40.0, 40.0)));
                         }
-                        if index + 1 < clip.frames.len() && ui.small_button("↓").clicked() {
-                            move_frame(app, entity_id, animator_index, clip_name, index, index + 1);
-                        }
-                        if index > 0 && ui.small_button("↑").clicked() {
-                            move_frame(app, entity_id, animator_index, clip_name, index, index - 1);
-                        }
+                        ui.vertical(|ui| {
+                            ui.label(
+                                egui::RichText::new(format!("Frame {}", index + 1))
+                                    .strong()
+                                    .small(),
+                            );
+                            ui.label(egui::RichText::new(frame).small().weak());
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("🗑").clicked() {
+                                remove_frame(app, entity_id, animator_index, clip_name, index);
+                            }
+                            if index + 1 < clip.frames.len() && ui.small_button("↓").clicked() {
+                                move_frame(
+                                    app,
+                                    entity_id,
+                                    animator_index,
+                                    clip_name,
+                                    index,
+                                    index + 1,
+                                );
+                            }
+                            if index > 0 && ui.small_button("↑").clicked() {
+                                move_frame(
+                                    app,
+                                    entity_id,
+                                    animator_index,
+                                    clip_name,
+                                    index,
+                                    index - 1,
+                                );
+                            }
+                        });
                     });
                 });
-            });
-            ui.add_space(4.0);
-        }
-    });
+                ui.add_space(4.0);
+            }
+        });
 }
 
 fn draw_clip_preview(
@@ -705,7 +820,11 @@ fn draw_clip_preview(
 ) {
     ui.label(egui::RichText::new("Preview").strong());
     ui.add_space(6.0);
-    let preview_h = if ui.available_width() < 340.0 { 180.0 } else { 240.0 };
+    let preview_h = if ui.available_width() < 340.0 {
+        180.0
+    } else {
+        240.0
+    };
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width().max(220.0), preview_h),
         egui::Sense::hover(),
@@ -742,7 +861,12 @@ fn draw_clip_preview(
         painter.text(
             rect.left_top() + egui::vec2(10.0, 10.0),
             egui::Align2::LEFT_TOP,
-            format!("{}  •  frame {}/{}", clip_name, frame_index + 1, clip.frames.len()),
+            format!(
+                "{}  •  frame {}/{}",
+                clip_name,
+                frame_index + 1,
+                clip.frames.len()
+            ),
             egui::FontId::proportional(12.0),
             egui::Color32::from_rgb(215, 225, 240),
         );
@@ -751,8 +875,11 @@ fn draw_clip_preview(
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            format!("Não foi possível abrir
-{}", frame_path),
+            format!(
+                "Não foi possível abrir
+{}",
+                frame_path
+            ),
             egui::FontId::proportional(14.0),
             egui::Color32::from_rgb(214, 102, 102),
         );
@@ -779,53 +906,80 @@ fn draw_simple_settings(
     let mut threshold = animator.locomotion_threshold;
     let mut changed = false;
 
-    egui::Grid::new(format!("simple_settings_grid_{}_{}", entity_id, selected_name))
-        .num_columns(2)
-        .spacing([10.0, 8.0])
-        .show(ui, |ui| {
-            ui.label("FPS:");
-            changed |= ui.add(egui::DragValue::new(&mut fps).speed(0.25).range(1.0..=60.0)).changed();
-            ui.end_row();
+    egui::Grid::new(format!(
+        "simple_settings_grid_{}_{}",
+        entity_id, selected_name
+    ))
+    .num_columns(2)
+    .spacing([10.0, 8.0])
+    .show(ui, |ui| {
+        ui.label("FPS:");
+        changed |= ui
+            .add(egui::DragValue::new(&mut fps).speed(0.25).range(1.0..=60.0))
+            .changed();
+        ui.end_row();
 
-            ui.label("Loop:");
-            changed |= ui.checkbox(&mut looped, "Repetir animação").changed();
-            ui.end_row();
+        ui.label("Loop:");
+        changed |= ui.checkbox(&mut looped, "Repetir animação").changed();
+        ui.end_row();
 
-            ui.label("Interruptível:");
-            changed |= ui.checkbox(&mut interruptible, "Pode trocar no meio").changed();
-            ui.end_row();
+        ui.label("Interruptível:");
+        changed |= ui
+            .checkbox(&mut interruptible, "Pode trocar no meio")
+            .changed();
+        ui.end_row();
 
-            ui.label("Próximo estado:");
-            let next_before = next_state.clone();
-            egui::ComboBox::from_id_source(format!("simple_next_state_{}_{}", entity_id, selected_name))
-                .selected_text(if next_state.is_empty() { "<nenhum>" } else { next_state.as_str() })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut next_state, String::new(), "<nenhum>");
-                    for name in state_names {
-                        if name != selected_name {
-                            ui.selectable_value(&mut next_state, name.clone(), name);
-                        }
-                    }
-                });
-            changed |= next_state != next_before;
-            ui.end_row();
-
-            ui.label("Estado padrão:");
-            let default_before = default_state.clone();
-            egui::ComboBox::from_id_source(format!("simple_default_state_{}_{}", entity_id, selected_name))
-                .selected_text(if default_state.is_empty() { "<nenhum>" } else { default_state.as_str() })
-                .show_ui(ui, |ui| {
-                    for name in state_names {
-                        ui.selectable_value(&mut default_state, name.clone(), name);
-                    }
-                });
-            changed |= default_state != default_before;
-            ui.end_row();
-
-            ui.label("Threshold movimento:");
-            changed |= ui.add(egui::DragValue::new(&mut threshold).speed(0.25).range(0.0..=999.0)).changed();
-            ui.end_row();
+        ui.label("Próximo estado:");
+        let next_before = next_state.clone();
+        egui::ComboBox::from_id_source(format!(
+            "simple_next_state_{}_{}",
+            entity_id, selected_name
+        ))
+        .selected_text(if next_state.is_empty() {
+            "<nenhum>"
+        } else {
+            next_state.as_str()
+        })
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut next_state, String::new(), "<nenhum>");
+            for name in state_names {
+                if name != selected_name {
+                    ui.selectable_value(&mut next_state, name.clone(), name);
+                }
+            }
         });
+        changed |= next_state != next_before;
+        ui.end_row();
+
+        ui.label("Estado padrão:");
+        let default_before = default_state.clone();
+        egui::ComboBox::from_id_source(format!(
+            "simple_default_state_{}_{}",
+            entity_id, selected_name
+        ))
+        .selected_text(if default_state.is_empty() {
+            "<nenhum>"
+        } else {
+            default_state.as_str()
+        })
+        .show_ui(ui, |ui| {
+            for name in state_names {
+                ui.selectable_value(&mut default_state, name.clone(), name);
+            }
+        });
+        changed |= default_state != default_before;
+        ui.end_row();
+
+        ui.label("Threshold movimento:");
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut threshold)
+                    .speed(0.25)
+                    .range(0.0..=999.0),
+            )
+            .changed();
+        ui.end_row();
+    });
 
     if changed {
         let state_name = selected_name.to_string();
@@ -870,7 +1024,10 @@ fn draw_simple_settings(
                 animator.looped = looped;
             }
         });
-        app.status_msg = format!("✅ Ajustes do estado '{}' salvos com sucesso.", selected_name);
+        app.status_msg = format!(
+            "✅ Ajustes do estado '{}' salvos com sucesso.",
+            selected_name
+        );
     }
 }
 
@@ -894,7 +1051,11 @@ fn draw_state_rename_row(
             rename_selected_state(app, entity_id, animator_index, selected_name);
         }
     });
-    ui.label(egui::RichText::new("Exemplo: idle, run, attack, jump, slide.").small().weak());
+    ui.label(
+        egui::RichText::new("Exemplo: idle, run, attack, jump, slide.")
+            .small()
+            .weak(),
+    );
 }
 
 fn rename_selected_state(
@@ -943,7 +1104,10 @@ fn rename_selected_state(
             if let Some(clip) = animator.clips.remove(old_name) {
                 animator.clips.insert(new_name.clone(), clip);
             } else {
-                animator.clips.entry(new_name.clone()).or_insert_with(AnimationClip::default);
+                animator
+                    .clips
+                    .entry(new_name.clone())
+                    .or_insert_with(AnimationClip::default);
             }
             if animator.current == old_name {
                 animator.current = new_name.clone();
@@ -967,7 +1131,8 @@ fn rename_selected_state(
     match rename_result {
         Ok(()) => {
             if let Some(position) = app.animator_node_positions.remove(old_name) {
-                app.animator_node_positions.insert(new_name.clone(), position);
+                app.animator_node_positions
+                    .insert(new_name.clone(), position);
             }
             app.animator_selected_state = new_name.clone();
             app.animator_state_rename_buffer = new_name.clone();
@@ -987,7 +1152,8 @@ fn append_frames_to_clip(
     frames: Vec<String>,
 ) {
     if frames.is_empty() {
-        app.status_msg = "❌ Nenhum asset de imagem válido foi encontrado para adicionar.".to_string();
+        app.status_msg =
+            "❌ Nenhum asset de imagem válido foi encontrado para adicionar.".to_string();
         return;
     }
     let clip = clip_name.to_string();
@@ -1003,7 +1169,10 @@ fn append_frames_to_clip(
     app.status_msg = if added_count == 1 {
         format!("✅ 1 frame adicionado ao clip '{}'.", clip_name)
     } else {
-        format!("✅ {} frames adicionados ao clip '{}'.", added_count, clip_name)
+        format!(
+            "✅ {} frames adicionados ao clip '{}'.",
+            added_count, clip_name
+        )
     };
 }
 
@@ -1055,7 +1224,6 @@ fn relative_to_project_or_full(project_root: &std::path::Path, path: &std::path:
     path.to_string_lossy().replace('\\', "/")
 }
 
-
 fn show_empty_state(ui: &mut egui::Ui, text: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(24.0);
@@ -1091,12 +1259,18 @@ fn unique_state_name(animator: &Animator, base: &str) -> String {
 
 fn ensure_node_layout(app: &mut EditorApp, state_names: &[String]) {
     for (index, state_name) in state_names.iter().enumerate() {
-        app.animator_node_positions.entry(state_name.clone()).or_insert_with(|| {
-            let row = index as f32;
-            [0.25 + ((index % 2) as f32) * 0.28, (0.18 + row * 0.12).min(0.82)]
-        });
+        app.animator_node_positions
+            .entry(state_name.clone())
+            .or_insert_with(|| {
+                let row = index as f32;
+                [
+                    0.25 + ((index % 2) as f32) * 0.28,
+                    (0.18 + row * 0.12).min(0.82),
+                ]
+            });
     }
-    app.animator_node_positions.retain(|name, _| state_names.iter().any(|state| state == name));
+    app.animator_node_positions
+        .retain(|name, _| state_names.iter().any(|state| state == name));
 }
 
 fn update_animator<F>(app: &mut EditorApp, entity_id: &str, animator_index: usize, mut update: F)

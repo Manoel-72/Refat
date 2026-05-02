@@ -37,7 +37,13 @@ impl AudioRuntime {
         }
     }
 
-    pub fn play_once(&mut self, key: &str, file_path: &Path, looped: bool, volume: f32) -> Result<(), String> {
+    pub fn play_once(
+        &mut self,
+        key: &str,
+        file_path: &Path,
+        looped: bool,
+        volume: f32,
+    ) -> Result<(), String> {
         self.ensure_output()?;
 
         if self.active.iter().any(|audio| audio.key == key) {
@@ -49,10 +55,16 @@ impl AudioRuntime {
             .as_ref()
             .ok_or_else(|| "Dispositivo de áudio indisponível".to_string())?;
 
-        let file = File::open(file_path)
-            .map_err(|error| format!("Falha ao abrir áudio '{}': {}", file_path.display(), error))?;
-        let source = Decoder::new(BufReader::new(file))
-            .map_err(|error| format!("Falha ao decodificar áudio '{}': {}", file_path.display(), error))?;
+        let file = File::open(file_path).map_err(|error| {
+            format!("Falha ao abrir áudio '{}': {}", file_path.display(), error)
+        })?;
+        let source = Decoder::new(BufReader::new(file)).map_err(|error| {
+            format!(
+                "Falha ao decodificar áudio '{}': {}",
+                file_path.display(),
+                error
+            )
+        })?;
 
         let sink = Sink::try_new(handle)
             .map_err(|error| format!("Falha ao criar sink de áudio: {}", error))?;
@@ -75,7 +87,8 @@ impl AudioRuntime {
     }
 
     pub fn maintain(&mut self) {
-        self.active.retain(|audio| audio.looped || !audio.sink.empty());
+        self.active
+            .retain(|audio| audio.looped || !audio.sink.empty());
     }
 
     pub fn stop_all(&mut self) {

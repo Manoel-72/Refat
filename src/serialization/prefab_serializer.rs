@@ -54,7 +54,6 @@ pub fn load_prefab_from_path(path: &Path) -> Option<Prefab> {
     try_load_prefab_from_path(path).ok()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

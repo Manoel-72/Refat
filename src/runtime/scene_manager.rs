@@ -5,7 +5,10 @@ use crate::{core::scene::Scene, serialization::scene_serializer};
 #[derive(Debug, Clone)]
 pub enum PendingSceneChange {
     Path(PathBuf),
-    Snapshot { scene: Scene, source_path: Option<PathBuf> },
+    Snapshot {
+        scene: Scene,
+        source_path: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, Default)]

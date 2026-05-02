@@ -8,9 +8,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::core::{
-    project::create_basic_project_template_at,
-};
+use crate::core::project::create_basic_project_template_at;
 
 use super::types::{detect_asset_type, AssetRecord};
 
@@ -116,7 +114,12 @@ impl AssetNode {
             Vec::new()
         };
 
-        Some(AssetNode { name, path: path.to_path_buf(), is_dir, children })
+        Some(AssetNode {
+            name,
+            path: path.to_path_buf(),
+            is_dir,
+            children,
+        })
     }
 
     pub fn icon(&self) -> &str {
@@ -142,7 +145,10 @@ pub struct AssetManager {
 
 impl AssetManager {
     pub fn new(root: PathBuf) -> Self {
-        let mut mgr = Self { root: root.clone(), tree: None };
+        let mut mgr = Self {
+            root: root.clone(),
+            tree: None,
+        };
         mgr.refresh();
         mgr
     }
@@ -180,7 +186,10 @@ impl AssetManager {
         let sanitized = sanitize_asset_name(name.trim_end_matches(".scene.json"));
         let path = parent.join(format!("{}.scene.json", sanitized));
         if path.exists() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe uma cena com esse nome."));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Já existe uma cena com esse nome.",
+            ));
         }
         let scene = crate::core::scene::Scene::new(&sanitized);
         crate::serialization::scene_serializer::save_scene_to_path(&scene, &path)?;
@@ -190,7 +199,10 @@ impl AssetManager {
     pub fn import_file(&self, source: &Path, target_dir: &Path) -> io::Result<PathBuf> {
         fs::create_dir_all(target_dir)?;
 
-        let file_name = source.file_name().and_then(|n| n.to_str()).unwrap_or("asset.bin");
+        let file_name = source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("asset.bin");
 
         let mut destination = target_dir.join(file_name);
         if destination.exists() {
@@ -203,16 +215,27 @@ impl AssetManager {
 
     pub fn rename_path(&self, path: &Path, new_name: &str) -> io::Result<PathBuf> {
         if !path.exists() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "O asset selecionado não existe mais no disco."));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "O asset selecionado não existe mais no disco.",
+            ));
         }
 
         let trimmed = sanitize_asset_name(new_name);
         if trimmed.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Nome não pode ficar vazio."));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Nome não pode ficar vazio.",
+            ));
         }
 
-        let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
-        let current_file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let parent = path
+            .parent()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
+        let current_file_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
 
         let final_name = if path.is_file() {
             if current_file_name.ends_with(".scene.json") {
@@ -222,7 +245,13 @@ impl AssetManager {
             } else if current_file_name.ends_with(".matr.json") {
                 format!("{}.matr.json", trimmed.trim_end_matches(".matr.json"))
             } else if Path::new(&trimmed).extension().is_none() && path.extension().is_some() {
-                format!("{}.{}", trimmed, path.extension().and_then(|e| e.to_str()).unwrap_or_default())
+                format!(
+                    "{}.{}",
+                    trimmed,
+                    path.extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or_default()
+                )
             } else {
                 trimmed.clone()
             }
@@ -235,7 +264,10 @@ impl AssetManager {
             return Ok(target);
         }
         if target.exists() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um asset com esse nome nessa pasta."));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Já existe um asset com esse nome nessa pasta.",
+            ));
         }
 
         fs::rename(path, &target)?;
@@ -243,23 +275,38 @@ impl AssetManager {
     }
 
     pub fn duplicate_path(&self, path: &Path) -> io::Result<PathBuf> {
-        let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Pasta pai não encontrada."))?;
         if path.is_dir() {
-            let duplicate_dir = make_unique_named_path(parent, path.file_name().and_then(|n| n.to_str()).unwrap_or("pasta"));
+            let duplicate_dir = make_unique_named_path(
+                parent,
+                path.file_name().and_then(|n| n.to_str()).unwrap_or("pasta"),
+            );
             copy_dir_recursive(path, &duplicate_dir)?;
             return Ok(duplicate_dir);
         }
 
-        let duplicate_file = make_unique_named_path(parent, path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
+        let duplicate_file = make_unique_named_path(
+            parent,
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"),
+        );
         fs::copy(path, &duplicate_file)?;
         Ok(duplicate_file)
     }
 
     pub fn delete_path(&self, path: &Path) -> io::Result<()> {
         if !path.exists() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "O asset selecionado já não existe mais."));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "O asset selecionado já não existe mais.",
+            ));
         }
-        if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) }
+        if path.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        }
     }
 
     pub fn create_rs2_script_file(&self, parent: &Path, name: &str) -> io::Result<PathBuf> {
@@ -271,7 +318,10 @@ impl AssetManager {
 
         let path = parent.join(&final_name);
         if path.exists() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um script RS2 com esse nome."));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Já existe um script RS2 com esse nome.",
+            ));
         }
 
         let template = "// Script RS2BR-Engine
@@ -290,29 +340,34 @@ impl AssetManager {
 
         let path = parent.join(&final_name);
         if path.exists() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Já existe um script Lua com esse nome."));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Já existe um script Lua com esse nome.",
+            ));
         }
 
         let template = concat!(
-"-- Script Lua — RS2BR-Engine V", env!("CARGO_PKG_VERSION"), "\n",
-"--\n",
-"-- APIs disponíveis:\n",
-"--   entity.x, entity.y, entity.vx, entity.vy, entity.name\n",
-"--   entity.set_position(x, y)  entity.set_velocity(vx, vy)\n",
-"--   entity.set_rotation(r)     entity.set_visible(bool)\n",
-"--   entity.play_anim(\"clip\")\n",
-"--   input.key_held(\"A\")        input.key_pressed(\"Space\")\n",
-"--   input.mouse_pos()          input.mouse_left / mouse_right\n",
-"--   game.delta_time            game.elapsed_time\n",
-"--   game.log(\"msg\")            game.change_scene(\"path\")\n",
-"--   save.get(\"k\") save.set(\"k\", v) save.has(\"k\") save.remove(\"k\")\n",
-"\n",
-"function on_start()\n",
-"end\n",
-"\n",
-"function on_update(dt)\n",
-"end\n"
-);
+            "-- Script Lua — RS2BR-Engine V",
+            env!("CARGO_PKG_VERSION"),
+            "\n",
+            "--\n",
+            "-- APIs disponíveis:\n",
+            "--   entity.x, entity.y, entity.vx, entity.vy, entity.name\n",
+            "--   entity.set_position(x, y)  entity.set_velocity(vx, vy)\n",
+            "--   entity.set_rotation(r)     entity.set_visible(bool)\n",
+            "--   entity.play_anim(\"clip\")\n",
+            "--   input.key_held(\"A\")        input.key_pressed(\"Space\")\n",
+            "--   input.mouse_pos()          input.mouse_left / mouse_right\n",
+            "--   game.delta_time            game.elapsed_time\n",
+            "--   game.log(\"msg\")            game.change_scene(\"path\")\n",
+            "--   save.get(\"k\") save.set(\"k\", v) save.has(\"k\") save.remove(\"k\")\n",
+            "\n",
+            "function on_start()\n",
+            "end\n",
+            "\n",
+            "function on_update(dt)\n",
+            "end\n"
+        );
         fs::write(&path, template)?;
         Ok(path)
     }
@@ -331,12 +386,18 @@ impl AssetManager {
     }
 }
 
-
 fn collect_records(path: &Path, output: &mut Vec<AssetRecord>) {
-    if !path.exists() { return; }
-    output.push(AssetRecord::new(path.to_path_buf(), detect_asset_type(path)));
+    if !path.exists() {
+        return;
+    }
+    output.push(AssetRecord::new(
+        path.to_path_buf(),
+        detect_asset_type(path),
+    ));
     if path.is_dir() {
-        let Ok(entries) = fs::read_dir(path) else { return; };
+        let Ok(entries) = fs::read_dir(path) else {
+            return;
+        };
         for entry in entries.filter_map(Result::ok) {
             collect_records(&entry.path(), output);
         }
@@ -344,13 +405,22 @@ fn collect_records(path: &Path, output: &mut Vec<AssetRecord>) {
 }
 
 fn make_unique_path(target_dir: &Path, source: &Path) -> PathBuf {
-    let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
+    let stem = source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("asset");
     let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     for index in 1..1000 {
-        let candidate_name = if ext.is_empty() { format!("{}_{}", stem, index) } else { format!("{}_{}.{}", stem, index, ext) };
+        let candidate_name = if ext.is_empty() {
+            format!("{}_{}", stem, index)
+        } else {
+            format!("{}_{}.{}", stem, index, ext)
+        };
         let candidate = target_dir.join(candidate_name);
-        if !candidate.exists() { return candidate; }
+        if !candidate.exists() {
+            return candidate;
+        }
     }
 
     target_dir.join(format!("{}_copy", stem))
@@ -358,13 +428,22 @@ fn make_unique_path(target_dir: &Path, source: &Path) -> PathBuf {
 
 fn make_unique_named_path(parent: &Path, original_name: &str) -> PathBuf {
     let original = Path::new(original_name);
-    let stem = original.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
+    let stem = original
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("asset");
     let ext = original.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     for index in 1..1000 {
-        let candidate_name = if ext.is_empty() { format!("{}_copy_{}", stem, index) } else { format!("{}_copy_{}.{}", stem, index, ext) };
+        let candidate_name = if ext.is_empty() {
+            format!("{}_copy_{}", stem, index)
+        } else {
+            format!("{}_copy_{}.{}", stem, index, ext)
+        };
         let candidate = parent.join(candidate_name);
-        if !candidate.exists() { return candidate; }
+        if !candidate.exists() {
+            return candidate;
+        }
     }
 
     parent.join(format!("{}_copy", stem))
@@ -384,7 +463,6 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> io::Result<()> {
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -410,13 +488,25 @@ mod tests {
     fn create_scene_file_and_script_work() {
         let root = temp_root("asset_manager_create");
         let manager = AssetManager::new(root.clone());
-        let scene_path = manager.create_scene_file(&root.join("assets/scenes"), "fase_01").unwrap();
-        let script_path = manager.create_rs2_script_file(&root.join("assets/scripts"), "jogador").unwrap();
+        let scene_path = manager
+            .create_scene_file(&root.join("assets/scenes"), "fase_01")
+            .unwrap();
+        let script_path = manager
+            .create_rs2_script_file(&root.join("assets/scripts"), "jogador")
+            .unwrap();
 
         assert!(scene_path.exists());
         assert!(script_path.exists());
-        assert!(scene_path.file_name().unwrap().to_string_lossy().ends_with(".scene.json"));
-        assert!(script_path.file_name().unwrap().to_string_lossy().ends_with(".rs2"));
+        assert!(scene_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".scene.json"));
+        assert!(script_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".rs2"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -425,10 +515,16 @@ mod tests {
     fn rename_scene_keeps_compound_extension() {
         let root = temp_root("asset_manager_scene_rename");
         let manager = AssetManager::new(root.clone());
-        let scene = manager.create_scene_file(&root.join("assets/scenes"), "fase_teste").unwrap();
+        let scene = manager
+            .create_scene_file(&root.join("assets/scenes"), "fase_teste")
+            .unwrap();
         let renamed = manager.rename_path(&scene, "fase_final").unwrap();
 
-        assert!(renamed.file_name().unwrap().to_string_lossy().ends_with(".scene.json"));
+        assert!(renamed
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".scene.json"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -447,7 +543,11 @@ mod tests {
 
         assert!(original.exists());
         assert!(renamed.exists());
-        assert!(renamed.file_name().unwrap().to_string_lossy().contains("hero_copia"));
+        assert!(renamed
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("hero_copia"));
 
         let _ = fs::remove_dir_all(root);
     }

@@ -94,7 +94,10 @@ impl SpatialHashGrid {
 
             for cell_y in min_cell_y..=max_cell_y {
                 for cell_x in min_cell_x..=max_cell_x {
-                    grid.buckets.entry((cell_x, cell_y)).or_default().push(index);
+                    grid.buckets
+                        .entry((cell_x, cell_y))
+                        .or_default()
+                        .push(index);
                 }
             }
         }
@@ -186,10 +189,13 @@ pub fn intersects_box_circle(box_rect: (f32, f32, f32, f32), circle: (f32, f32, 
 #[inline]
 pub fn intersects(a: &RuntimeCollider, b: &RuntimeCollider) -> bool {
     match (&a.shape, &b.shape) {
-        (Shape2D::Box { .. }, Shape2D::Box { .. }) => intersects_box_box(a.as_box_rect(), b.as_box_rect()),
-        (Shape2D::Circle { .. }, Shape2D::Circle { .. }) => {
-            intersects_circle_circle((a.center_x, a.center_y, a.radius()), (b.center_x, b.center_y, b.radius()))
+        (Shape2D::Box { .. }, Shape2D::Box { .. }) => {
+            intersects_box_box(a.as_box_rect(), b.as_box_rect())
         }
+        (Shape2D::Circle { .. }, Shape2D::Circle { .. }) => intersects_circle_circle(
+            (a.center_x, a.center_y, a.radius()),
+            (b.center_x, b.center_y, b.radius()),
+        ),
         (Shape2D::Box { .. }, Shape2D::Circle { .. }) => {
             intersects_box_circle(a.as_box_rect(), (b.center_x, b.center_y, b.radius()))
         }
@@ -225,13 +231,18 @@ pub fn aabb_mtv(a: (f32, f32, f32, f32), b: (f32, f32, f32, f32)) -> Mtv {
 
     if overlap_x < overlap_y {
         let sign = if acx < bcx { -1.0 } else { 1.0 };
-        Mtv { x: sign * overlap_x, y: 0.0 }
+        Mtv {
+            x: sign * overlap_x,
+            y: 0.0,
+        }
     } else {
         let sign = if acy < bcy { -1.0 } else { 1.0 };
-        Mtv { x: 0.0, y: sign * overlap_y }
+        Mtv {
+            x: 0.0,
+            y: sign * overlap_y,
+        }
     }
 }
-
 
 #[inline]
 pub fn mtv_circle_circle(a: (f32, f32, f32), b: (f32, f32, f32)) -> Mtv {
@@ -243,13 +254,19 @@ pub fn mtv_circle_circle(a: (f32, f32, f32), b: (f32, f32, f32)) -> Mtv {
         return Mtv::default();
     }
     if dist_sq <= f32::EPSILON {
-        return Mtv { x: sum.max(0.001), y: 0.0 };
+        return Mtv {
+            x: sum.max(0.001),
+            y: 0.0,
+        };
     }
     let dist = dist_sq.sqrt();
     let penetration = (sum - dist).max(0.0);
     let nx = dx / dist;
     let ny = dy / dist;
-    Mtv { x: nx * penetration, y: ny * penetration }
+    Mtv {
+        x: nx * penetration,
+        y: ny * penetration,
+    }
 }
 
 #[inline]
@@ -269,7 +286,10 @@ pub fn mtv_circle_box(circle: (f32, f32, f32), box_rect: (f32, f32, f32, f32)) -
         if penetration <= 0.0 {
             return Mtv::default();
         }
-        return Mtv { x: (dx / dist) * penetration, y: (dy / dist) * penetration };
+        return Mtv {
+            x: (dx / dist) * penetration,
+            y: (dy / dist) * penetration,
+        };
     }
 
     let left_pen = (cx - bx).abs();
@@ -279,29 +299,45 @@ pub fn mtv_circle_box(circle: (f32, f32, f32), box_rect: (f32, f32, f32, f32)) -
     let min_pen = left_pen.min(right_pen).min(down_pen).min(up_pen);
 
     if min_pen == left_pen {
-        Mtv { x: -(radius + left_pen).max(0.001), y: 0.0 }
+        Mtv {
+            x: -(radius + left_pen).max(0.001),
+            y: 0.0,
+        }
     } else if min_pen == right_pen {
-        Mtv { x: (radius + right_pen).max(0.001), y: 0.0 }
+        Mtv {
+            x: (radius + right_pen).max(0.001),
+            y: 0.0,
+        }
     } else if min_pen == down_pen {
-        Mtv { x: 0.0, y: -(radius + down_pen).max(0.001) }
+        Mtv {
+            x: 0.0,
+            y: -(radius + down_pen).max(0.001),
+        }
     } else {
-        Mtv { x: 0.0, y: (radius + up_pen).max(0.001) }
+        Mtv {
+            x: 0.0,
+            y: (radius + up_pen).max(0.001),
+        }
     }
 }
 
 #[inline]
 pub fn mtv_box_circle(box_rect: (f32, f32, f32, f32), circle: (f32, f32, f32)) -> Mtv {
     let mtv = mtv_circle_box(circle, box_rect);
-    Mtv { x: -mtv.x, y: -mtv.y }
+    Mtv {
+        x: -mtv.x,
+        y: -mtv.y,
+    }
 }
 
 #[inline]
 pub fn mtv(a: &RuntimeCollider, b: &RuntimeCollider) -> Mtv {
     match (&a.shape, &b.shape) {
         (Shape2D::Box { .. }, Shape2D::Box { .. }) => aabb_mtv(a.as_box_rect(), b.as_box_rect()),
-        (Shape2D::Circle { .. }, Shape2D::Circle { .. }) => {
-            mtv_circle_circle((a.center_x, a.center_y, a.radius()), (b.center_x, b.center_y, b.radius()))
-        }
+        (Shape2D::Circle { .. }, Shape2D::Circle { .. }) => mtv_circle_circle(
+            (a.center_x, a.center_y, a.radius()),
+            (b.center_x, b.center_y, b.radius()),
+        ),
         (Shape2D::Box { .. }, Shape2D::Circle { .. }) => {
             mtv_box_circle(a.as_box_rect(), (b.center_x, b.center_y, b.radius()))
         }
@@ -319,7 +355,10 @@ pub fn can_collide(a: &RuntimeCollider, b: &RuntimeCollider) -> bool {
     if a.entity_id == b.entity_id {
         return false;
     }
-    if !a.entity_ptr.is_null() && !b.entity_ptr.is_null() && std::ptr::eq(a.entity_ptr, b.entity_ptr) {
+    if !a.entity_ptr.is_null()
+        && !b.entity_ptr.is_null()
+        && std::ptr::eq(a.entity_ptr, b.entity_ptr)
+    {
         return false;
     }
 
@@ -398,8 +437,16 @@ pub fn raycast(
         return None;
     }
 
-    let inv_dx = if dir.0.abs() > f32::EPSILON { Some(1.0 / dir.0) } else { None };
-    let inv_dy = if dir.1.abs() > f32::EPSILON { Some(1.0 / dir.1) } else { None };
+    let inv_dx = if dir.0.abs() > f32::EPSILON {
+        Some(1.0 / dir.0)
+    } else {
+        None
+    };
+    let inv_dy = if dir.1.abs() > f32::EPSILON {
+        Some(1.0 / dir.1)
+    } else {
+        None
+    };
     let mut best: Option<RaycastHit> = None;
 
     for col in colliders {
@@ -464,7 +511,10 @@ mod tests {
             center_y: 0.0,
             width: 32.0,
             height: 32.0,
-            shape: Shape2D::Box { width: 32.0, height: 32.0 },
+            shape: Shape2D::Box {
+                width: 32.0,
+                height: 32.0,
+            },
             body_type: BodyType::Kinematic,
             is_trigger: false,
             collision_enabled: true,
@@ -488,20 +538,38 @@ mod tests {
 
     #[test]
     fn intersect_box_box() {
-        assert!(intersects_box_box((0.0, 0.0, 32.0, 32.0), (16.0, 16.0, 32.0, 32.0)));
-        assert!(!intersects_box_box((0.0, 0.0, 32.0, 32.0), (40.0, 0.0, 16.0, 16.0)));
+        assert!(intersects_box_box(
+            (0.0, 0.0, 32.0, 32.0),
+            (16.0, 16.0, 32.0, 32.0)
+        ));
+        assert!(!intersects_box_box(
+            (0.0, 0.0, 32.0, 32.0),
+            (40.0, 0.0, 16.0, 16.0)
+        ));
     }
 
     #[test]
     fn intersect_circle_circle() {
-        assert!(intersects_circle_circle((0.0, 0.0, 10.0), (15.0, 0.0, 10.0)));
-        assert!(!intersects_circle_circle((0.0, 0.0, 10.0), (25.1, 0.0, 10.0)));
+        assert!(intersects_circle_circle(
+            (0.0, 0.0, 10.0),
+            (15.0, 0.0, 10.0)
+        ));
+        assert!(!intersects_circle_circle(
+            (0.0, 0.0, 10.0),
+            (25.1, 0.0, 10.0)
+        ));
     }
 
     #[test]
     fn intersect_box_circle() {
-        assert!(intersects_box_circle((0.0, 0.0, 20.0, 20.0), (25.0, 10.0, 6.0)));
-        assert!(!intersects_box_circle((0.0, 0.0, 20.0, 20.0), (40.0, 10.0, 5.0)));
+        assert!(intersects_box_circle(
+            (0.0, 0.0, 20.0, 20.0),
+            (25.0, 10.0, 6.0)
+        ));
+        assert!(!intersects_box_circle(
+            (0.0, 0.0, 20.0, 20.0),
+            (40.0, 10.0, 5.0)
+        ));
     }
 
     #[test]
@@ -521,4 +589,3 @@ mod tests {
         assert!(!can_collide(&a, &make_box(1, 1)));
     }
 }
-

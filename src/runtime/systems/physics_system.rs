@@ -28,8 +28,16 @@ pub fn apply_gravity(entity: &mut Entity, delta_time: f32, gravity_scale: Option
 /// Retorna true se o pulo foi aplicado.
 #[allow(dead_code)]
 pub fn try_jump(entity: &mut Entity, impulse: f32) -> bool {
-    let grounded = entity.components.iter()
-        .find_map(|c| if let Component::RigidBody2D(rb) = c { Some(rb.grounded) } else { None })
+    let grounded = entity
+        .components
+        .iter()
+        .find_map(|c| {
+            if let Component::RigidBody2D(rb) = c {
+                Some(rb.grounded)
+            } else {
+                None
+            }
+        })
         .unwrap_or(false);
 
     if !grounded {
@@ -82,7 +90,6 @@ pub fn set_grounded(entity: &mut Entity, grounded: bool) {
         }
     }
 }
-
 
 pub fn reset_contact_flags(entity: &mut Entity) {
     for component in &mut entity.components {

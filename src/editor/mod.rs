@@ -3,13 +3,13 @@
 //  Módulo raiz do editor — junta todos os painéis da UI
 // ============================================================
 
+mod animator_editor;
+mod asset_browser;
 mod hierarchy;
 mod inspector;
-mod asset_browser;
-mod scene_view;
 mod menubar;
+mod scene_view;
 mod warnings;
-mod animator_editor;
 
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -26,14 +26,18 @@ use std::{
 
 use crate::{
     assets::AssetManager,
+    core::version,
     core::{
         component::{Component, Sprite},
         entity::Entity,
-        project::{ProjectConfig, create_basic_project_template_at},
+        project::{create_basic_project_template_at, ProjectConfig},
         scene::Scene,
     },
-    runtime::{self, RuntimeState, context::{RuntimeContext, RuntimePlayState}},
-    core::version,
+    runtime::{
+        self,
+        context::{RuntimeContext, RuntimePlayState},
+        RuntimeState,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,7 +57,6 @@ pub enum AssetBrowserFilter {
     Audio,
     Fonts,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BottomDockTab {
@@ -284,7 +287,6 @@ pub struct EditorApp {
     build_dialog_pending: Option<BuildDialogPending>,
 }
 
-
 impl EditorApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let engine_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -395,14 +397,17 @@ impl EditorApp {
         }
     }
 
-
-
     fn current_project_name(&self) -> String {
         ProjectConfig::load_or_create(&self.project_root).name
     }
 
     fn update_window_title(&self, ctx: &egui::Context) {
-        let title = format!("{} {} - {}", version::ENGINE_TITLE, version::ENGINE_VERSION, self.current_project_name());
+        let title = format!(
+            "{} {} - {}",
+            version::ENGINE_TITLE,
+            version::ENGINE_VERSION,
+            self.current_project_name()
+        );
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
     }
 
@@ -414,11 +419,18 @@ impl EditorApp {
 
     fn register_recent_project(&mut self, root: &Path) {
         let root_str = root.to_string_lossy().to_string();
-        self.project_hub_session.recent_projects.retain(|p| p != &root_str);
-        self.project_hub_session.recent_projects.insert(0, root_str.clone());
+        self.project_hub_session
+            .recent_projects
+            .retain(|p| p != &root_str);
+        self.project_hub_session
+            .recent_projects
+            .insert(0, root_str.clone());
         self.project_hub_session.recent_projects.truncate(8);
         self.project_hub_session.last_project = Some(root_str);
-        let _ = save_project_hub_session(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")), &self.project_hub_session);
+        let _ = save_project_hub_session(
+            &std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            &self.project_hub_session,
+        );
     }
 
     fn load_project_root(&mut self, ctx: &egui::Context, root: PathBuf) -> Result<(), String> {
@@ -436,7 +448,10 @@ impl EditorApp {
         self.assets = AssetManager::new(root.clone());
         self.assets.refresh();
         self.scene = initial_scene.clone();
-        self.open_scenes = vec![OpenSceneDocument { scene: initial_scene, file_path: Some(root.join(&project_config.initial_scene)) }];
+        self.open_scenes = vec![OpenSceneDocument {
+            scene: initial_scene,
+            file_path: Some(root.join(&project_config.initial_scene)),
+        }];
         self.active_scene_index = 0;
         self.selected_entity_id = None;
         self.selected_entity_ids.clear();
@@ -454,14 +469,24 @@ impl EditorApp {
         Ok(())
     }
 
-    fn create_new_project_at(&mut self, ctx: &egui::Context, project_name: &str, base_dir: &str) -> Result<(), String> {
+    fn create_new_project_at(
+        &mut self,
+        ctx: &egui::Context,
+        project_name: &str,
+        base_dir: &str,
+    ) -> Result<(), String> {
         let base = PathBuf::from(base_dir.trim());
         if base_dir.trim().is_empty() {
             return Err("Escolha uma pasta base para o projeto.".to_string());
         }
         let folder_name = sanitize_filename(project_name.trim());
-        let project_root = base.join(if folder_name.is_empty() { "MeuProjeto" } else { &folder_name });
-        fs::create_dir_all(&project_root).map_err(|e| format!("Falha ao criar pasta do projeto: {}", e))?;
+        let project_root = base.join(if folder_name.is_empty() {
+            "MeuProjeto"
+        } else {
+            &folder_name
+        });
+        fs::create_dir_all(&project_root)
+            .map_err(|e| format!("Falha ao criar pasta do projeto: {}", e))?;
         create_basic_project_template_at(&project_root, project_name)
             .map_err(|e| format!("Falha ao criar template do projeto: {}", e))?;
         self.load_project_root(ctx, project_root)
@@ -474,7 +499,11 @@ impl EditorApp {
         self.app_screen = EditorScreen::ProjectHub;
         self.show_version_popup = false;
         self.status_msg = "Projeto fechado. Escolha outro projeto ou crie um novo.".to_string();
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION)));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!(
+            "{} {}",
+            version::ENGINE_TITLE,
+            version::ENGINE_VERSION
+        )));
     }
 
     fn show_project_hub(&mut self, ctx: &egui::Context) {
@@ -489,247 +518,246 @@ impl EditorApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(bg))
             .show(ctx, |ui| {
-
-            // ── Título centrado ──
-            ui.add_space(28.0);
-            ui.vertical_centered(|ui| {
-                ui.label(
-                    egui::RichText::new(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION))
+                // ── Título centrado ──
+                ui.add_space(28.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} {}",
+                            version::ENGINE_TITLE,
+                            version::ENGINE_VERSION
+                        ))
                         .size(22.0)
                         .color(egui::Color32::WHITE)
                         .strong(),
-                );
-                ui.label(
-                    egui::RichText::new("Hub de Projetos")
-                        .size(13.0)
-                        .color(text_dim),
-                );
-            });
-            ui.add_space(24.0);
+                    );
+                    ui.label(
+                        egui::RichText::new("Hub de Projetos")
+                            .size(13.0)
+                            .color(text_dim),
+                    );
+                });
+                ui.add_space(24.0);
 
-            // ── Layout 2 colunas ──
-            let avail = ui.available_width();
-            let col_w = (avail - 24.0) * 0.5;
+                // ── Layout 2 colunas ──
+                let avail = ui.available_width();
+                let col_w = (avail - 24.0) * 0.5;
 
-            ui.horizontal(|ui| {
-                ui.add_space(12.0);
-
-                // ── Coluna esquerda: Último Projeto + Recentes ──
-                ui.vertical(|ui| {
-                    ui.set_width(col_w);
-
-                    // Último Projeto
-                    egui::Frame::none()
-                        .fill(panel_bg)
-                        .rounding(8.0)
-                        .inner_margin(egui::Margin::same(14.0))
-                        .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("Último Projeto")
-                                    .color(text_dim)
-                                    .size(11.0),
-                            );
-                            ui.add_space(4.0);
-                            match self.project_hub_session.last_project.clone() {
-                                Some(path) => {
-                                    ui.label(
-                                        egui::RichText::new(&path)
-                                            .color(egui::Color32::WHITE)
-                                            .size(13.0),
-                                    );
-                                    ui.label(
-                                        egui::RichText::new("Continuar último projeto")
-                                            .color(text_dim)
-                                            .size(11.0),
-                                    );
-                                    ui.add_space(10.0);
-                                    let btn = egui::Button::new(
-                                        egui::RichText::new("Continuar último projeto")
-                                            .color(egui::Color32::WHITE),
-                                    )
-                                    .fill(egui::Color32::from_rgb(42, 74, 124))
-                                    .min_size(egui::vec2(ui.available_width(), 32.0));
-                                    if ui.add(btn).clicked() {
-                                        let root = PathBuf::from(path);
-                                        if let Err(e) = self.load_project_root(ctx, root) {
-                                            self.status_msg = format!("❌ {}", e);
-                                        }
-                                    }
-                                }
-                                None => {
-                                    ui.label(
-                                        egui::RichText::new("Nenhum projeto recente salvo.")
-                                            .color(text_dim),
-                                    );
-                                }
-                            }
-                        });
-
+                ui.horizontal(|ui| {
                     ui.add_space(12.0);
 
-                    // Projetos Recentes
-                    egui::Frame::none()
-                        .fill(panel_bg)
-                        .rounding(8.0)
-                        .inner_margin(egui::Margin::same(14.0))
-                        .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("Projetos Recentes")
-                                    .color(text_dim)
-                                    .size(11.0),
-                            );
-                            ui.add_space(6.0);
-                            if self.project_hub_session.recent_projects.is_empty() {
+                    // ── Coluna esquerda: Último Projeto + Recentes ──
+                    ui.vertical(|ui| {
+                        ui.set_width(col_w);
+
+                        // Último Projeto
+                        egui::Frame::none()
+                            .fill(panel_bg)
+                            .rounding(8.0)
+                            .inner_margin(egui::Margin::same(14.0))
+                            .show(ui, |ui| {
                                 ui.label(
-                                    egui::RichText::new("Nenhum projeto recente.")
-                                        .color(text_dim),
+                                    egui::RichText::new("Último Projeto")
+                                        .color(text_dim)
+                                        .size(11.0),
                                 );
-                            } else {
-                                let recent = self.project_hub_session.recent_projects.clone();
-                                for path in recent {
-                                    let resp = ui.add(
-                                        egui::Button::new(
+                                ui.add_space(4.0);
+                                match self.project_hub_session.last_project.clone() {
+                                    Some(path) => {
+                                        ui.label(
                                             egui::RichText::new(&path)
                                                 .color(egui::Color32::WHITE)
-                                                .size(12.0),
+                                                .size(13.0),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new("Continuar último projeto")
+                                                .color(text_dim)
+                                                .size(11.0),
+                                        );
+                                        ui.add_space(10.0);
+                                        let btn = egui::Button::new(
+                                            egui::RichText::new("Continuar último projeto")
+                                                .color(egui::Color32::WHITE),
                                         )
-                                        .fill(btn_bg)
-                                        .min_size(egui::vec2(ui.available_width() - 60.0, 28.0)),
+                                        .fill(egui::Color32::from_rgb(42, 74, 124))
+                                        .min_size(egui::vec2(ui.available_width(), 32.0));
+                                        if ui.add(btn).clicked() {
+                                            let root = PathBuf::from(path);
+                                            if let Err(e) = self.load_project_root(ctx, root) {
+                                                self.status_msg = format!("❌ {}", e);
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        ui.label(
+                                            egui::RichText::new("Nenhum projeto recente salvo.")
+                                                .color(text_dim),
+                                        );
+                                    }
+                                }
+                            });
+
+                        ui.add_space(12.0);
+
+                        // Projetos Recentes
+                        egui::Frame::none()
+                            .fill(panel_bg)
+                            .rounding(8.0)
+                            .inner_margin(egui::Margin::same(14.0))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new("Projetos Recentes")
+                                        .color(text_dim)
+                                        .size(11.0),
+                                );
+                                ui.add_space(6.0);
+                                if self.project_hub_session.recent_projects.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("Nenhum projeto recente.")
+                                            .color(text_dim),
                                     );
-                                    // "Abrir" ao lado
-                                    // layout manual: usamos horizontal dentro
-                                    let _ = resp; // handled below via horizontal
-                                    ui.add_space(-28.0); // volta para fazer horizontal
-                                    ui.horizontal(|ui| {
-                                        let w = ui.available_width();
-                                        let path_resp = ui.add(
+                                } else {
+                                    let recent = self.project_hub_session.recent_projects.clone();
+                                    for path in recent {
+                                        let resp = ui.add(
                                             egui::Button::new(
                                                 egui::RichText::new(&path)
                                                     .color(egui::Color32::WHITE)
                                                     .size(12.0),
                                             )
                                             .fill(btn_bg)
-                                            .min_size(egui::vec2(w - 64.0, 28.0)),
+                                            .min_size(
+                                                egui::vec2(ui.available_width() - 60.0, 28.0),
+                                            ),
                                         );
-                                        let open_resp = ui.add(
-                                            egui::Button::new(
-                                                egui::RichText::new("Abrir")
-                                                    .color(accent),
-                                            )
-                                            .fill(btn_bg)
-                                            .min_size(egui::vec2(56.0, 28.0)),
-                                        );
-                                        if path_resp.double_clicked() || open_resp.clicked() {
-                                            if let Err(e) = self.load_project_root(ctx, PathBuf::from(&path)) {
-                                                self.status_msg = format!("❌ {}", e);
+                                        // "Abrir" ao lado
+                                        // layout manual: usamos horizontal dentro
+                                        let _ = resp; // handled below via horizontal
+                                        ui.add_space(-28.0); // volta para fazer horizontal
+                                        ui.horizontal(|ui| {
+                                            let w = ui.available_width();
+                                            let path_resp = ui.add(
+                                                egui::Button::new(
+                                                    egui::RichText::new(&path)
+                                                        .color(egui::Color32::WHITE)
+                                                        .size(12.0),
+                                                )
+                                                .fill(btn_bg)
+                                                .min_size(egui::vec2(w - 64.0, 28.0)),
+                                            );
+                                            let open_resp = ui.add(
+                                                egui::Button::new(
+                                                    egui::RichText::new("Abrir").color(accent),
+                                                )
+                                                .fill(btn_bg)
+                                                .min_size(egui::vec2(56.0, 28.0)),
+                                            );
+                                            if path_resp.double_clicked() || open_resp.clicked() {
+                                                if let Err(e) = self
+                                                    .load_project_root(ctx, PathBuf::from(&path))
+                                                {
+                                                    self.status_msg = format!("❌ {}", e);
+                                                }
                                             }
-                                        }
-                                    });
-                                    ui.add_space(2.0);
-                                }
-                            }
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new("Selecione um projeto para começar.")
-                                    .color(text_dim)
-                                    .size(10.0),
-                            );
-                        });
-                });
-
-                ui.add_space(12.0);
-
-                // ── Coluna direita: Ações ──
-                ui.vertical(|ui| {
-                    ui.set_width(col_w);
-                    egui::Frame::none()
-                        .fill(panel_bg)
-                        .rounding(8.0)
-                        .inner_margin(egui::Margin::same(14.0))
-                        .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("Ações")
-                                    .color(text_dim)
-                                    .size(11.0),
-                            );
-                            ui.add_space(8.0);
-
-                            let actions: &[(&str, &str)] = &[
-                                ("Novo Projeto...", "🆕"),
-                                ("Abrir Projeto...", "📂"),
-                                ("Entrar no editor atual", "✏"),
-                                ("Sair", "🚪"),
-                            ];
-
-                            for (label, icon) in actions {
-                                let full = format!("{}  {}", icon, label);
-                                let btn = egui::Button::new(
-                                    egui::RichText::new(&full)
-                                        .color(egui::Color32::WHITE)
-                                        .size(13.0),
-                                )
-                                .fill(btn_bg)
-                                .min_size(egui::vec2(ui.available_width(), 38.0));
-
-                                let _hover_id = egui::Id::new(format!("hub_btn_{}", label));
-                                let resp = ui.add(btn);
-                                if resp.hovered() {
-                                    ui.painter().rect_filled(
-                                        resp.rect,
-                                        6.0,
-                                        btn_hover,
-                                    );
-                                }
-
-                                // Seta › à direita
-                                ui.painter().text(
-                                    egui::pos2(resp.rect.right() - 16.0, resp.rect.center().y),
-                                    egui::Align2::CENTER_CENTER,
-                                    "›",
-                                    egui::FontId::proportional(16.0),
-                                    text_dim,
-                                );
-
-                                if resp.clicked() {
-                                    match *label {
-                                        "Novo Projeto..." => {
-                                            let base = std::env::current_dir()
-                                                .unwrap_or_else(|_| PathBuf::from("."))
-                                                .to_string_lossy()
-                                                .to_string();
-                                            self.new_project_dialog = Some(("MeuProjeto".to_string(), base));
-                                        }
-                                        "Abrir Projeto..." => {
-                                            self.open_project_dialog = Some(String::new());
-                                        }
-                                        "Entrar no editor atual" => {
-                                            self.enter_editor_for_current_project(ctx);
-                                        }
-                                        "Sair" => {
-                                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                        }
-                                        _ => {}
+                                        });
+                                        ui.add_space(2.0);
                                     }
                                 }
                                 ui.add_space(4.0);
-                            }
-                        });
+                                ui.label(
+                                    egui::RichText::new("Selecione um projeto para começar.")
+                                        .color(text_dim)
+                                        .size(10.0),
+                                );
+                            });
+                    });
+
+                    ui.add_space(12.0);
+
+                    // ── Coluna direita: Ações ──
+                    ui.vertical(|ui| {
+                        ui.set_width(col_w);
+                        egui::Frame::none()
+                            .fill(panel_bg)
+                            .rounding(8.0)
+                            .inner_margin(egui::Margin::same(14.0))
+                            .show(ui, |ui| {
+                                ui.label(egui::RichText::new("Ações").color(text_dim).size(11.0));
+                                ui.add_space(8.0);
+
+                                let actions: &[(&str, &str)] = &[
+                                    ("Novo Projeto...", "🆕"),
+                                    ("Abrir Projeto...", "📂"),
+                                    ("Entrar no editor atual", "✏"),
+                                    ("Sair", "🚪"),
+                                ];
+
+                                for (label, icon) in actions {
+                                    let full = format!("{}  {}", icon, label);
+                                    let btn = egui::Button::new(
+                                        egui::RichText::new(&full)
+                                            .color(egui::Color32::WHITE)
+                                            .size(13.0),
+                                    )
+                                    .fill(btn_bg)
+                                    .min_size(egui::vec2(ui.available_width(), 38.0));
+
+                                    let _hover_id = egui::Id::new(format!("hub_btn_{}", label));
+                                    let resp = ui.add(btn);
+                                    if resp.hovered() {
+                                        ui.painter().rect_filled(resp.rect, 6.0, btn_hover);
+                                    }
+
+                                    // Seta › à direita
+                                    ui.painter().text(
+                                        egui::pos2(resp.rect.right() - 16.0, resp.rect.center().y),
+                                        egui::Align2::CENTER_CENTER,
+                                        "›",
+                                        egui::FontId::proportional(16.0),
+                                        text_dim,
+                                    );
+
+                                    if resp.clicked() {
+                                        match *label {
+                                            "Novo Projeto..." => {
+                                                let base = std::env::current_dir()
+                                                    .unwrap_or_else(|_| PathBuf::from("."))
+                                                    .to_string_lossy()
+                                                    .to_string();
+                                                self.new_project_dialog =
+                                                    Some(("MeuProjeto".to_string(), base));
+                                            }
+                                            "Abrir Projeto..." => {
+                                                self.open_project_dialog = Some(String::new());
+                                            }
+                                            "Entrar no editor atual" => {
+                                                self.enter_editor_for_current_project(ctx);
+                                            }
+                                            "Sair" => {
+                                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    ui.add_space(4.0);
+                                }
+                            });
+                    });
+
+                    ui.add_space(12.0);
                 });
 
-                ui.add_space(12.0);
+                // ── Status ──
+                if !self.status_msg.is_empty() {
+                    ui.add_space(12.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            egui::RichText::new(&self.status_msg)
+                                .color(egui::Color32::from_rgb(255, 180, 80)),
+                        );
+                    });
+                }
             });
-
-            // ── Status ──
-            if !self.status_msg.is_empty() {
-                ui.add_space(12.0);
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new(&self.status_msg)
-                            .color(egui::Color32::from_rgb(255, 180, 80)),
-                    );
-                });
-            }
-        });
 
         self.sync_console_from_status();
 
@@ -773,7 +801,9 @@ impl EditorApp {
                         }
                     });
                 });
-            if !open { self.new_project_dialog = None; }
+            if !open {
+                self.new_project_dialog = None;
+            }
         }
     }
 
@@ -790,17 +820,24 @@ impl EditorApp {
                     ui.label("Pasta do projeto ou arquivo project.json:");
                     ui.text_edit_singleline(&mut buf);
                     if ui.button("Escolher...").clicked() {
-                        if let Some(file) = rfd::FileDialog::new().add_filter("Projeto RS2BR", &["json"]).pick_file() {
+                        if let Some(file) = rfd::FileDialog::new()
+                            .add_filter("Projeto RS2BR", &["json"])
+                            .pick_file()
+                        {
                             buf = file.to_string_lossy().to_string();
                         } else if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                             buf = folder.to_string_lossy().to_string();
                         }
                     }
-                    if let Some(v) = self.open_project_dialog.as_mut() { *v = buf.clone(); }
+                    if let Some(v) = self.open_project_dialog.as_mut() {
+                        *v = buf.clone();
+                    }
                     ui.horizontal(|ui| {
                         if ui.button("Abrir").clicked() {
                             let mut root = PathBuf::from(buf.trim());
-                            if root.is_file() { root = root.parent().unwrap_or(Path::new(".")).to_path_buf(); }
+                            if root.is_file() {
+                                root = root.parent().unwrap_or(Path::new(".")).to_path_buf();
+                            }
                             if let Err(e) = self.load_project_root(ctx, root) {
                                 self.status_msg = format!("❌ {}", e);
                             }
@@ -811,10 +848,11 @@ impl EditorApp {
                         }
                     });
                 });
-            if !open { self.open_project_dialog = None; }
+            if !open {
+                self.open_project_dialog = None;
+            }
         }
     }
-
 
     fn show_version_popup(&mut self, ctx: &egui::Context) {
         if !self.show_version_popup {
@@ -826,7 +864,11 @@ impl EditorApp {
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
-                ui.heading(format!("{} {}", version::ENGINE_TITLE, version::ENGINE_VERSION));
+                ui.heading(format!(
+                    "{} {}",
+                    version::ENGINE_TITLE,
+                    version::ENGINE_VERSION
+                ));
                 ui.label(format!("Status: {}", version::ENGINE_STATUS));
                 ui.label("Esta versão está em teste.");
                 ui.label("Clique em OK para continuar e confirmar qual versão está aberta.");
@@ -1026,7 +1068,6 @@ impl EditorApp {
         }
     }
 
-
     pub fn collect_runtime_warnings(&self) -> Vec<RuntimePreviewWarning> {
         warnings::collect_scene_warnings(&self.project_root, &self.scene)
             .into_iter()
@@ -1104,10 +1145,13 @@ impl EditorApp {
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("Falha ao ler MATR: {}", e))?;
 
-        let mut entity = if let Some(prefab) = crate::serialization::prefab_serializer::prefab_from_json(&content) {
+        let mut entity = if let Some(prefab) =
+            crate::serialization::prefab_serializer::prefab_from_json(&content)
+        {
             prefab.root_entity
         } else {
-            Entity::from_json(&content).ok_or_else(|| "Prefab/MATR inválido ou corrompido.".to_string())?
+            Entity::from_json(&content)
+                .ok_or_else(|| "Prefab/MATR inválido ou corrompido.".to_string())?
         };
 
         entity.regenerate_ids_recursive();
@@ -1200,9 +1244,7 @@ impl EditorApp {
         self.assets.refresh();
         self.status_msg = format!(
             "✅ Cena carregada: {}",
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("cena")
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("cena")
         );
         Ok(())
     }
@@ -1261,8 +1303,9 @@ impl EditorApp {
 
         let saved_scene_path = self.save_active_scene()?;
 
-        let engine_root = find_engine_root(&self.project_root)
-            .ok_or_else(|| "Não foi possível localizar a raiz da engine (Cargo.toml).".to_string())?;
+        let engine_root = find_engine_root(&self.project_root).ok_or_else(|| {
+            "Não foi possível localizar a raiz da engine (Cargo.toml).".to_string()
+        })?;
 
         let cargo_toml = engine_root.join("Cargo.toml");
         let bin_name = detect_bin_name(&cargo_toml).unwrap_or_else(|| "rs2br-engine".to_string());
@@ -1331,7 +1374,10 @@ impl EditorApp {
             saved_scene_name,
         });
 
-        self.status_msg = format!("🔧 Aguardando escolha de destino para build '{}'...", project_name);
+        self.status_msg = format!(
+            "🔧 Aguardando escolha de destino para build '{}'...",
+            project_name
+        );
         Ok(())
     }
 
@@ -1382,7 +1428,10 @@ impl EditorApp {
         self.build_job = Some(BuildJobState {
             receiver: rx,
             current_step: "Preparando build standalone...".to_string(),
-            log_lines: vec![format!("🔧 Preparando build do projeto '{}'...", project_name)],
+            log_lines: vec![format!(
+                "🔧 Preparando build do projeto '{}'...",
+                project_name
+            )],
             started_at: Instant::now(),
             progress: 0.05,
             estimated_total: 90.0,
@@ -1398,13 +1447,18 @@ impl EditorApp {
         ));
         if use_prebuilt_runtime {
             self.push_console_message(
-                "ℹ Runtime pré-compilado detectado. Build seguirá sem Rust/Cargo instalados.".to_string(),
+                "ℹ Runtime pré-compilado detectado. Build seguirá sem Rust/Cargo instalados."
+                    .to_string(),
             );
         }
 
         thread::spawn(move || {
-            let send_step = |msg: &str| { let _ = tx.send(BuildWorkerMessage::Step(msg.to_string())); };
-            let finish = |result: Result<PathBuf, String>| { let _ = tx.send(BuildWorkerMessage::Finished(result)); };
+            let send_step = |msg: &str| {
+                let _ = tx.send(BuildWorkerMessage::Step(msg.to_string()));
+            };
+            let finish = |result: Result<PathBuf, String>| {
+                let _ = tx.send(BuildWorkerMessage::Finished(result));
+            };
 
             let run = || -> Result<PathBuf, String> {
                 if build_cache_root.exists() {
@@ -1467,7 +1521,8 @@ impl EditorApp {
                             for line in reader.lines().map_while(Result::ok) {
                                 let trimmed = line.trim();
                                 if !trimmed.is_empty() {
-                                    let _ = tx_out.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                                    let _ =
+                                        tx_out.send(BuildWorkerMessage::Log(trimmed.to_string()));
                                 }
                             }
                         })
@@ -1480,15 +1535,22 @@ impl EditorApp {
                             for line in reader.lines().map_while(Result::ok) {
                                 let trimmed = line.trim();
                                 if !trimmed.is_empty() {
-                                    let _ = tx_err.send(BuildWorkerMessage::Log(trimmed.to_string()));
+                                    let _ =
+                                        tx_err.send(BuildWorkerMessage::Log(trimmed.to_string()));
                                 }
                             }
                         })
                     });
 
-                    let status = child.wait().map_err(|e| format!("Falha ao aguardar término da build: {}", e))?;
-                    if let Some(handle) = stdout_handle { let _ = handle.join(); }
-                    if let Some(handle) = stderr_handle { let _ = handle.join(); }
+                    let status = child
+                        .wait()
+                        .map_err(|e| format!("Falha ao aguardar término da build: {}", e))?;
+                    if let Some(handle) = stdout_handle {
+                        let _ = handle.join();
+                    }
+                    if let Some(handle) = stderr_handle {
+                        let _ = handle.join();
+                    }
 
                     if !status.success() {
                         return Err(format!(
@@ -1498,7 +1560,10 @@ impl EditorApp {
                         ));
                     }
 
-                    build_cache_root.join("target").join("release").join(&engine_exe_name)
+                    build_cache_root
+                        .join("target")
+                        .join("release")
+                        .join(&engine_exe_name)
                 };
 
                 send_step("Montando pasta final do jogo...");
@@ -1510,8 +1575,9 @@ impl EditorApp {
                     ));
                 }
 
-                copy_runtime_binary_set(&exe_src, &staged_export_root, &game_exe_name)
-                    .map_err(|e| format!("Falha ao copiar executável/dependências do jogo: {}", e))?;
+                copy_runtime_binary_set(&exe_src, &staged_export_root, &game_exe_name).map_err(
+                    |e| format!("Falha ao copiar executável/dependências do jogo: {}", e),
+                )?;
 
                 if project_json_src.exists() {
                     fs::copy(&project_json_src, staged_export_root.join("project.json"))
@@ -1601,7 +1667,8 @@ impl EditorApp {
                     if let Some(job) = &mut self.build_job {
                         job.current_step = step.clone();
                         let elapsed = job.started_at.elapsed().as_secs_f32();
-                        let (progress, estimated_total) = estimate_build_progress(&step, elapsed, &job.log_lines);
+                        let (progress, estimated_total) =
+                            estimate_build_progress(&step, elapsed, &job.log_lines);
                         job.progress = progress;
                         job.estimated_total = estimated_total;
                         job.log_lines.push(format!("➡ {}", step));
@@ -1616,7 +1683,8 @@ impl EditorApp {
                     if let Some(job) = &mut self.build_job {
                         job.log_lines.push(line.clone());
                         let elapsed = job.started_at.elapsed().as_secs_f32();
-                        let (progress, estimated_total) = estimate_build_progress(&job.current_step, elapsed, &job.log_lines);
+                        let (progress, estimated_total) =
+                            estimate_build_progress(&job.current_step, elapsed, &job.log_lines);
                         job.progress = progress;
                         job.estimated_total = estimated_total;
                         if job.log_lines.len() > 400 {
@@ -1643,7 +1711,11 @@ impl EditorApp {
             let (predicted_progress, estimated_total) =
                 estimate_build_progress(&job.current_step, elapsed, &job.log_lines);
             job.estimated_total = estimated_total;
-            let hard_cap = if job.pending_result.is_some() { 1.0 } else { 0.99 };
+            let hard_cap = if job.pending_result.is_some() {
+                1.0
+            } else {
+                0.99
+            };
             job.progress = job.progress.max(predicted_progress).clamp(0.0, hard_cap);
             if job.pending_result.is_some() && Instant::now() >= job.min_visible_until {
                 ready_result = job.pending_result.take();
@@ -1654,8 +1726,12 @@ impl EditorApp {
             self.build_job = None;
             match result {
                 Ok(path) => {
-                    self.status_msg = format!("✅ Build Standalone PC concluído: {}", path.display());
-                    self.push_console_message(format!("✅ Build finalizada com sucesso em {}", path.display()));
+                    self.status_msg =
+                        format!("✅ Build Standalone PC concluído: {}", path.display());
+                    self.push_console_message(format!(
+                        "✅ Build finalizada com sucesso em {}",
+                        path.display()
+                    ));
                 }
                 Err(error) => {
                     self.status_msg = format!("❌ {}", error);
@@ -1681,8 +1757,16 @@ impl EditorApp {
         let progress = job.progress.clamp(0.0, 1.0);
         let step = job.current_step.clone();
         // Últimas linhas do log do compilador para o usuário ver que está compilando
-        let log_tail: Vec<String> = job.log_lines
-            .iter().rev().take(6).cloned().collect::<Vec<_>>().into_iter().rev().collect();
+        let log_tail: Vec<String> = job
+            .log_lines
+            .iter()
+            .rev()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
 
         egui::Window::new("Build Standalone PC")
             .collapsible(false)
@@ -1691,9 +1775,11 @@ impl EditorApp {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 if is_done {
-                    ui.label(egui::RichText::new("✅ Build concluída!")
-                        .strong()
-                        .color(egui::Color32::from_rgb(120, 220, 140)));
+                    ui.label(
+                        egui::RichText::new("✅ Build concluída!")
+                            .strong()
+                            .color(egui::Color32::from_rgb(120, 220, 140)),
+                    );
                 } else {
                     ui.horizontal(|ui| {
                         ui.add(egui::Spinner::new());
@@ -1777,7 +1863,12 @@ impl EditorApp {
                         if ui.button("✅ Criar").clicked() {
                             match self.assets.create_rs2_script_file(&folder, &buf) {
                                 Ok(p) => {
-                                    self.status_msg = format!("✅ Script RS2 criado: {}", p.file_name().and_then(|n| n.to_str()).unwrap_or("script.rs2"));
+                                    self.status_msg = format!(
+                                        "✅ Script RS2 criado: {}",
+                                        p.file_name()
+                                            .and_then(|n| n.to_str())
+                                            .unwrap_or("script.rs2")
+                                    );
                                     self.assets.refresh();
 
                                     #[cfg(target_os = "windows")]
@@ -1829,7 +1920,9 @@ impl EditorApp {
                                     self.selected_asset = Some(p.clone());
                                     self.status_msg = format!(
                                         "🌙 Script Lua criado: {}",
-                                        p.file_name().and_then(|n| n.to_str()).unwrap_or("script.lua")
+                                        p.file_name()
+                                            .and_then(|n| n.to_str())
+                                            .unwrap_or("script.lua")
                                     );
                                     #[cfg(target_os = "windows")]
                                     {
@@ -1876,7 +1969,10 @@ impl EditorApp {
                         if ui.button("✅ Criar").clicked() {
                             match self.assets.create_folder(&parent, &buf) {
                                 Ok(_) => {
-                                    self.status_msg = format!("✅ Pasta criada: {}", crate::assets::manager::sanitize_asset_name(&buf));
+                                    self.status_msg = format!(
+                                        "✅ Pasta criada: {}",
+                                        crate::assets::manager::sanitize_asset_name(&buf)
+                                    );
                                     self.assets.refresh();
                                 }
                                 Err(e) => self.status_msg = format!("Erro: {}", e),
@@ -1957,7 +2053,8 @@ impl EditorApp {
                                 Ok(path) => {
                                     self.assets.refresh();
                                     self.selected_asset = Some(path.clone());
-                                    self.status_msg = format!("📦 Template '{}' criado.", buf.trim());
+                                    self.status_msg =
+                                        format!("📦 Template '{}' criado.", buf.trim());
                                 }
                                 Err(e) => self.status_msg = format!("❌ {}", e),
                             }
@@ -2006,8 +2103,7 @@ impl EditorApp {
                                     );
                                 }
                                 Err(e) => {
-                                    self.status_msg =
-                                        format!("❌ Erro ao renomear asset: {}", e);
+                                    self.status_msg = format!("❌ Erro ao renomear asset: {}", e);
                                 }
                             }
                             self.rename_asset_dialog = None;
@@ -2047,7 +2143,8 @@ impl EditorApp {
                             if !buf.trim().is_empty() {
                                 if let Some(entity) = self.find_entity_mut(&entity_id) {
                                     entity.name = buf.trim().to_string();
-                                    self.status_msg = format!("✅ Entidade renomeada para '{}'.", buf.trim());
+                                    self.status_msg =
+                                        format!("✅ Entidade renomeada para '{}'.", buf.trim());
                                 }
                             }
                             self.rename_entity_dialog = None;
@@ -2101,24 +2198,26 @@ impl EditorApp {
                                     format!("🗑 {} removidas.", label)
                                 };
                             }
-                            DeleteTarget::Asset { path, label } => match self.assets.delete_path(&path) {
-                                Ok(_) => {
-                                    self.assets.refresh();
-                                    if self
-                                        .selected_asset
-                                        .as_ref()
-                                        .map(|p| p == &path || p.starts_with(&path))
-                                        .unwrap_or(false)
-                                    {
-                                        self.selected_asset = None;
+                            DeleteTarget::Asset { path, label } => {
+                                match self.assets.delete_path(&path) {
+                                    Ok(_) => {
+                                        self.assets.refresh();
+                                        if self
+                                            .selected_asset
+                                            .as_ref()
+                                            .map(|p| p == &path || p.starts_with(&path))
+                                            .unwrap_or(false)
+                                        {
+                                            self.selected_asset = None;
+                                        }
+                                        self.status_msg = format!("🗑 '{}' removido.", label);
                                     }
-                                    self.status_msg = format!("🗑 '{}' removido.", label);
+                                    Err(e) => {
+                                        self.status_msg =
+                                            format!("❌ Erro ao deletar '{}': {}", label, e);
+                                    }
                                 }
-                                Err(e) => {
-                                    self.status_msg =
-                                        format!("❌ Erro ao deletar '{}': {}", label, e);
-                                }
-                            },
+                            }
                         }
                         self.delete_confirmation = None;
                     }
@@ -2162,37 +2261,37 @@ impl eframe::App for EditorApp {
         // ── Tema escuro profundo — v0.9 ──
         let mut visuals = egui::Visuals::dark();
         visuals.override_text_color = Some(egui::Color32::from_rgb(220, 227, 236));
-        visuals.panel_fill              = egui::Color32::from_rgb(16, 23, 36);
-        visuals.faint_bg_color          = egui::Color32::from_rgb(24, 33, 50);
-        visuals.extreme_bg_color        = egui::Color32::from_rgb(11, 16, 28);
-        visuals.code_bg_color           = egui::Color32::from_rgb(18, 26, 40);
-        visuals.window_fill             = egui::Color32::from_rgb(20, 29, 45);
-        visuals.widgets.noninteractive.bg_fill      = egui::Color32::from_rgb(30, 36, 46);
+        visuals.panel_fill = egui::Color32::from_rgb(16, 23, 36);
+        visuals.faint_bg_color = egui::Color32::from_rgb(24, 33, 50);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(11, 16, 28);
+        visuals.code_bg_color = egui::Color32::from_rgb(18, 26, 40);
+        visuals.window_fill = egui::Color32::from_rgb(20, 29, 45);
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(30, 36, 46);
         visuals.widgets.noninteractive.weak_bg_fill = egui::Color32::from_rgb(35, 42, 54);
-        visuals.widgets.inactive.bg_fill            = egui::Color32::from_rgb(30, 40, 58);
-        visuals.widgets.inactive.weak_bg_fill       = egui::Color32::from_rgb(36, 46, 66);
-        visuals.widgets.hovered.bg_fill             = egui::Color32::from_rgb(42, 54, 78);
-        visuals.widgets.hovered.weak_bg_fill        = egui::Color32::from_rgb(47, 60, 85);
-        visuals.widgets.active.bg_fill              = egui::Color32::from_rgb(56, 106, 188);
-        visuals.widgets.active.weak_bg_fill         = egui::Color32::from_rgb(46, 92, 168);
-        visuals.widgets.open.bg_fill                = egui::Color32::from_rgb(38, 46, 60);
-        visuals.selection.bg_fill                   = egui::Color32::from_rgb(56, 106, 188);
-        visuals.selection.stroke.color              = egui::Color32::from_rgb(88, 166, 255);
-        visuals.hyperlink_color                     = egui::Color32::from_rgb(88, 166, 255);
-        visuals.window_stroke.color                         = egui::Color32::from_rgb(48, 56, 70);
-        visuals.widgets.noninteractive.bg_stroke.color      = egui::Color32::from_rgb(44, 52, 66);
-        visuals.widgets.inactive.bg_stroke.color            = egui::Color32::from_rgb(50, 60, 75);
-        visuals.widgets.hovered.bg_stroke.color             = egui::Color32::from_rgb(88, 166, 255);
-        visuals.widgets.active.bg_stroke.color              = egui::Color32::from_rgb(120, 190, 255);
-        visuals.widgets.open.bg_stroke.color                = egui::Color32::from_rgb(60, 72, 90);
-        visuals.widgets.noninteractive.fg_stroke.color      = egui::Color32::from_rgb(48, 56, 70);
-        visuals.window_rounding                             = 2.0.into();
-        visuals.menu_rounding                               = 2.0.into();
-        visuals.widgets.noninteractive.rounding             = 2.0.into();
-        visuals.widgets.inactive.rounding                   = 2.0.into();
-        visuals.widgets.hovered.rounding                    = 2.0.into();
-        visuals.widgets.active.rounding                     = 2.0.into();
-        visuals.widgets.open.rounding                       = 2.0.into();
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(30, 40, 58);
+        visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(36, 46, 66);
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(42, 54, 78);
+        visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(47, 60, 85);
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(56, 106, 188);
+        visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(46, 92, 168);
+        visuals.widgets.open.bg_fill = egui::Color32::from_rgb(38, 46, 60);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(56, 106, 188);
+        visuals.selection.stroke.color = egui::Color32::from_rgb(88, 166, 255);
+        visuals.hyperlink_color = egui::Color32::from_rgb(88, 166, 255);
+        visuals.window_stroke.color = egui::Color32::from_rgb(48, 56, 70);
+        visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::from_rgb(44, 52, 66);
+        visuals.widgets.inactive.bg_stroke.color = egui::Color32::from_rgb(50, 60, 75);
+        visuals.widgets.hovered.bg_stroke.color = egui::Color32::from_rgb(88, 166, 255);
+        visuals.widgets.active.bg_stroke.color = egui::Color32::from_rgb(120, 190, 255);
+        visuals.widgets.open.bg_stroke.color = egui::Color32::from_rgb(60, 72, 90);
+        visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::from_rgb(48, 56, 70);
+        visuals.window_rounding = 2.0.into();
+        visuals.menu_rounding = 2.0.into();
+        visuals.widgets.noninteractive.rounding = 2.0.into();
+        visuals.widgets.inactive.rounding = 2.0.into();
+        visuals.widgets.hovered.rounding = 2.0.into();
+        visuals.widgets.active.rounding = 2.0.into();
+        visuals.widgets.open.rounding = 2.0.into();
         ctx.set_visuals(visuals);
 
         if self.app_screen == EditorScreen::ProjectHub {
@@ -2223,9 +2322,8 @@ impl eframe::App for EditorApp {
         }
 
         if !ctx.wants_keyboard_input()
-            && ctx.input(|i| {
-                i.modifiers.command && !i.modifiers.shift && i.key_pressed(egui::Key::Z)
-            })
+            && ctx
+                .input(|i| i.modifiers.command && !i.modifiers.shift && i.key_pressed(egui::Key::Z))
         {
             self.undo_scene();
         }
@@ -2233,9 +2331,7 @@ impl eframe::App for EditorApp {
         if !ctx.wants_keyboard_input()
             && ctx.input(|i| {
                 (i.modifiers.command && i.key_pressed(egui::Key::Y))
-                    || (i.modifiers.command
-                        && i.modifiers.shift
-                        && i.key_pressed(egui::Key::Z))
+                    || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
             })
         {
             self.redo_scene();
@@ -2257,7 +2353,9 @@ impl eframe::App for EditorApp {
                 Ok(path) => {
                     self.status_msg = format!(
                         "✅ Cena salva: {}",
-                        path.file_name().and_then(|n| n.to_str()).unwrap_or("cena.scene.json")
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("cena.scene.json")
                     );
                 }
                 Err(error) => self.status_msg = format!("❌ {}", error),
@@ -2329,47 +2427,50 @@ impl eframe::App for EditorApp {
             .resizable(false)
             .exact_height(22.0)
             .show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                let level = infer_status_level(&self.status_msg);
-                let (icon, color) = status_visuals(level);
-                let trimmed_message = self
-                    .status_msg
-                    .trim_start_matches(|c: char| matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' '));
-                ui.colored_label(color, format!("{} {}", icon, trimmed_message));
-                ui.separator();
-
-                let mode_label = match self.play_state {
-                    EditorPlayState::Edit => "Modo: Edição",
-                    EditorPlayState::Playing => "Modo: Play",
-                    EditorPlayState::Paused => "Modo: Pausado",
-                };
-                ui.label(mode_label);
-
-                let warning_count = self.warning_count();
-                ui.separator();
-                if warning_count == 0 {
-                    ui.label("Warnings: 0");
-                } else {
-                    ui.colored_label(egui::Color32::YELLOW, format!("Warnings: {}", warning_count));
-                }
-
-                if let Some(asset) = self.selected_asset.as_ref() {
-                    let record = self.assets.asset_record_for(asset);
+                ui.horizontal_wrapped(|ui| {
+                    let level = infer_status_level(&self.status_msg);
+                    let (icon, color) = status_visuals(level);
+                    let trimmed_message = self.status_msg.trim_start_matches(|c: char| {
+                        matches!(c, '✅' | '⚠' | '❌' | 'ℹ' | '✔' | ' ')
+                    });
+                    ui.colored_label(color, format!("{} {}", icon, trimmed_message));
                     ui.separator();
-                    let asset_color = if record.validation.is_valid {
-                        egui::Color32::from_rgb(120, 220, 140)
-                    } else {
-                        egui::Color32::from_rgb(255, 120, 120)
+
+                    let mode_label = match self.play_state {
+                        EditorPlayState::Edit => "Modo: Edição",
+                        EditorPlayState::Playing => "Modo: Play",
+                        EditorPlayState::Paused => "Modo: Pausado",
                     };
-                    ui.colored_label(asset_color, format!("Asset: {}", record.name));
-                }
+                    ui.label(mode_label);
 
-                if !self.selected_entity_ids.is_empty() {
+                    let warning_count = self.warning_count();
                     ui.separator();
-                    ui.label(format!("Seleção: {}", self.selected_entity_ids.len()));
-                }
+                    if warning_count == 0 {
+                        ui.label("Warnings: 0");
+                    } else {
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            format!("Warnings: {}", warning_count),
+                        );
+                    }
+
+                    if let Some(asset) = self.selected_asset.as_ref() {
+                        let record = self.assets.asset_record_for(asset);
+                        ui.separator();
+                        let asset_color = if record.validation.is_valid {
+                            egui::Color32::from_rgb(120, 220, 140)
+                        } else {
+                            egui::Color32::from_rgb(255, 120, 120)
+                        };
+                        ui.colored_label(asset_color, format!("Asset: {}", record.name));
+                    }
+
+                    if !self.selected_entity_ids.is_empty() {
+                        ui.separator();
+                        ui.label(format!("Seleção: {}", self.selected_entity_ids.len()));
+                    }
+                });
             });
-        });
 
         let asset_response = egui::TopBottomPanel::bottom("asset_panel")
             .default_height(self.layout.asset_height.clamp(150.0, 900.0).max(180.0))
@@ -2380,7 +2481,10 @@ impl eframe::App for EditorApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     let assets_selected = self.bottom_tab == BottomDockTab::Assets;
-                    if ui.selectable_label(assets_selected, "📦 Asset Browser").clicked() {
+                    if ui
+                        .selectable_label(assets_selected, "📦 Asset Browser")
+                        .clicked()
+                    {
                         self.bottom_tab = BottomDockTab::Assets;
                     }
                     let animator_selected = self.bottom_tab == BottomDockTab::Animator;
@@ -2404,26 +2508,42 @@ impl eframe::App for EditorApp {
                     BottomDockTab::Animator => animator_editor::show(self, ui),
                     BottomDockTab::Console => {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Mensagens do editor e runtime").small().weak());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button("Limpar console").clicked() {
-                                    self.console_history.clear();
-                                    self.console_history.push("ℹ Console limpo.".to_string());
-                                    self.status_msg = "ℹ Console limpo.".to_string();
-                                }
-                            });
+                            ui.label(
+                                egui::RichText::new("Mensagens do editor e runtime")
+                                    .small()
+                                    .weak(),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("Limpar console").clicked() {
+                                        self.console_history.clear();
+                                        self.console_history.push("ℹ Console limpo.".to_string());
+                                        self.status_msg = "ℹ Console limpo.".to_string();
+                                    }
+                                },
+                            );
                         });
                         ui.separator();
                         egui::ScrollArea::vertical()
+                            .id_source(egui::Id::new("editor_bottom_console_scroll"))
                             .auto_shrink([false, false])
                             .stick_to_bottom(true)
                             .show(ui, |ui| {
                                 for line in &self.console_history {
-                                    let color = if line.contains('❌') || line.to_lowercase().contains("erro") {
+                                    let color = if line.contains('❌')
+                                        || line.to_lowercase().contains("erro")
+                                    {
                                         egui::Color32::from_rgb(255, 120, 120)
-                                    } else if line.contains('✅') || line.contains('✔') || line.to_lowercase().contains("salvo") || line.to_lowercase().contains("criado") {
+                                    } else if line.contains('✅')
+                                        || line.contains('✔')
+                                        || line.to_lowercase().contains("salvo")
+                                        || line.to_lowercase().contains("criado")
+                                    {
                                         egui::Color32::from_rgb(120, 220, 140)
-                                    } else if line.contains('⚠') || line.to_lowercase().contains("aviso") {
+                                    } else if line.contains('⚠')
+                                        || line.to_lowercase().contains("aviso")
+                                    {
                                         egui::Color32::from_rgb(255, 210, 90)
                                     } else {
                                         egui::Color32::from_rgb(210, 220, 235)
@@ -2436,15 +2556,19 @@ impl eframe::App for EditorApp {
                                         warnings::EditorWarningSeverity::Warning => "⚠",
                                         warnings::EditorWarningSeverity::Error => "❌",
                                     };
-                                    ui.colored_label(egui::Color32::from_rgb(220, 220, 120), format!("{} {} — {}", prefix, warning.label, warning.details));
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(220, 220, 120),
+                                        format!(
+                                            "{} {} — {}",
+                                            prefix, warning.label, warning.details
+                                        ),
+                                    );
                                 }
                             });
                     }
                 }
             });
         self.layout.asset_height = asset_response.response.rect.height().clamp(130.0, 900.0);
-
-
 
         if self.animator_detached {
             let mut open = self.animator_detached;
@@ -2508,15 +2632,16 @@ fn load_project_hub_session(engine_root: &Path) -> Option<ProjectHubSession> {
     serde_json::from_str(&content).ok()
 }
 
-
-
-
 fn unique_temp_build_dir_in_parent(parent: &Path, project_name: &str) -> PathBuf {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    parent.join(format!(".rs2br_build_cache_{}_{}", sanitize_filename(project_name), timestamp))
+    parent.join(format!(
+        ".rs2br_build_cache_{}_{}",
+        sanitize_filename(project_name),
+        timestamp
+    ))
 }
 
 fn copy_minimal_engine_workspace(src_root: &Path, dst_root: &Path) -> std::io::Result<()> {
@@ -2574,7 +2699,10 @@ fn copy_minimal_engine_workspace(src_root: &Path, dst_root: &Path) -> std::io::R
 
     let src_dir = src_root.join("src");
     if !src_dir.is_dir() {
-        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Pasta src da engine não encontrada"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Pasta src da engine não encontrada",
+        ));
     }
     copy_dir_recursive_filtered(&src_dir, &dst_root.join("src"))?;
 
@@ -2585,13 +2713,14 @@ fn estimate_build_progress(current_step: &str, elapsed: f32, log_lines: &[String
     let logs = log_lines.join("\n").to_lowercase();
     let step = current_step.to_lowercase();
 
-    let estimated_total = if logs.contains("downloading crates") || logs.contains("updating crates.io index") {
-        180.0
-    } else if logs.contains("compiling") {
-        120.0
-    } else {
-        75.0
-    };
+    let estimated_total =
+        if logs.contains("downloading crates") || logs.contains("updating crates.io index") {
+            180.0
+        } else if logs.contains("compiling") {
+            120.0
+        } else {
+            75.0
+        };
 
     let mut progress = if step.contains("preparando pasta") {
         0.10
@@ -2692,11 +2821,32 @@ fn detect_command_available(command: &str) -> bool {
 
 fn find_prebuilt_runtime_exe(engine_root: &Path, engine_exe_name: &str) -> Option<PathBuf> {
     let mut candidates = Vec::new();
-    candidates.push(engine_root.join("standalone_runtime").join("windows").join(engine_exe_name));
+    candidates.push(
+        engine_root
+            .join("standalone_runtime")
+            .join("windows")
+            .join(engine_exe_name),
+    );
     candidates.push(engine_root.join("standalone_runtime").join(engine_exe_name));
-    candidates.push(engine_root.join("build").join("standalone_runtime").join("windows").join(engine_exe_name));
-    candidates.push(engine_root.join("build").join("standalone_runtime").join(engine_exe_name));
-    candidates.push(engine_root.join("target").join("release").join(engine_exe_name));
+    candidates.push(
+        engine_root
+            .join("build")
+            .join("standalone_runtime")
+            .join("windows")
+            .join(engine_exe_name),
+    );
+    candidates.push(
+        engine_root
+            .join("build")
+            .join("standalone_runtime")
+            .join(engine_exe_name),
+    );
+    candidates.push(
+        engine_root
+            .join("target")
+            .join("release")
+            .join(engine_exe_name),
+    );
     if let Ok(custom_dir) = std::env::var("RS2BR_STANDALONE_RUNTIME_DIR") {
         let trimmed = custom_dir.trim();
         if !trimmed.is_empty() {
@@ -2706,7 +2856,11 @@ fn find_prebuilt_runtime_exe(engine_root: &Path, engine_exe_name: &str) -> Optio
     candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
-fn copy_runtime_binary_set(exe_src: &Path, dst_root: &Path, game_exe_name: &str) -> std::io::Result<()> {
+fn copy_runtime_binary_set(
+    exe_src: &Path,
+    dst_root: &Path,
+    game_exe_name: &str,
+) -> std::io::Result<()> {
     fs::create_dir_all(dst_root)?;
     fs::copy(exe_src, dst_root.join(game_exe_name))?;
     let Some(runtime_dir) = exe_src.parent() else {
@@ -2730,7 +2884,10 @@ fn copy_runtime_binary_set(exe_src: &Path, dst_root: &Path, game_exe_name: &str)
     }
     Ok(())
 }
-fn save_project_hub_session(engine_root: &Path, session: &ProjectHubSession) -> std::io::Result<()> {
+fn save_project_hub_session(
+    engine_root: &Path,
+    session: &ProjectHubSession,
+) -> std::io::Result<()> {
     let path = project_hub_session_path(engine_root);
     let json = serde_json::to_string_pretty(session)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
@@ -2742,17 +2899,17 @@ fn save_project_hub_session(engine_root: &Path, session: &ProjectHubSession) -> 
 impl RuntimeContext for EditorApp {
     fn play_state(&self) -> RuntimePlayState {
         match self.play_state {
-            EditorPlayState::Edit    => RuntimePlayState::Edit,
+            EditorPlayState::Edit => RuntimePlayState::Edit,
             EditorPlayState::Playing => RuntimePlayState::Playing,
-            EditorPlayState::Paused  => RuntimePlayState::Paused,
+            EditorPlayState::Paused => RuntimePlayState::Paused,
         }
     }
 
     fn set_play_state(&mut self, state: RuntimePlayState) {
         self.play_state = match state {
-            RuntimePlayState::Edit    => EditorPlayState::Edit,
+            RuntimePlayState::Edit => EditorPlayState::Edit,
             RuntimePlayState::Playing => EditorPlayState::Playing,
-            RuntimePlayState::Paused  => EditorPlayState::Paused,
+            RuntimePlayState::Paused => EditorPlayState::Paused,
         };
     }
 
@@ -2769,14 +2926,25 @@ impl RuntimeContext for EditorApp {
         EditorApp::scene_file_candidates(self)
     }
 
-    fn scene_snapshot_by_path(&self, path: &std::path::Path) -> Option<(crate::core::scene::Scene, Option<std::path::PathBuf>)> {
-        let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
-        self.open_scenes.iter().find(|doc| {
-            doc.file_path
-                .as_ref()
-                .map(|p| p.to_string_lossy().replace('\\', "/").to_ascii_lowercase() == normalized)
-                .unwrap_or(false)
-        }).map(|doc| (doc.scene.clone(), doc.file_path.clone()))
+    fn scene_snapshot_by_path(
+        &self,
+        path: &std::path::Path,
+    ) -> Option<(crate::core::scene::Scene, Option<std::path::PathBuf>)> {
+        let normalized = path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        self.open_scenes
+            .iter()
+            .find(|doc| {
+                doc.file_path
+                    .as_ref()
+                    .map(|p| {
+                        p.to_string_lossy().replace('\\', "/").to_ascii_lowercase() == normalized
+                    })
+                    .unwrap_or(false)
+            })
+            .map(|doc| (doc.scene.clone(), doc.file_path.clone()))
     }
 
     fn set_status(&mut self, msg: String) {
@@ -2784,11 +2952,12 @@ impl RuntimeContext for EditorApp {
         self.sync_console_from_status();
     }
 
-    fn sprite_textures(&mut self) -> &mut std::collections::HashMap<String, eframe::egui::TextureHandle> {
+    fn sprite_textures(
+        &mut self,
+    ) -> &mut std::collections::HashMap<String, eframe::egui::TextureHandle> {
         &mut self.sprite_textures
     }
 }
-
 
 fn find_entity_recursive_mut<'a>(
     entities: &'a mut Vec<Entity>,

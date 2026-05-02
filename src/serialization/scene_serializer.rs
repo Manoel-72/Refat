@@ -40,10 +40,12 @@ pub fn try_scene_from_json(json: &str) -> Result<Scene, String> {
 }
 
 pub fn scene_from_json(json: &str) -> Option<Scene> {
-    try_scene_from_json(json).map_err(|error| {
-        eprintln!("{}", error);
-        error
-    }).ok()
+    try_scene_from_json(json)
+        .map_err(|error| {
+            eprintln!("{}", error);
+            error
+        })
+        .ok()
 }
 
 pub fn save_scene_to_path(scene: &Scene, path: &Path) -> io::Result<()> {
@@ -62,7 +64,6 @@ pub fn try_load_scene_from_path(path: &Path) -> Result<Scene, String> {
 pub fn load_scene_from_path(path: &Path) -> Option<Scene> {
     try_load_scene_from_path(path).ok()
 }
-
 
 #[cfg(test)]
 mod tests {

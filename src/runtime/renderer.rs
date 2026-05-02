@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::{Path, PathBuf}};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use eframe::egui;
 
@@ -35,17 +38,22 @@ pub fn draw_runtime_grid(
     painter: &egui::Painter,
     rect: egui::Rect,
     center: egui::Pos2,
-    camera: CameraView) {
+    camera: CameraView,
+) {
     let grid_color = egui::Color32::from_rgba_unmultiplied(90, 90, 100, 60);
     let grid_size = (32.0_f32 * camera.zoom).clamp(8.0, 128.0);
-    let center = egui::pos2(center.x - camera.x * camera.zoom, center.y + camera.y * camera.zoom);
+    let center = egui::pos2(
+        center.x - camera.x * camera.zoom,
+        center.y + camera.y * camera.zoom,
+    );
 
     let start_x = center.x % grid_size;
     let mut x = rect.left() + (start_x - rect.left()).rem_euclid(grid_size);
     while x <= rect.right() {
         painter.line_segment(
             [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-            egui::Stroke::new(0.5, grid_color));
+            egui::Stroke::new(0.5, grid_color),
+        );
         x += grid_size;
     }
 
@@ -54,7 +62,8 @@ pub fn draw_runtime_grid(
     while y <= rect.bottom() {
         painter.line_segment(
             [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-            egui::Stroke::new(0.5, grid_color));
+            egui::Stroke::new(0.5, grid_color),
+        );
         y += grid_size;
     }
 }
@@ -67,7 +76,8 @@ pub fn draw_runtime_entity(
     sprite_textures: &mut HashMap<String, egui::TextureHandle>,
     entity: &Entity,
     center: egui::Pos2,
-    camera: CameraView) -> Option<UiAction> {
+    camera: CameraView,
+) -> Option<UiAction> {
     if !entity.visible {
         return None;
     }
@@ -79,7 +89,8 @@ pub fn draw_runtime_entity(
 
     let world_screen_pos = egui::pos2(
         center.x + ((ex - camera.x) * camera.zoom),
-        center.y - ((ey - camera.y) * camera.zoom));
+        center.y - ((ey - camera.y) * camera.zoom),
+    );
     let screen_space_pos = egui::pos2(center.x + ex, center.y - ey);
 
     let mut sprite: Option<&Sprite> = None;
@@ -111,30 +122,38 @@ pub fn draw_runtime_entity(
             world_screen_pos,
             screen_space_pos,
             entity,
-            button);
+            button,
+        );
     }
 
     // Runtime final: não desenha colliders por padrão para evitar ruído visual
     // e custo extra de renderização em tempo de jogo.
 
     if let Some(sprite_comp) = sprite {
-        let sprite_pos = if sprite_comp.screen_space { screen_space_pos } else { world_screen_pos };
+        let sprite_pos = if sprite_comp.screen_space {
+            screen_space_pos
+        } else {
+            world_screen_pos
+        };
         let tint = egui::Color32::from_rgba_unmultiplied(
             (sprite_comp.color_r.clamp(0.0, 1.0) * 255.0) as u8,
             (sprite_comp.color_g.clamp(0.0, 1.0) * 255.0) as u8,
             (sprite_comp.color_b.clamp(0.0, 1.0) * 255.0) as u8,
-            (sprite_comp.color_a.clamp(0.0, 1.0) * 255.0) as u8);
+            (sprite_comp.color_a.clamp(0.0, 1.0) * 255.0) as u8,
+        );
 
         if !sprite_comp.texture_path.trim().is_empty() {
             if let Some(texture) = load_texture_from_relative_path(
                 ui.ctx(),
                 project_root,
                 sprite_textures,
-                &sprite_comp.texture_path) {
+                &sprite_comp.texture_path,
+            ) {
                 let tex_size = texture.size_vec2();
                 let draw_size = egui::vec2(
                     (tex_size.x * scale_x.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0),
-                    (tex_size.y * scale_y.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0));
+                    (tex_size.y * scale_y.abs().max(0.25) * camera.zoom).clamp(8.0, 512.0),
+                );
                 paint_rotated_image(
                     painter,
                     texture.id(),
@@ -143,27 +162,46 @@ pub fn draw_runtime_entity(
                     rotation,
                     tint,
                     scale_x < 0.0,
-                    scale_y < 0.0);
+                    scale_y < 0.0,
+                );
             }
         } else {
             // Sem textura: desenha retângulo colorido usando a cor do Sprite
             // Tamanho baseado no BoxCollider se existir, senão 32×32
-            let fallback_w = entity.components.iter()
-                .find_map(|c| if let crate::core::component::Component::BoxCollider(b) = c { Some(b.width) } else { None })
+            let fallback_w = entity
+                .components
+                .iter()
+                .find_map(|c| {
+                    if let crate::core::component::Component::BoxCollider(b) = c {
+                        Some(b.width)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(32.0);
-            let fallback_h = entity.components.iter()
-                .find_map(|c| if let crate::core::component::Component::BoxCollider(b) = c { Some(b.height) } else { None })
+            let fallback_h = entity
+                .components
+                .iter()
+                .find_map(|c| {
+                    if let crate::core::component::Component::BoxCollider(b) = c {
+                        Some(b.height)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(32.0);
             let draw_size = egui::vec2(
                 fallback_w * scale_x.abs().max(0.25) * camera.zoom,
-                fallback_h * scale_y.abs().max(0.25) * camera.zoom);
+                fallback_h * scale_y.abs().max(0.25) * camera.zoom,
+            );
             paint_rotated_placeholder(
                 painter,
                 sprite_pos,
                 draw_size,
                 rotation,
                 tint,
-                egui::Stroke::NONE);
+                egui::Stroke::NONE,
+            );
         }
     } else if has_camera {
         // Runtime final: não desenha contorno de câmera.
@@ -180,14 +218,14 @@ pub fn draw_runtime_entity(
             sprite_textures,
             child,
             center,
-            camera) {
+            camera,
+        ) {
             action = Some(child_action);
         }
     }
 
     action
 }
-
 
 pub fn count_entities(entities: &[Entity]) -> usize {
     entities
@@ -234,18 +272,36 @@ fn paint_rotated_image(
     rotation_deg: f32,
     tint: egui::Color32,
     flip_x: bool,
-    flip_y: bool) {
+    flip_y: bool,
+) {
     let points = rotated_rect_points(center, size, rotation_deg);
     let (u0, u1) = if flip_x { (1.0, 0.0) } else { (0.0, 1.0) };
     let (v0, v1) = if flip_y { (1.0, 0.0) } else { (0.0, 1.0) };
 
     let mut mesh = egui::epaint::Mesh::with_texture(texture_id);
     let base = mesh.vertices.len() as u32;
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[0], uv: egui::pos2(u0, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[1], uv: egui::pos2(u1, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[2], uv: egui::pos2(u1, v1), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[3], uv: egui::pos2(u0, v1), color: tint });
-    mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[0],
+        uv: egui::pos2(u0, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[1],
+        uv: egui::pos2(u1, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[2],
+        uv: egui::pos2(u1, v1),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[3],
+        uv: egui::pos2(u0, v1),
+        color: tint,
+    });
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     painter.add(egui::Shape::mesh(mesh));
 }
 
@@ -253,7 +309,8 @@ fn draw_text_label(
     painter: &egui::Painter,
     world_screen_pos: egui::Pos2,
     screen_space_pos: egui::Pos2,
-    label: &TextLabel) {
+    label: &TextLabel,
+) {
     let pos = if label.screen_space {
         screen_space_pos
     } else {
@@ -264,14 +321,16 @@ fn draw_text_label(
         (label.color_r.clamp(0.0, 1.0) * 255.0) as u8,
         (label.color_g.clamp(0.0, 1.0) * 255.0) as u8,
         (label.color_b.clamp(0.0, 1.0) * 255.0) as u8,
-        (label.color_a.clamp(0.0, 1.0) * 255.0) as u8);
+        (label.color_a.clamp(0.0, 1.0) * 255.0) as u8,
+    );
 
     painter.text(
         pos,
         egui::Align2::CENTER_CENTER,
         &label.text,
         egui::FontId::proportional(label.font_size.max(8.0)),
-        color);
+        color,
+    );
 }
 
 /// Chave estável para cache de texturas (evita entradas duplicadas por espaços ou barras).
@@ -283,7 +342,8 @@ fn load_texture_from_relative_path(
     ctx: &egui::Context,
     project_root: &Path,
     sprite_textures: &mut HashMap<String, egui::TextureHandle>,
-    relative_path: &str) -> Option<egui::TextureHandle> {
+    relative_path: &str,
+) -> Option<egui::TextureHandle> {
     let key = texture_cache_key(relative_path);
 
     if let Some(texture) = sprite_textures.get(&key) {
@@ -318,7 +378,8 @@ fn load_texture_from_relative_path(
     let texture = ctx.load_texture(
         format!("asset://{}", key),
         color_image,
-        egui::TextureOptions::LINEAR);
+        egui::TextureOptions::LINEAR,
+    );
 
     sprite_textures.insert(key, texture.clone());
     Some(texture)
@@ -327,7 +388,8 @@ fn load_texture_from_relative_path(
 fn resolve_scene_path(
     project_root: &Path,
     current_scene_path: Option<&Path>,
-    target: &str) -> Result<PathBuf, String> {
+    target: &str,
+) -> Result<PathBuf, String> {
     let raw = target.trim();
     if raw.is_empty() {
         return Err("UIButton sem target_scene configurado".to_string());
@@ -354,7 +416,11 @@ fn resolve_scene_path(
 
         if !normalized.ends_with(".scene.json") {
             candidates.push(project_root.join(format!("{}.scene.json", normalized)));
-            candidates.push(project_root.join("assets/scenes").join(format!("{}.scene.json", normalized)));
+            candidates.push(
+                project_root
+                    .join("assets/scenes")
+                    .join(format!("{}.scene.json", normalized)),
+            );
         }
     }
 
@@ -375,7 +441,8 @@ fn draw_ui_button(
     world_screen_pos: egui::Pos2,
     screen_space_pos: egui::Pos2,
     entity: &Entity,
-    button: &UIButton) -> Option<UiAction> {
+    button: &UIButton,
+) -> Option<UiAction> {
     let pos = if button.screen_space {
         screen_space_pos
     } else {
@@ -427,55 +494,71 @@ fn draw_ui_button(
         brighten(fill_r, 26),
         brighten(fill_g, 26),
         brighten(fill_b, 26),
-        base_a);
+        base_a,
+    );
     let top_highlight = egui::Color32::from_rgba_unmultiplied(
         brighten(fill_r, 38),
         brighten(fill_g, 38),
         brighten(fill_b, 38),
-        darken(base_a, 18));
+        darken(base_a, 18),
+    );
     let shadow_alpha = lerp_u8(72, 112, hover_t.max(press_t * 0.5));
     let shadow = egui::Color32::from_rgba_unmultiplied(0, 0, 0, shadow_alpha);
     let text_color = egui::Color32::from_rgba_unmultiplied(
         to_u8(button.text_r),
         to_u8(button.text_g),
         to_u8(button.text_b),
-        to_u8(button.text_a));
+        to_u8(button.text_a),
+    );
 
     let visual_offset_y = 5.0 - (hover_t * 1.0) - (press_t * 3.0);
     let visual_rect = rect.translate(egui::vec2(0.0, -press_t * 2.0));
     let shadow_rect = rect.translate(egui::vec2(0.0, visual_offset_y));
     let gloss_rect = egui::Rect::from_min_max(
         egui::pos2(visual_rect.left() + 6.0, visual_rect.top() + 6.0),
-        egui::pos2(visual_rect.right() - 6.0, visual_rect.top() + visual_rect.height() * (0.40 - press_t * 0.08)));
+        egui::pos2(
+            visual_rect.right() - 6.0,
+            visual_rect.top() + visual_rect.height() * (0.40 - press_t * 0.08),
+        ),
+    );
 
     painter.rect_filled(shadow_rect, 16.0, shadow);
     painter.rect_filled(visual_rect, 16.0, fill);
-    painter.rect_stroke(visual_rect, 16.0, egui::Stroke::new(1.5 + hover_t * 0.5, border));
+    painter.rect_stroke(
+        visual_rect,
+        16.0,
+        egui::Stroke::new(1.5 + hover_t * 0.5, border),
+    );
     painter.rect_filled(
         gloss_rect,
         12.0,
-        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(12, 28, hover_t)));
+        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(12, 28, hover_t)),
+    );
     painter.line_segment(
         [
             egui::pos2(visual_rect.left() + 10.0, visual_rect.top() + 7.0),
             egui::pos2(visual_rect.right() - 10.0, visual_rect.top() + 7.0),
         ],
-        egui::Stroke::new(1.0, top_highlight));
+        egui::Stroke::new(1.0, top_highlight),
+    );
 
     let accent_rect = egui::Rect::from_min_max(
         egui::pos2(visual_rect.left() + 8.0, visual_rect.bottom() - 8.0),
-        egui::pos2(visual_rect.right() - 8.0, visual_rect.bottom() - 5.0));
+        egui::pos2(visual_rect.right() - 8.0, visual_rect.bottom() - 5.0),
+    );
     painter.rect_filled(
         accent_rect,
         2.0,
-        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(18, 30, hover_t)));
+        egui::Color32::from_rgba_unmultiplied(255, 255, 255, lerp_u8(18, 30, hover_t)),
+    );
 
     painter.text(
         visual_rect.center() + egui::vec2(0.0, -press_t),
         egui::Align2::CENTER_CENTER,
         &button.text,
         egui::FontId::proportional(button.font_size.max(12.0)),
-        text_color);
+        text_color,
+    );
 
     if response.clicked() {
         if !button.target_scene.trim().is_empty() {
@@ -493,23 +576,29 @@ fn draw_ui_button(
     None
 }
 
-
 pub fn draw_runtime_particles(
     painter: &egui::Painter,
     center: egui::Pos2,
     camera: CameraView,
-    particles: &[crate::runtime::state::RuntimeParticle]) {
+    particles: &[crate::runtime::state::RuntimeParticle],
+) {
     for particle in particles {
-        let t = if particle.max_life <= f32::EPSILON { 0.0 } else { (particle.life / particle.max_life).clamp(0.0, 1.0) };
+        let t = if particle.max_life <= f32::EPSILON {
+            0.0
+        } else {
+            (particle.life / particle.max_life).clamp(0.0, 1.0)
+        };
         let pos = egui::pos2(
             center.x + ((particle.x - camera.x) * camera.zoom),
-            center.y - ((particle.y - camera.y) * camera.zoom));
+            center.y - ((particle.y - camera.y) * camera.zoom),
+        );
         let radius = (particle.scale.max(0.25) * 6.0 * camera.zoom.max(0.5)).clamp(2.0, 24.0);
         let color = egui::Color32::from_rgba_unmultiplied(
             (particle.color[0].clamp(0.0, 1.0) * 255.0) as u8,
             (particle.color[1].clamp(0.0, 1.0) * 255.0) as u8,
             (particle.color[2].clamp(0.0, 1.0) * 255.0) as u8,
-            ((particle.color[3].clamp(0.0, 1.0) * t) * 255.0) as u8);
+            ((particle.color[3].clamp(0.0, 1.0) * t) * 255.0) as u8,
+        );
         painter.circle_filled(pos, radius, color);
     }
 }

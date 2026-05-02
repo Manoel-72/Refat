@@ -7,8 +7,14 @@
 
 use eframe::egui;
 
-use crate::{component::{Animator, Audio, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, UIButton, Velocity}, entity::Entity};
 use super::{EditorApp, EditorPlayState};
+use crate::{
+    component::{
+        Animator, Audio, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite,
+        TextLabel, UIButton, Velocity,
+    },
+    entity::Entity,
+};
 
 /// Ação disparada por interação do mouse dentro da viewport.
 enum SceneInteraction {
@@ -29,12 +35,21 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Cabeçalho da viewport ──
     egui::Frame::none()
         .fill(egui::Color32::from_rgb(22, 27, 34))
-        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 4.0, bottom: 3.0 })
+        .inner_margin(egui::Margin {
+            left: 8.0,
+            right: 8.0,
+            top: 4.0,
+            bottom: 3.0,
+        })
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new("Scene").strong().size(13.0));
                 ui.separator();
-                ui.label(egui::RichText::new(app.scene.name.clone()).color(egui::Color32::from_rgb(88, 166, 255)).size(12.0));
+                ui.label(
+                    egui::RichText::new(app.scene.name.clone())
+                        .color(egui::Color32::from_rgb(88, 166, 255))
+                        .size(12.0),
+                );
                 ui.separator();
                 ui.label(
                     egui::RichText::new(format!("{:.0}%", app.scene_zoom * 100.0))
@@ -42,14 +57,15 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                         .size(12.0),
                 );
                 ui.separator();
-                ui.label(egui::RichText::new(format!("{} objects", entity_count)).color(egui::Color32::from_rgb(139, 148, 158)).size(12.0));
+                ui.label(
+                    egui::RichText::new(format!("{} objects", entity_count))
+                        .color(egui::Color32::from_rgb(139, 148, 158))
+                        .size(12.0),
+                );
 
                 if app.play_state != EditorPlayState::Edit {
                     ui.separator();
-                    ui.colored_label(
-                        egui::Color32::from_rgb(63, 185, 80),
-                        "▶ Runtime ativo",
-                    );
+                    ui.colored_label(egui::Color32::from_rgb(63, 185, 80), "▶ Runtime ativo");
                 }
 
                 ui.separator();
@@ -60,16 +76,23 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 ui.checkbox(&mut app.snap_to_grid, "Snap 32px")
                     .on_hover_text("Encaixa entidades na grade de 32px ao mover");
 
-                if ui.small_button("🎯 Resetar Visão")
-                    .on_hover_text("Volta zoom 100% e centraliza a viewport").clicked() {
+                if ui
+                    .small_button("🎯 Resetar Visão")
+                    .on_hover_text("Volta zoom 100% e centraliza a viewport")
+                    .clicked()
+                {
                     app.scene_zoom = 1.0;
                     app.scene_pan = egui::Vec2::ZERO;
                 }
 
                 if let Some(selected_id) = &app.selected_entity_id {
-                    if ui.small_button("📍 Focar")
-                        .on_hover_text("Centraliza a viewport na entidade selecionada").clicked() {
-                        if let Some((x, y)) = find_entity_position(&app.scene.entities, selected_id) {
+                    if ui
+                        .small_button("📍 Focar")
+                        .on_hover_text("Centraliza a viewport na entidade selecionada")
+                        .clicked()
+                    {
+                        if let Some((x, y)) = find_entity_position(&app.scene.entities, selected_id)
+                        {
                             app.scene_pan = egui::vec2(-(x * app.scene_zoom), y * app.scene_zoom);
                         }
                     }
@@ -129,7 +152,9 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // Menu de contexto do viewport: cria entidades no local do mouse
     let mut create_at: Option<QuickCreateKind> = None;
-    let pointer_screen_pos = response.hover_pos().or_else(|| response.interact_pointer_pos());
+    let pointer_screen_pos = response
+        .hover_pos()
+        .or_else(|| response.interact_pointer_pos());
     let pointer_world_pos = pointer_screen_pos.map(|p| screen_to_world(p, center, app.scene_zoom));
 
     response.context_menu(|ui| {
@@ -150,15 +175,27 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     });
 
     // ── Grid ──
-    draw_grid(&painter, available, center, app.scene_zoom, app.snap_to_grid);
+    draw_grid(
+        &painter,
+        available,
+        center,
+        app.scene_zoom,
+        app.snap_to_grid,
+    );
 
     // ── Eixos X/Y ──
     painter.line_segment(
-        [egui::pos2(available.left(), center.y), egui::pos2(available.right(), center.y)],
+        [
+            egui::pos2(available.left(), center.y),
+            egui::pos2(available.right(), center.y),
+        ],
         egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 80, 80, 120)),
     );
     painter.line_segment(
-        [egui::pos2(center.x, available.top()), egui::pos2(center.x, available.bottom())],
+        [
+            egui::pos2(center.x, available.top()),
+            egui::pos2(center.x, available.bottom()),
+        ],
         egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(80, 255, 80, 120)),
     );
 
@@ -200,14 +237,26 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     let mut interaction: Option<SceneInteraction> = None;
 
     for entity in &entities {
-        if let Some(result) = draw_entity(app, ui, &painter, entity, center, app.scene_zoom, &selected_id) {
+        if let Some(result) = draw_entity(
+            app,
+            ui,
+            &painter,
+            entity,
+            center,
+            app.scene_zoom,
+            &selected_id,
+        ) {
             interaction = Some(result);
         }
     }
 
     let primary_down = ui.ctx().input(|i| i.pointer.primary_down());
 
-    if interaction.is_none() && app.dragging_asset_path.is_none() && response.hovered() && primary_down {
+    if interaction.is_none()
+        && app.dragging_asset_path.is_none()
+        && response.hovered()
+        && primary_down
+    {
         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
             if app.selection_box_start.is_none() {
                 app.selection_box_start = Some(pointer_pos);
@@ -238,7 +287,10 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // Aplicar seleção / arrasto
     match interaction {
-        Some(SceneInteraction::Select { id, add_to_selection }) => {
+        Some(SceneInteraction::Select {
+            id,
+            add_to_selection,
+        }) => {
             app.selection_box_start = None;
             app.selection_box_current = None;
 
@@ -307,11 +359,20 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     }
 
     if !has_interaction && app.selection_box_start.is_some() && !primary_down {
-        if let (Some(start), Some(end)) = (app.selection_box_start.take(), app.selection_box_current.take()) {
+        if let (Some(start), Some(end)) = (
+            app.selection_box_start.take(),
+            app.selection_box_current.take(),
+        ) {
             let selection_rect = egui::Rect::from_two_pos(start, end);
             if selection_rect.width() > 6.0 || selection_rect.height() > 6.0 {
                 let mut hits = Vec::new();
-                collect_entities_in_rect(&app.scene.entities, center, app.scene_zoom, selection_rect, &mut hits);
+                collect_entities_in_rect(
+                    &app.scene.entities,
+                    center,
+                    app.scene_zoom,
+                    selection_rect,
+                    &mut hits,
+                );
 
                 let add_to_selection = ui.ctx().input(|i| i.modifiers.command || i.modifiers.ctrl);
                 if !add_to_selection {
@@ -334,20 +395,15 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             if is_image_file(&path) {
                 match app.create_sprite_entity_from_asset(&path, Some((x, y))) {
                     Ok(name) => {
-                        app.status_msg = format!(
-                            "🖼 Sprite '{}' criado via drag-and-drop.",
-                            name
-                        );
+                        app.status_msg = format!("🖼 Sprite '{}' criado via drag-and-drop.", name);
                     }
                     Err(e) => app.status_msg = format!("❌ {}", e),
                 }
             } else if is_matr_file(&path) {
                 match app.instantiate_matr_from_path(&path, Some((x, y))) {
                     Ok(name) => {
-                        app.status_msg = format!(
-                            "🧱 MATR '{}' instanciado via drag-and-drop.",
-                            name
-                        );
+                        app.status_msg =
+                            format!("🧱 MATR '{}' instanciado via drag-and-drop.", name);
                     }
                     Err(e) => app.status_msg = format!("❌ {}", e),
                 }
@@ -489,7 +545,9 @@ fn draw_entity(
         );
 
         let sprite_rect = if !sprite_comp.texture_path.trim().is_empty() {
-            if let Some(texture) = app.load_texture_from_relative_path(ui.ctx(), &sprite_comp.texture_path) {
+            if let Some(texture) =
+                app.load_texture_from_relative_path(ui.ctx(), &sprite_comp.texture_path)
+            {
                 let tex_size = texture.size_vec2();
                 let draw_size = egui::vec2(
                     (tex_size.x * scale_x.abs().max(0.25) * zoom).clamp(12.0, 512.0),
@@ -535,7 +593,10 @@ fn draw_entity(
                 screen_pos,
                 sprite_rect.size() + egui::vec2(8.0, 8.0),
                 rotation,
-                egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 240, 120, 190)),
+                egui::Stroke::new(
+                    1.5,
+                    egui::Color32::from_rgba_unmultiplied(255, 240, 120, 190),
+                ),
             );
         }
     }
@@ -565,17 +626,27 @@ fn draw_entity(
             );
             let cross = (6.0 * zoom).clamp(4.0, 12.0);
             painter.line_segment(
-                [egui::pos2(collider_center.x - cross, collider_center.y), egui::pos2(collider_center.x + cross, collider_center.y)],
+                [
+                    egui::pos2(collider_center.x - cross, collider_center.y),
+                    egui::pos2(collider_center.x + cross, collider_center.y),
+                ],
                 egui::Stroke::new(1.0, collider_color),
             );
             painter.line_segment(
-                [egui::pos2(collider_center.x, collider_center.y - cross), egui::pos2(collider_center.x, collider_center.y + cross)],
+                [
+                    egui::pos2(collider_center.x, collider_center.y - cross),
+                    egui::pos2(collider_center.x, collider_center.y + cross),
+                ],
                 egui::Stroke::new(1.0, collider_color),
             );
             painter.text(
                 egui::pos2(collider_rect.center().x, collider_rect.top() - 3.0),
                 egui::Align2::CENTER_BOTTOM,
-                if collider_comp.is_trigger { "Trigger" } else { "BoxCollider" },
+                if collider_comp.is_trigger {
+                    "Trigger"
+                } else {
+                    "BoxCollider"
+                },
                 egui::FontId::proportional(10.0),
                 collider_color,
             );
@@ -587,7 +658,10 @@ fn draw_entity(
     if has_camera {
         let camera_rect = egui::Rect::from_center_size(
             screen_pos,
-            egui::vec2((80.0 * zoom).clamp(20.0, 140.0), (52.0 * zoom).clamp(14.0, 100.0)),
+            egui::vec2(
+                (80.0 * zoom).clamp(20.0, 140.0),
+                (52.0 * zoom).clamp(14.0, 100.0),
+            ),
         );
         let cam_color = egui::Color32::from_rgb(180, 120, 255);
         painter.rect_stroke(camera_rect, 4.0, egui::Stroke::new(1.5, cam_color));
@@ -664,7 +738,11 @@ fn draw_entity(
 
     // Área interativa para drag / clique
     let id = egui::Id::new(("scene_entity", &entity.id));
-    let response = ui.interact(interactive_rect.expand(6.0), id, egui::Sense::click_and_drag());
+    let response = ui.interact(
+        interactive_rect.expand(6.0),
+        id,
+        egui::Sense::click_and_drag(),
+    );
 
     if response.clicked() {
         let add_to_selection = ui.ctx().input(|i| i.modifiers.command || i.modifiers.ctrl);
@@ -699,39 +777,118 @@ fn draw_entity(
     None
 }
 
-
 fn show_scene_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
     ui.label(egui::RichText::new("Adicionar componente").small().strong());
     ui.separator();
 
     ui.menu_button("🎮 Gameplay", |ui| {
-        scene_component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
-        scene_component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
-        scene_component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
-        scene_component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "💨 Velocity",
+            Component::Velocity(Velocity::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "⚽ RigidBody2D",
+            Component::RigidBody2D(RigidBody2D::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📐 BoxCollider",
+            Component::BoxCollider(BoxCollider::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🎞 Animator",
+            Component::Animator(Animator::default()),
+        );
     });
 
     ui.menu_button("🧠 Scripts", |ui| {
-        scene_component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
-        scene_component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📜 Script RS2",
+            Component::Script(Script {
+                file_path: String::new(),
+            }),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🌙 LuaScript",
+            Component::LuaScript(LuaScript {
+                file_path: String::new(),
+            }),
+        );
     });
 
     ui.menu_button("🖼 Visual", |ui| {
-        scene_component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
-        scene_component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
-        scene_component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
-        scene_component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🖼 Sprite",
+            Component::Sprite(Sprite::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔤 TextLabel",
+            Component::TextLabel(TextLabel::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔘 UIButton",
+            Component::UIButton(UIButton::default()),
+        );
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔊 Audio",
+            Component::Audio(Audio::default()),
+        );
     });
 
     ui.menu_button("📷 Cena", |ui| {
-        scene_component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
+        scene_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📷 Camera2D",
+            Component::Camera2D(Camera2D::default()),
+        );
     });
 }
 
-fn scene_component_menu_button(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str, label: &str, component: Component) {
+fn scene_component_menu_button(
+    ui: &mut egui::Ui,
+    app: &mut EditorApp,
+    entity_id: &str,
+    label: &str,
+    component: Component,
+) {
     let already_has = app
         .find_entity_mut(entity_id)
-        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
+        .map(|entity| {
+            entity.components.iter().any(|existing| {
+                std::mem::discriminant(existing) == std::mem::discriminant(&component)
+            })
+        })
         .unwrap_or(false);
 
     let response = ui.add_enabled(!already_has, egui::Button::new(label));
@@ -761,7 +918,11 @@ fn component_badges(entity: &Entity) -> String {
             Component::Camera2D(_) => badges.push("Camera2D"),
             Component::RigidBody2D(_) => badges.push("RigidBody2D"),
             Component::Velocity(_) => badges.push("Velocity"),
-            Component::BoxCollider(collider) => badges.push(if collider.is_trigger { "Trigger" } else { "Collider" }),
+            Component::BoxCollider(collider) => badges.push(if collider.is_trigger {
+                "Trigger"
+            } else {
+                "Collider"
+            }),
             Component::Script(_) => badges.push("Script"),
             Component::LuaScript(_) => badges.push("LuaScript"),
             Component::Audio(_) => badges.push("Audio"),
@@ -776,7 +937,10 @@ fn component_badges(entity: &Entity) -> String {
 }
 
 fn count_entities(entities: &[Entity]) -> usize {
-    entities.iter().map(|e| 1 + count_entities(&e.children)).sum()
+    entities
+        .iter()
+        .map(|e| 1 + count_entities(&e.children))
+        .sum()
 }
 
 fn collect_entities_in_rect(
@@ -839,7 +1003,9 @@ fn create_entity_at(app: &mut EditorApp, kind: QuickCreateKind, x: f32, y: f32) 
         }
         QuickCreateKind::Camera => {
             let mut entity = Entity::new("Camera");
-            entity.add_component(Component::Camera2D(crate::core::component::Camera2D::default()));
+            entity.add_component(Component::Camera2D(
+                crate::core::component::Camera2D::default(),
+            ));
             entity
         }
     };
@@ -858,17 +1024,10 @@ fn create_entity_at(app: &mut EditorApp, kind: QuickCreateKind, x: f32, y: f32) 
 
 fn rotate_vec2(vec: egui::Vec2, rotation_deg: f32) -> egui::Vec2 {
     let (sin, cos) = rotation_deg.to_radians().sin_cos();
-    egui::vec2(
-        vec.x * cos - vec.y * sin,
-        vec.x * sin + vec.y * cos,
-    )
+    egui::vec2(vec.x * cos - vec.y * sin, vec.x * sin + vec.y * cos)
 }
 
-fn rotated_rect_points(
-    center: egui::Pos2,
-    size: egui::Vec2,
-    rotation_deg: f32,
-) -> [egui::Pos2; 4] {
+fn rotated_rect_points(center: egui::Pos2, size: egui::Vec2, rotation_deg: f32) -> [egui::Pos2; 4] {
     let (sin, cos) = rotation_deg.to_radians().sin_cos();
     let half = size * 0.5;
     let corners = [
@@ -919,11 +1078,28 @@ fn paint_rotated_image(
 
     let mut mesh = egui::epaint::Mesh::with_texture(texture_id);
     let base = mesh.vertices.len() as u32;
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[0], uv: egui::pos2(u0, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[1], uv: egui::pos2(u1, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[2], uv: egui::pos2(u1, v1), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[3], uv: egui::pos2(u0, v1), color: tint });
-    mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[0],
+        uv: egui::pos2(u0, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[1],
+        uv: egui::pos2(u1, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[2],
+        uv: egui::pos2(u1, v1),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[3],
+        uv: egui::pos2(u0, v1),
+        color: tint,
+    });
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
 
     painter.add(egui::Shape::mesh(mesh));
     rect_from_points(&points)

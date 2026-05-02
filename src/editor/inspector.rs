@@ -4,19 +4,27 @@
 //  selecionada na hierarquia
 // ============================================================
 
-use eframe::egui;
+use super::{warnings::EditorWarningSeverity, EditorApp};
+use crate::runtime::script::is_valid_rs2_script;
 use crate::{
     assets::is_rs2_script_file,
-    component::{Animator, Audio, BodyType, BoxCollider, Shape2D, UIButton, Camera2D, Component, LuaScript, RigidBody2D, Script, Sprite, TextLabel, Velocity},
+    component::{
+        Animator, Audio, BodyType, BoxCollider, Camera2D, Component, LuaScript, RigidBody2D,
+        Script, Shape2D, Sprite, TextLabel, UIButton, Velocity,
+    },
 };
-use crate::runtime::script::is_valid_rs2_script;
-use super::{warnings::EditorWarningSeverity, EditorApp};
+use eframe::egui;
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     // ── Cabeçalho do Inspector ──
     egui::Frame::none()
         .fill(egui::Color32::from_rgb(22, 27, 34))
-        .inner_margin(egui::Margin { left: 8.0, right: 8.0, top: 6.0, bottom: 4.0 })
+        .inner_margin(egui::Margin {
+            left: 8.0,
+            right: 8.0,
+            top: 6.0,
+            bottom: 4.0,
+        })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Inspector").strong().size(13.0));
@@ -47,7 +55,11 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 .hint_text("transform, sprite, collider...")
                 .desired_width((ui.available_width() - 34.0).max(80.0)),
         );
-        if ui.small_button("✖").on_hover_text("Limpar busca do inspector").clicked() {
+        if ui
+            .small_button("✖")
+            .on_hover_text("Limpar busca do inspector")
+            .clicked()
+        {
             app.inspector_search.clear();
         }
     });
@@ -83,11 +95,15 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                 .rounding(6.0)
                 .inner_margin(egui::Margin::same(10.0))
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new("🎬 Propriedades da Cena").strong().size(13.0));
+                    ui.label(
+                        egui::RichText::new("🎬 Propriedades da Cena")
+                            .strong()
+                            .size(13.0),
+                    );
                     ui.add_space(2.0);
                     ui.label(
                         egui::RichText::new(format!("📄 {}", app.scene.name))
-                            .color(egui::Color32::from_rgb(88, 166, 255))
+                            .color(egui::Color32::from_rgb(88, 166, 255)),
                     );
                 });
 
@@ -106,26 +122,31 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new("R").color(egui::Color32::from_rgb(255, 100, 100)));
+                    ui.label(
+                        egui::RichText::new("R").color(egui::Color32::from_rgb(255, 100, 100)),
+                    );
                     ui.add(egui::Slider::new(&mut bg[0], 0.0..=1.0).show_value(true));
                     ui.end_row();
-                    ui.label(egui::RichText::new("G").color(egui::Color32::from_rgb(100, 220, 100)));
+                    ui.label(
+                        egui::RichText::new("G").color(egui::Color32::from_rgb(100, 220, 100)),
+                    );
                     ui.add(egui::Slider::new(&mut bg[1], 0.0..=1.0).show_value(true));
                     ui.end_row();
-                    ui.label(egui::RichText::new("B").color(egui::Color32::from_rgb(100, 140, 255)));
+                    ui.label(
+                        egui::RichText::new("B").color(egui::Color32::from_rgb(100, 140, 255)),
+                    );
                     ui.add(egui::Slider::new(&mut bg[2], 0.0..=1.0).show_value(true));
                     ui.end_row();
                 });
 
             // Preview da cor
             let preview_color = egui::Color32::from_rgb(
-                (bg[0].clamp(0.0,1.0)*255.0) as u8,
-                (bg[1].clamp(0.0,1.0)*255.0) as u8,
-                (bg[2].clamp(0.0,1.0)*255.0) as u8,
+                (bg[0].clamp(0.0, 1.0) * 255.0) as u8,
+                (bg[1].clamp(0.0, 1.0) * 255.0) as u8,
+                (bg[2].clamp(0.0, 1.0) * 255.0) as u8,
             );
-            let (preview_rect, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), 28.0), egui::Sense::hover()
-            );
+            let (preview_rect, _) = ui
+                .allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::hover());
             ui.painter().rect_filled(preview_rect, 4.0, preview_color);
 
             ui.add_space(10.0);
@@ -133,8 +154,11 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
             ui.add_space(4.0);
 
             ui.label(
-                egui::RichText::new(format!("📦 {} entidade(s) na cena", app.scene.entities.len()))
-                    .color(egui::Color32::from_rgb(88, 166, 255))
+                egui::RichText::new(format!(
+                    "📦 {} entidade(s) na cena",
+                    app.scene.entities.len()
+                ))
+                .color(egui::Color32::from_rgb(88, 166, 255)),
             );
 
             ui.add_space(10.0);
@@ -199,7 +223,14 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                 ui.add_space(4.0);
             }
             if runtime_warnings.len() > 6 {
-                ui.label(egui::RichText::new(format!("+ {} aviso(s) adicional(is)", runtime_warnings.len() - 6)).small().weak());
+                ui.label(
+                    egui::RichText::new(format!(
+                        "+ {} aviso(s) adicional(is)",
+                        runtime_warnings.len() - 6
+                    ))
+                    .small()
+                    .weak(),
+                );
             }
         });
         ui.add_space(6.0);
@@ -260,13 +291,20 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     for (i, component) in components.iter().enumerate() {
         let component_name = component.display_name();
-        if !inspector_filter.is_empty() && !component_name.to_lowercase().contains(&inspector_filter) {
+        if !inspector_filter.is_empty()
+            && !component_name.to_lowercase().contains(&inspector_filter)
+        {
             continue;
         }
         let header_text = format!("⚙ {}", component_name);
 
         egui::CollapsingHeader::new(&header_text)
-            .id_source(format!("comp_{}_{}_{}", selected_id, i, component.display_name()))
+            .id_source(format!(
+                "comp_{}_{}_{}",
+                selected_id,
+                i,
+                component.display_name()
+            ))
             .default_open(true)
             .show(ui, |ui| {
                 match component {
@@ -283,10 +321,12 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
                                 ui.label("X:");
-                                changed |= ui.add(egui::DragValue::new(&mut cx).speed(0.5)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut cx).speed(0.5)).changed();
                                 ui.end_row();
                                 ui.label("Y:");
-                                changed |= ui.add(egui::DragValue::new(&mut cy).speed(0.5)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut cy).speed(0.5)).changed();
                                 ui.end_row();
                                 ui.label("Rotação:");
                                 changed |= ui
@@ -294,10 +334,12 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                     .changed();
                                 ui.end_row();
                                 ui.label("Escala X:");
-                                changed |= ui.add(egui::DragValue::new(&mut sx).speed(0.01)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut sx).speed(0.01)).changed();
                                 ui.end_row();
                                 ui.label("Escala Y:");
-                                changed |= ui.add(egui::DragValue::new(&mut sy).speed(0.01)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut sy).speed(0.01)).changed();
                                 ui.end_row();
                             });
                         if changed {
@@ -367,14 +409,17 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
                                 ui.label("Zoom:");
-                                changed |= ui.add(egui::DragValue::new(&mut zoom).speed(0.01)).changed();
+                                changed |= ui
+                                    .add(egui::DragValue::new(&mut zoom).speed(0.01))
+                                    .changed();
                                 ui.end_row();
                                 ui.label("Câmera principal:");
                                 changed |= ui.checkbox(&mut is_main, "").changed();
                                 ui.end_row();
                             });
                         if changed {
-                            updated_components.push((i, Component::Camera2D(Camera2D { zoom, is_main })));
+                            updated_components
+                                .push((i, Component::Camera2D(Camera2D { zoom, is_main })));
                         }
                     }
 
@@ -389,7 +434,9 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
                                 ui.label("Gravidade:");
-                                changed |= ui.add(egui::DragValue::new(&mut gravity).speed(0.1)).changed();
+                                changed |= ui
+                                    .add(egui::DragValue::new(&mut gravity).speed(0.1))
+                                    .changed();
                                 ui.end_row();
                                 ui.label("Estático:");
                                 changed |= ui.checkbox(&mut is_static, "").changed();
@@ -423,14 +470,17 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
                                 ui.label("Vel X:");
-                                changed |= ui.add(egui::DragValue::new(&mut vx).speed(1.0)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut vx).speed(1.0)).changed();
                                 ui.end_row();
                                 ui.label("Vel Y:");
-                                changed |= ui.add(egui::DragValue::new(&mut vy).speed(1.0)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut vy).speed(1.0)).changed();
                                 ui.end_row();
                             });
                         if changed {
-                            updated_components.push((i, Component::Velocity(Velocity { x: vx, y: vy })));
+                            updated_components
+                                .push((i, Component::Velocity(Velocity { x: vx, y: vy })));
                         }
                     }
 
@@ -465,9 +515,27 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                         BodyType::Trigger => "Trigger",
                                     })
                                     .show_ui(ui, |ui| {
-                                        changed |= ui.selectable_value(&mut body_type, BodyType::Static, "Static").changed();
-                                        changed |= ui.selectable_value(&mut body_type, BodyType::Kinematic, "Kinematic").changed();
-                                        changed |= ui.selectable_value(&mut body_type, BodyType::Trigger, "Trigger").changed();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut body_type,
+                                                BodyType::Static,
+                                                "Static",
+                                            )
+                                            .changed();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut body_type,
+                                                BodyType::Kinematic,
+                                                "Kinematic",
+                                            )
+                                            .changed();
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut body_type,
+                                                BodyType::Trigger,
+                                                "Trigger",
+                                            )
+                                            .changed();
                                     });
                                 ui.end_row();
                                 ui.label("Shape:");
@@ -475,21 +543,41 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 ui.end_row();
                                 if use_circle {
                                     ui.label("Raio:");
-                                    changed |= ui.add(egui::DragValue::new(&mut radius).speed(0.5).range(1.0..=4096.0)).changed();
+                                    changed |= ui
+                                        .add(
+                                            egui::DragValue::new(&mut radius)
+                                                .speed(0.5)
+                                                .range(1.0..=4096.0),
+                                        )
+                                        .changed();
                                     ui.end_row();
                                 } else {
                                     ui.label("Largura:");
-                                    changed |= ui.add(egui::DragValue::new(&mut w).speed(0.5).range(1.0..=4096.0)).changed();
+                                    changed |= ui
+                                        .add(
+                                            egui::DragValue::new(&mut w)
+                                                .speed(0.5)
+                                                .range(1.0..=4096.0),
+                                        )
+                                        .changed();
                                     ui.end_row();
                                     ui.label("Altura:");
-                                    changed |= ui.add(egui::DragValue::new(&mut h).speed(0.5).range(1.0..=4096.0)).changed();
+                                    changed |= ui
+                                        .add(
+                                            egui::DragValue::new(&mut h)
+                                                .speed(0.5)
+                                                .range(1.0..=4096.0),
+                                        )
+                                        .changed();
                                     ui.end_row();
                                 }
                                 ui.label("Offset X:");
-                                changed |= ui.add(egui::DragValue::new(&mut ox).speed(0.5)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut ox).speed(0.5)).changed();
                                 ui.end_row();
                                 ui.label("Offset Y:");
-                                changed |= ui.add(egui::DragValue::new(&mut oy).speed(0.5)).changed();
+                                changed |=
+                                    ui.add(egui::DragValue::new(&mut oy).speed(0.5)).changed();
                                 ui.end_row();
                                 ui.label("Trigger legado:");
                                 changed |= ui.checkbox(&mut is_trigger, "").changed();
@@ -498,29 +586,60 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                                 changed |= ui.checkbox(&mut collision_enabled, "").changed();
                                 ui.end_row();
                                 ui.label("Layer:");
-                                changed |= ui.add(egui::DragValue::new(&mut layer).speed(1.0).range(0..=u32::MAX)).changed();
+                                changed |= ui
+                                    .add(
+                                        egui::DragValue::new(&mut layer)
+                                            .speed(1.0)
+                                            .range(0..=u32::MAX),
+                                    )
+                                    .changed();
                                 ui.end_row();
                                 ui.label("Mask:");
-                                changed |= ui.add(egui::DragValue::new(&mut mask).speed(1.0).range(0..=u32::MAX)).changed();
+                                changed |= ui
+                                    .add(
+                                        egui::DragValue::new(&mut mask)
+                                            .speed(1.0)
+                                            .range(0..=u32::MAX),
+                                    )
+                                    .changed();
                                 ui.end_row();
                                 ui.label("One-way platform:");
                                 changed |= ui.checkbox(&mut one_way, "").changed();
                                 ui.end_row();
                                 ui.label("Margem one-way:");
-                                changed |= ui.add(egui::DragValue::new(&mut one_way_margin).speed(0.25).range(0.0..=64.0)).changed();
+                                changed |= ui
+                                    .add(
+                                        egui::DragValue::new(&mut one_way_margin)
+                                            .speed(0.25)
+                                            .range(0.0..=64.0),
+                                    )
+                                    .changed();
                                 ui.end_row();
                             });
                         if changed {
                             let shape = if use_circle {
-                                Shape2D::Circle { radius: radius.max(1.0) }
+                                Shape2D::Circle {
+                                    radius: radius.max(1.0),
+                                }
                             } else {
-                                Shape2D::Box { width: w.max(1.0), height: h.max(1.0) }
+                                Shape2D::Box {
+                                    width: w.max(1.0),
+                                    height: h.max(1.0),
+                                }
                             };
                             updated_components.push((
                                 i,
                                 Component::BoxCollider(BoxCollider {
-                                    width: if use_circle { radius.max(1.0) * 2.0 } else { w.max(1.0) },
-                                    height: if use_circle { radius.max(1.0) * 2.0 } else { h.max(1.0) },
+                                    width: if use_circle {
+                                        radius.max(1.0) * 2.0
+                                    } else {
+                                        w.max(1.0)
+                                    },
+                                    height: if use_circle {
+                                        radius.max(1.0) * 2.0
+                                    } else {
+                                        h.max(1.0)
+                                    },
                                     offset_x: ox,
                                     offset_y: oy,
                                     is_trigger,
@@ -537,7 +656,14 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
                     }
 
                     Component::Script(sc) => {
-                        draw_script_component_ui(app, ui, &selected_id, i, sc, &mut updated_components);
+                        draw_script_component_ui(
+                            app,
+                            ui,
+                            &selected_id,
+                            i,
+                            sc,
+                            &mut updated_components,
+                        );
                     }
 
                     Component::LuaScript(sc) => {
@@ -596,8 +722,6 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
     );
 }
 
-
-
 fn relative_to_project_or_full(project_root: &std::path::Path, path: &std::path::Path) -> String {
     if let Ok(relative) = path.strip_prefix(project_root) {
         return relative.to_string_lossy().replace('\\', "/");
@@ -629,7 +753,9 @@ fn draw_text_label_component_ui(
             ui.end_row();
 
             ui.label("Fonte:");
-            changed |= ui.add(egui::Slider::new(&mut font_size, 8.0..=96.0)).changed();
+            changed |= ui
+                .add(egui::Slider::new(&mut font_size, 8.0..=96.0))
+                .changed();
             ui.end_row();
 
             ui.label("Screen space:");
@@ -703,15 +829,21 @@ fn draw_ui_button_component_ui(
             ui.end_row();
 
             ui.label("Largura:");
-            changed |= ui.add(egui::Slider::new(&mut edited.width, 32.0..=512.0)).changed();
+            changed |= ui
+                .add(egui::Slider::new(&mut edited.width, 32.0..=512.0))
+                .changed();
             ui.end_row();
 
             ui.label("Altura:");
-            changed |= ui.add(egui::Slider::new(&mut edited.height, 20.0..=256.0)).changed();
+            changed |= ui
+                .add(egui::Slider::new(&mut edited.height, 20.0..=256.0))
+                .changed();
             ui.end_row();
 
             ui.label("Fonte:");
-            changed |= ui.add(egui::Slider::new(&mut edited.font_size, 8.0..=72.0)).changed();
+            changed |= ui
+                .add(egui::Slider::new(&mut edited.font_size, 8.0..=72.0))
+                .changed();
             ui.end_row();
 
             ui.label("Screen space:");
@@ -755,17 +887,27 @@ fn draw_audio_component_ui(
 ) {
     use std::fs;
 
-    let candidate_dirs = [app.project_root.join("sounds"), app.project_root.join("assets/sounds")];
+    let candidate_dirs = [
+        app.project_root.join("sounds"),
+        app.project_root.join("assets/sounds"),
+    ];
     let mut audio_files: Vec<String> = Vec::new();
     for dir in candidate_dirs {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase());
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase());
                 let is_audio = matches!(ext.as_deref(), Some("wav") | Some("ogg") | Some("mp3"));
                 if is_audio {
                     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        let prefix = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("sounds");
+                        let prefix = path
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("sounds");
                         audio_files.push(format!("{}/{}", prefix, name));
                     }
                 }
@@ -825,15 +967,23 @@ fn draw_audio_component_ui(
             ui.end_row();
         });
 
-    if !path.trim().is_empty() && !crate::runtime::systems::audio_system::validate_audio_path(&app.project_root, &path) {
-        ui.colored_label(egui::Color32::YELLOW, "Arquivo de áudio não encontrado no projeto.");
+    if !path.trim().is_empty()
+        && !crate::runtime::systems::audio_system::validate_audio_path(&app.project_root, &path)
+    {
+        ui.colored_label(
+            egui::Color32::YELLOW,
+            "Arquivo de áudio não encontrado no projeto.",
+        );
     } else if !path.trim().is_empty() {
         ui.colored_label(egui::Color32::GREEN, "Áudio válido para o runtime.");
     }
 
     ui.horizontal_wrapped(|ui| {
         let runtime_ativo = app.runtime.window_open;
-        let stop_btn = ui.add_enabled(runtime_ativo && !path.trim().is_empty(), egui::Button::new("⏹ Stop por nome"));
+        let stop_btn = ui.add_enabled(
+            runtime_ativo && !path.trim().is_empty(),
+            egui::Button::new("⏹ Stop por nome"),
+        );
         if stop_btn.clicked() {
             let stopped = app.runtime.stop_audio_by_name(&path);
             if stopped > 0 {
@@ -844,7 +994,11 @@ fn draw_audio_component_ui(
         }
 
         if !runtime_ativo {
-            ui.label(egui::RichText::new("Disponível durante o Play do runtime.").small().weak());
+            ui.label(
+                egui::RichText::new("Disponível durante o Play do runtime.")
+                    .small()
+                    .weak(),
+            );
         }
     });
 
@@ -909,7 +1063,10 @@ fn draw_script_component_ui(
         }
 
         if ui.button("Criar Script RS2").clicked() {
-            match app.assets.create_rs2_script_file(&scripts_dir, "novo_script") {
+            match app
+                .assets
+                .create_rs2_script_file(&scripts_dir, "novo_script")
+            {
                 Ok(new_path) => {
                     path = format!(
                         "assets/scripts/{}",
@@ -959,7 +1116,8 @@ fn draw_script_component_ui(
                 changed = true;
             } else if ui.rect_contains_pointer(ui.max_rect()) {
                 drop_error = Some(
-                    "Só é permitido arrastar arquivos .rs2 para o componente Script RS2.".to_string(),
+                    "Só é permitido arrastar arquivos .rs2 para o componente Script RS2."
+                        .to_string(),
                 );
             }
         }
@@ -1003,10 +1161,7 @@ fn draw_script_component_ui(
             }
 
             if !path.is_empty() && !is_valid_rs2_script(&path) {
-                ui.colored_label(
-                    egui::Color32::YELLOW,
-                    "Use um arquivo com extensão .rs2.",
-                );
+                ui.colored_label(egui::Color32::YELLOW, "Use um arquivo com extensão .rs2.");
             } else if let Some(msg) = &drop_error {
                 ui.colored_label(egui::Color32::RED, msg);
             }
@@ -1038,7 +1193,9 @@ fn draw_script_component_ui(
     }
 
     if !path.trim().is_empty() {
-        if let Some(script_full_path) = crate::runtime::script::resolve_script_path(&app.project_root, &path) {
+        if let Some(script_full_path) =
+            crate::runtime::script::resolve_script_path(&app.project_root, &path)
+        {
             match std::fs::read_to_string(&script_full_path) {
                 Ok(source) => {
                     let script_errors = crate::runtime::script::validate_script(&source);
@@ -1054,9 +1211,12 @@ fn draw_script_component_ui(
                         }
                         if script_errors.len() > 4 {
                             ui.label(
-                                egui::RichText::new(format!("+ {} erro(s) adicional(is)", script_errors.len() - 4))
-                                    .small()
-                                    .weak(),
+                                egui::RichText::new(format!(
+                                    "+ {} erro(s) adicional(is)",
+                                    script_errors.len() - 4
+                                ))
+                                .small()
+                                .weak(),
                             );
                         }
                     }
@@ -1107,7 +1267,11 @@ fn draw_lua_script_component_ui(
     let mut path = sc.file_path.clone();
     let mut changed = false;
 
-    let popup_id = egui::Id::new(format!("select_lua_script_popup_{}_{}", index, scripts_dir.display()));
+    let popup_id = egui::Id::new(format!(
+        "select_lua_script_popup_{}_{}",
+        index,
+        scripts_dir.display()
+    ));
 
     ui.horizontal(|ui| {
         // ── botão Selecionar (popup igual ao RS2) ──
@@ -1125,7 +1289,11 @@ fn draw_lua_script_component_ui(
                 ui.set_min_width(220.0);
                 ui.label("Selecione um script Lua:");
                 if lua_files.is_empty() {
-                    ui.label(egui::RichText::new("Nenhum .lua encontrado em assets/scripts").small().weak());
+                    ui.label(
+                        egui::RichText::new("Nenhum .lua encontrado em assets/scripts")
+                            .small()
+                            .weak(),
+                    );
                 }
                 for script_name in &lua_files {
                     if ui.button(script_name).clicked() {
@@ -1139,11 +1307,17 @@ fn draw_lua_script_component_ui(
 
         // ── botão Criar ──
         if ui.button("Criar LuaScript").clicked() {
-            match app.assets.create_lua_script_file(&scripts_dir, "novo_script_lua") {
+            match app
+                .assets
+                .create_lua_script_file(&scripts_dir, "novo_script_lua")
+            {
                 Ok(new_path) => {
                     path = format!(
                         "assets/scripts/{}",
-                        new_path.file_name().and_then(|n| n.to_str()).unwrap_or("novo_script_lua.lua")
+                        new_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("novo_script_lua.lua")
                     );
                     changed = true;
                 }
@@ -1160,20 +1334,37 @@ fn draw_lua_script_component_ui(
         .show(ui, |ui| {
             ui.label("Arquivo Lua:");
             changed |= ui
-                .add(egui::TextEdit::singleline(&mut path).hint_text("assets/scripts/meu_script.lua").desired_width(f32::INFINITY))
+                .add(
+                    egui::TextEdit::singleline(&mut path)
+                        .hint_text("assets/scripts/meu_script.lua")
+                        .desired_width(f32::INFINITY),
+                )
                 .changed();
             ui.end_row();
         });
 
     if changed {
-        updated_components.push((index, Component::LuaScript(LuaScript { file_path: path.clone() })));
+        updated_components.push((
+            index,
+            Component::LuaScript(LuaScript {
+                file_path: path.clone(),
+            }),
+        ));
     }
 
     if path.trim().is_empty() {
-        ui.label(egui::RichText::new("Preparação V0.8.7: componente pronto para validação local de Lua e template base.").small().weak());
+        ui.label(
+            egui::RichText::new(
+                "Preparação V0.8.7: componente pronto para validação local de Lua e template base.",
+            )
+            .small()
+            .weak(),
+        );
     } else if !crate::runtime::script::is_valid_lua_script(&path) {
         ui.colored_label(egui::Color32::YELLOW, "Use um arquivo com extensão .lua.");
-    } else if let Err(error) = crate::runtime::script::validate_lua_script_reference(&app.project_root, &path) {
+    } else if let Err(error) =
+        crate::runtime::script::validate_lua_script_reference(&app.project_root, &path)
+    {
         ui.colored_label(egui::Color32::RED, error);
     } else {
         ui.colored_label(egui::Color32::GREEN, "LuaScript localizado.");
@@ -1182,18 +1373,32 @@ fn draw_lua_script_component_ui(
             Ok(source) => {
                 let lua_errors = crate::runtime::script::validate_lua_source(&source);
                 if lua_errors.is_empty() {
-                    ui.label(egui::RichText::new("Sintaxe Lua OK via mlua.").small().weak());
+                    ui.label(
+                        egui::RichText::new("Sintaxe Lua OK via mlua.")
+                            .small()
+                            .weak(),
+                    );
                 } else {
                     for error in lua_errors.iter().take(3) {
                         ui.colored_label(egui::Color32::RED, error);
                     }
                     if lua_errors.len() > 3 {
-                        ui.label(egui::RichText::new(format!("+ {} erro(s) adicional(is)", lua_errors.len() - 3)).small().weak());
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "+ {} erro(s) adicional(is)",
+                                lua_errors.len() - 3
+                            ))
+                            .small()
+                            .weak(),
+                        );
                     }
                 }
             }
             Err(error) => {
-                ui.colored_label(egui::Color32::RED, format!("Falha ao ler LuaScript: {}", error));
+                ui.colored_label(
+                    egui::Color32::RED,
+                    format!("Falha ao ler LuaScript: {}", error),
+                );
             }
         }
     }
@@ -1239,40 +1444,118 @@ fn draw_animator_component_ui(
         });
 }
 
-
-
 fn show_add_component_menu_inspector(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str) {
     ui.label(egui::RichText::new("Adicionar componente").small().strong());
     ui.separator();
 
     ui.menu_button("🎮 Gameplay", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "💨 Velocity", Component::Velocity(Velocity::default()));
-        inspector_component_menu_button(ui, app, entity_id, "⚽ RigidBody2D", Component::RigidBody2D(RigidBody2D::default()));
-        inspector_component_menu_button(ui, app, entity_id, "📐 BoxCollider", Component::BoxCollider(BoxCollider::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🎞 Animator", Component::Animator(Animator::default()));
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "💨 Velocity",
+            Component::Velocity(Velocity::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "⚽ RigidBody2D",
+            Component::RigidBody2D(RigidBody2D::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📐 BoxCollider",
+            Component::BoxCollider(BoxCollider::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🎞 Animator",
+            Component::Animator(Animator::default()),
+        );
     });
 
     ui.menu_button("🧠 Scripts", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "📜 Script RS2", Component::Script(Script { file_path: String::new() }));
-        inspector_component_menu_button(ui, app, entity_id, "🌙 LuaScript", Component::LuaScript(LuaScript { file_path: String::new() }));
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📜 Script RS2",
+            Component::Script(Script {
+                file_path: String::new(),
+            }),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🌙 LuaScript",
+            Component::LuaScript(LuaScript {
+                file_path: String::new(),
+            }),
+        );
     });
 
     ui.menu_button("🖼 Visual", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "🖼 Sprite", Component::Sprite(Sprite::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔤 TextLabel", Component::TextLabel(TextLabel::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔘 UIButton", Component::UIButton(UIButton::default()));
-        inspector_component_menu_button(ui, app, entity_id, "🔊 Audio", Component::Audio(Audio::default()));
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🖼 Sprite",
+            Component::Sprite(Sprite::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔤 TextLabel",
+            Component::TextLabel(TextLabel::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔘 UIButton",
+            Component::UIButton(UIButton::default()),
+        );
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "🔊 Audio",
+            Component::Audio(Audio::default()),
+        );
     });
 
     ui.menu_button("📷 Cena", |ui| {
-        inspector_component_menu_button(ui, app, entity_id, "📷 Camera2D", Component::Camera2D(Camera2D::default()));
+        inspector_component_menu_button(
+            ui,
+            app,
+            entity_id,
+            "📷 Camera2D",
+            Component::Camera2D(Camera2D::default()),
+        );
     });
 }
 
-fn inspector_component_menu_button(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &str, label: &str, component: Component) {
+fn inspector_component_menu_button(
+    ui: &mut egui::Ui,
+    app: &mut EditorApp,
+    entity_id: &str,
+    label: &str,
+    component: Component,
+) {
     let already_has = app
         .find_entity_mut(entity_id)
-        .map(|entity| entity.components.iter().any(|existing| std::mem::discriminant(existing) == std::mem::discriminant(&component)))
+        .map(|entity| {
+            entity.components.iter().any(|existing| {
+                std::mem::discriminant(existing) == std::mem::discriminant(&component)
+            })
+        })
         .unwrap_or(false);
 
     let response = ui.add_enabled(!already_has, egui::Button::new(label));

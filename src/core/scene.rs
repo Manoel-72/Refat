@@ -43,7 +43,9 @@ impl Scene {
     }
 
     pub fn find_entity_mut(&mut self, id: &str) -> Option<&mut Entity> {
-        self.entities.iter_mut().find_map(|entity| entity.find_mut(id))
+        self.entities
+            .iter_mut()
+            .find_map(|entity| entity.find_mut(id))
     }
 
     pub fn remove_entity_by_id(&mut self, id: &str) -> bool {
@@ -111,7 +113,13 @@ fn remove_entity_recursive(entities: &mut Vec<Entity>, id: &str) -> bool {
 pub fn sanitize_scene_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
 
     if sanitized.trim_matches('_').is_empty() {

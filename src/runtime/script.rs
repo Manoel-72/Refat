@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fmt,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::SystemTime,
@@ -77,7 +76,10 @@ impl fmt::Display for ScriptLoadError {
         match self {
             ScriptLoadError::EmptyPath => write!(f, "Caminho do script está vazio."),
             ScriptLoadError::InvalidExtension(path) => {
-                write!(f, "'{path}' não é um arquivo de script válido (.rs2 ou .lua).")
+                write!(
+                    f,
+                    "'{path}' não é um arquivo de script válido (.rs2 ou .lua)."
+                )
             }
             ScriptLoadError::FileNotFound(path) => {
                 write!(f, "Arquivo de script não encontrado: {path}")
@@ -122,10 +124,14 @@ pub fn load_script_behavior_checked(
         .map(|ext| ext.eq_ignore_ascii_case("rs2"))
         .unwrap_or(false)
     {
-        return Err(ScriptLoadError::InvalidExtension(raw_path.trim().to_string()));
+        return Err(ScriptLoadError::InvalidExtension(
+            raw_path.trim().to_string(),
+        ));
     }
 
-    let modified_at = fs::metadata(&full_path).ok().and_then(|m| m.modified().ok());
+    let modified_at = fs::metadata(&full_path)
+        .ok()
+        .and_then(|m| m.modified().ok());
     if let Ok(cache) = script_cache().lock() {
         if let Some(cached) = cache.get(&full_path) {
             if cached.modified_at == modified_at {
@@ -178,7 +184,10 @@ pub fn validate_lua_script_reference(project_root: &Path, raw_path: &str) -> Res
         .unwrap_or(false);
 
     if !is_lua {
-        return Err(format!("'{}' não é um arquivo .lua válido.", raw_path.trim()));
+        return Err(format!(
+            "'{}' não é um arquivo .lua válido.",
+            raw_path.trim()
+        ));
     }
 
     fs::read_to_string(&full_path)
@@ -245,11 +254,16 @@ pub fn validate_script(code: &str) -> Vec<ScriptError> {
 
         if let Some(rest) = clean.strip_prefix("@on_start") {
             let trimmed = rest.trim();
-            current_event = if trimmed.is_empty() { Some("@on_start") } else { None };
+            current_event = if trimmed.is_empty() {
+                Some("@on_start")
+            } else {
+                None
+            };
             if !trimmed.is_empty() && parse_event_instruction(trimmed).is_none() {
                 errors.push(script_error(
                     line_no,
-                    "@on_start precisa usar print(\"texto\"), move_x(numero) ou move_y(numero).".to_string(),
+                    "@on_start precisa usar print(\"texto\"), move_x(numero) ou move_y(numero)."
+                        .to_string(),
                 ));
             }
             continue;
@@ -257,11 +271,16 @@ pub fn validate_script(code: &str) -> Vec<ScriptError> {
 
         if let Some(rest) = clean.strip_prefix("@on_update") {
             let trimmed = rest.trim();
-            current_event = if trimmed.is_empty() { Some("@on_update") } else { None };
+            current_event = if trimmed.is_empty() {
+                Some("@on_update")
+            } else {
+                None
+            };
             if !trimmed.is_empty() && parse_event_instruction(trimmed).is_none() {
                 errors.push(script_error(
                     line_no,
-                    "@on_update precisa usar print(\"texto\"), move_x(numero) ou move_y(numero).".to_string(),
+                    "@on_update precisa usar print(\"texto\"), move_x(numero) ou move_y(numero)."
+                        .to_string(),
                 ));
             }
             continue;
@@ -331,7 +350,11 @@ pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
         }
         if let Some(rest) = clean.strip_prefix("@on_start") {
             let trimmed = rest.trim();
-            current_event = if trimmed.is_empty() { Some("@on_start") } else { None };
+            current_event = if trimmed.is_empty() {
+                Some("@on_start")
+            } else {
+                None
+            };
             if !trimmed.is_empty() {
                 behavior.on_start.push(trimmed.to_string());
             }
@@ -339,7 +362,11 @@ pub fn parse_rs2_script(source: &str) -> ScriptBehavior {
         }
         if let Some(rest) = clean.strip_prefix("@on_update") {
             let trimmed = rest.trim();
-            current_event = if trimmed.is_empty() { Some("@on_update") } else { None };
+            current_event = if trimmed.is_empty() {
+                Some("@on_update")
+            } else {
+                None
+            };
             if !trimmed.is_empty() {
                 behavior.on_update.push(trimmed.to_string());
             }
@@ -439,7 +466,10 @@ fn validate_directive_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptE
             if !rest.is_empty() && parse_event_instruction(rest).is_none() {
                 errors.push(script_error(
                     line_no,
-                    format!("{} só aceita print(\"texto\"), move_x(numero) ou move_y(numero).", token),
+                    format!(
+                        "{} só aceita print(\"texto\"), move_x(numero) ou move_y(numero).",
+                        token
+                    ),
                 ));
             }
         }
@@ -448,7 +478,10 @@ fn validate_directive_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptE
             if parse_script_action(rest).is_none() {
                 errors.push(script_error(
                     line_no,
-                    format!("{} precisa de uma ação válida: change_scene \"caminho\" ou reload_scene.", token),
+                    format!(
+                        "{} precisa de uma ação válida: change_scene \"caminho\" ou reload_scene.",
+                        token
+                    ),
                 ));
             }
         }
@@ -462,7 +495,12 @@ fn validate_directive_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptE
 fn validate_assignment_line(clean: &str, line_no: usize, errors: &mut Vec<ScriptError>) {
     let mut parts = clean.splitn(2, '=');
     let key = parts.next().unwrap_or("").trim();
-    let value = parts.next().unwrap_or("").trim().trim_end_matches(';').trim();
+    let value = parts
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches(';')
+        .trim();
 
     match key {
         "move_x" | "move_y" | "rotate_speed" | "player_controller" | "player_controller_speed" => {
@@ -507,7 +545,12 @@ fn script_error(line: usize, message: String) -> ScriptError {
 }
 
 fn is_numeric_token(value: &str) -> bool {
-    value.trim().trim_end_matches(';').trim().parse::<f32>().is_ok()
+    value
+        .trim()
+        .trim_end_matches(';')
+        .trim()
+        .parse::<f32>()
+        .is_ok()
 }
 
 fn parse_script_number(line: &str, keys: &[&str]) -> Option<f32> {
@@ -557,7 +600,11 @@ pub fn parse_event_instruction(raw: &str) -> Option<ScriptEventInstruction> {
     let cleaned = raw.trim().trim_end_matches(';').trim();
 
     if let Some(rest) = cleaned.strip_prefix("print") {
-        let text = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        let text = rest
+            .trim()
+            .trim_start_matches('(')
+            .trim_end_matches(')')
+            .trim();
         let text = text.trim_matches('"').trim_matches('\'');
         if !text.is_empty() {
             return Some(ScriptEventInstruction::Print(text.to_string()));
@@ -565,14 +612,22 @@ pub fn parse_event_instruction(raw: &str) -> Option<ScriptEventInstruction> {
     }
 
     if let Some(rest) = cleaned.strip_prefix("move_x") {
-        let value = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        let value = rest
+            .trim()
+            .trim_start_matches('(')
+            .trim_end_matches(')')
+            .trim();
         if let Ok(parsed) = value.parse::<f32>() {
             return Some(ScriptEventInstruction::MoveX(parsed));
         }
     }
 
     if let Some(rest) = cleaned.strip_prefix("move_y") {
-        let value = rest.trim().trim_start_matches('(').trim_end_matches(')').trim();
+        let value = rest
+            .trim()
+            .trim_start_matches('(')
+            .trim_end_matches(')')
+            .trim();
         if let Ok(parsed) = value.parse::<f32>() {
             return Some(ScriptEventInstruction::MoveY(parsed));
         }
@@ -622,7 +677,9 @@ mod tests {
         assert_eq!(behavior.on_start, vec!["print(\"boot\")".to_string()]);
         assert_eq!(
             behavior.on_collision,
-            vec![ScriptAction::ChangeScene("fases/menu.scene.json".to_string())]
+            vec![ScriptAction::ChangeScene(
+                "fases/menu.scene.json".to_string()
+            )]
         );
         assert_eq!(behavior.on_trigger, vec![ScriptAction::ReloadScene]);
     }

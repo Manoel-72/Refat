@@ -5,8 +5,11 @@
 //  <projeto>/save/save.json como pares chave→valor JSON.
 // ============================================================
 
-use std::{collections::HashMap, path::{Path, PathBuf}};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 /// Valor que pode ser salvo: número, texto ou booleano.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -19,28 +22,80 @@ pub enum SaveValue {
 }
 
 impl SaveValue {
-    pub fn as_bool(&self)  -> Option<bool>   { if let SaveValue::Bool(v)  = self { Some(*v) } else { None } }
-    pub fn as_int(&self)   -> Option<i64>    { if let SaveValue::Int(v)   = self { Some(*v) } else { None } }
-    pub fn as_float(&self) -> Option<f64>    { if let SaveValue::Float(v) = self { Some(*v) } else { None } }
-    pub fn as_text(&self)  -> Option<&str>   { if let SaveValue::Text(v)  = self { Some(v) } else { None } }
+    pub fn as_bool(&self) -> Option<bool> {
+        if let SaveValue::Bool(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_int(&self) -> Option<i64> {
+        if let SaveValue::Int(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_float(&self) -> Option<f64> {
+        if let SaveValue::Float(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_text(&self) -> Option<&str> {
+        if let SaveValue::Text(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 
     /// Tenta converter para f64 independente de variante numérica.
     pub fn to_f64(&self) -> Option<f64> {
         match self {
-            SaveValue::Int(v)   => Some(*v as f64),
+            SaveValue::Int(v) => Some(*v as f64),
             SaveValue::Float(v) => Some(*v),
             _ => None,
         }
     }
 }
 
-impl From<bool>  for SaveValue { fn from(v: bool)  -> Self { SaveValue::Bool(v) } }
-impl From<i32>   for SaveValue { fn from(v: i32)   -> Self { SaveValue::Int(v as i64) } }
-impl From<i64>   for SaveValue { fn from(v: i64)   -> Self { SaveValue::Int(v) } }
-impl From<f32>   for SaveValue { fn from(v: f32)   -> Self { SaveValue::Float(v as f64) } }
-impl From<f64>   for SaveValue { fn from(v: f64)   -> Self { SaveValue::Float(v) } }
-impl From<&str>  for SaveValue { fn from(v: &str)  -> Self { SaveValue::Text(v.to_string()) } }
-impl From<String>for SaveValue { fn from(v: String)-> Self { SaveValue::Text(v) } }
+impl From<bool> for SaveValue {
+    fn from(v: bool) -> Self {
+        SaveValue::Bool(v)
+    }
+}
+impl From<i32> for SaveValue {
+    fn from(v: i32) -> Self {
+        SaveValue::Int(v as i64)
+    }
+}
+impl From<i64> for SaveValue {
+    fn from(v: i64) -> Self {
+        SaveValue::Int(v)
+    }
+}
+impl From<f32> for SaveValue {
+    fn from(v: f32) -> Self {
+        SaveValue::Float(v as f64)
+    }
+}
+impl From<f64> for SaveValue {
+    fn from(v: f64) -> Self {
+        SaveValue::Float(v)
+    }
+}
+impl From<&str> for SaveValue {
+    fn from(v: &str) -> Self {
+        SaveValue::Text(v.to_string())
+    }
+}
+impl From<String> for SaveValue {
+    fn from(v: String) -> Self {
+        SaveValue::Text(v)
+    }
+}
 
 // ── SaveData ─────────────────────────────────────────────────
 
@@ -57,11 +112,16 @@ pub struct SaveData {
     pub version: u32,
 }
 
-fn default_save_version() -> u32 { 1 }
+fn default_save_version() -> u32 {
+    1
+}
 
 impl SaveData {
     pub fn new() -> Self {
-        Self { version: default_save_version(), ..Default::default() }
+        Self {
+            version: default_save_version(),
+            ..Default::default()
+        }
     }
 
     // ── get ──────────────────────────────────────────────────
@@ -93,11 +153,13 @@ impl SaveData {
     }
 
     pub fn set_text(&mut self, key: &str, value: impl Into<String>) {
-        self.entries.insert(key.to_string(), SaveValue::Text(value.into()));
+        self.entries
+            .insert(key.to_string(), SaveValue::Text(value.into()));
     }
 
     pub fn set_float(&mut self, key: &str, value: f64) {
-        self.entries.insert(key.to_string(), SaveValue::Float(value));
+        self.entries
+            .insert(key.to_string(), SaveValue::Float(value));
     }
 
     pub fn set_int(&mut self, key: &str, value: i64) {
@@ -145,8 +207,7 @@ impl SaveData {
     pub fn load_from_path(path: &Path) -> Result<Self, String> {
         let raw = std::fs::read_to_string(path)
             .map_err(|e| format!("Erro ao ler save em '{}': {e}", path.display()))?;
-        serde_json::from_str(&raw)
-            .map_err(|e| format!("Erro ao desserializar save: {e}"))
+        serde_json::from_str(&raw).map_err(|e| format!("Erro ao desserializar save: {e}"))
     }
 
     /// Apaga o arquivo de save.
@@ -196,7 +257,10 @@ mod tests {
         let loaded = SaveData::load_from_project(&dir).expect("load falhou");
         assert_eq!(loaded.get_int("fase"), Some(3));
         assert_eq!(loaded.get_int("vidas"), Some(2));
-        assert_eq!(loaded.current_scene.as_deref(), Some("fases/fase3.scene.json"));
+        assert_eq!(
+            loaded.current_scene.as_deref(),
+            Some("fases/fase3.scene.json")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

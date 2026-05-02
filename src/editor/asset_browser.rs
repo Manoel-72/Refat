@@ -9,14 +9,16 @@ use rfd::FileDialog;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::{AssetBrowserFilter, EditorApp};
 use crate::{
     assets::{AssetLoadStatus, AssetNode, AssetType},
     component::{Camera2D, Component},
     entity::Entity,
 };
-use super::{AssetBrowserFilter, EditorApp};
 
 pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
+    // Namespace estável: evita colisão de IDs com Animator/Console no mesmo painel inferior.
+    ui.push_id("asset_browser_dock", |ui| {
     let assets_root = app.project_root.join("assets");
 
     // ── Cabeçalho + Busca ──
@@ -139,6 +141,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     ui.vertical(|ui| {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             egui::ScrollArea::vertical()
+                .id_source(egui::Id::new("asset_browser_card_grid_scroll"))
                 .max_height(grid_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
@@ -248,6 +251,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         let details_max = ui.available_height().max(72.0).min(220.0);
         egui::Frame::group(ui.style()).show(ui, |ui| {
             egui::ScrollArea::vertical()
+                .id_source(egui::Id::new("asset_browser_details_scroll"))
                 .max_height(details_max)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
@@ -257,12 +261,16 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
     });
 
     apply_asset_action(app, action, &assets_root);
+    });
 }
 
 fn current_asset_scope_dir(app: &EditorApp, assets_root: &Path) -> PathBuf {
     match app.selected_asset.as_ref() {
         Some(path) if path.is_dir() => path.clone(),
-        Some(path) => path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| assets_root.to_path_buf()),
+        Some(path) => path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| assets_root.to_path_buf()),
         None => assets_root.to_path_buf(),
     }
 }
@@ -274,29 +282,31 @@ fn read_scope_entries(scope_dir: &Path) -> Vec<PathBuf> {
             entries.push(entry.path());
         }
     }
-    entries.sort_by(|a, b| {
-        match (a.is_dir(), b.is_dir()) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default()
-                .to_lowercase()
-                .cmp(
-                    &b.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or_default()
-                        .to_lowercase(),
-                ),
-        }
+    entries.sort_by(|a, b| match (a.is_dir(), b.is_dir()) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_lowercase()
+            .cmp(
+                &b.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_lowercase(),
+            ),
     });
     entries
 }
 
 fn matches_scope_filter(path: &Path, search: &str, asset_filter: AssetBrowserFilter) -> bool {
     let query = search.trim().to_lowercase();
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_lowercase();
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
     let search_ok = query.is_empty() || name.contains(&query);
     let filter_ok = path.is_dir() || asset_matches_filter(path, asset_filter);
     search_ok && filter_ok
@@ -346,7 +356,12 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
                 Ok(path) => {
                     app.assets.refresh();
                     app.selected_asset = Some(path.clone());
-                    app.status_msg = format!("🎬 Cena criada: {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("nova_cena.scene.json"));
+                    app.status_msg = format!(
+                        "🎬 Cena criada: {}",
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("nova_cena.scene.json")
+                    );
                 }
                 Err(error) => app.status_msg = format!("❌ {}", error),
             }
@@ -381,16 +396,20 @@ fn apply_asset_action(app: &mut EditorApp, action: Option<AssetAction>, assets_r
         Some(AssetAction::Rename(path)) => {
             app.request_rename_asset(path);
         }
-        Some(AssetAction::Duplicate(path)) => {
-            match app.assets.duplicate_path(&path) {
-                Ok(new_path) => {
-                    app.assets.refresh();
-                    app.selected_asset = Some(new_path.clone());
-                    app.status_msg = format!("📄 Duplicado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
-                }
-                Err(error) => app.status_msg = format!("❌ {}", error),
+        Some(AssetAction::Duplicate(path)) => match app.assets.duplicate_path(&path) {
+            Ok(new_path) => {
+                app.assets.refresh();
+                app.selected_asset = Some(new_path.clone());
+                app.status_msg = format!(
+                    "📄 Duplicado: {}",
+                    new_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("asset")
+                );
             }
-        }
+            Err(error) => app.status_msg = format!("❌ {}", error),
+        },
         Some(AssetAction::Delete(path)) => {
             app.request_delete_asset(path);
         }
@@ -429,10 +448,20 @@ fn show_node(
 
         let response = egui::CollapsingHeader::new(&header)
             .id_source(node_path.to_string_lossy().to_string())
-            .default_open(search.trim().is_empty() && matches!(asset_filter, AssetBrowserFilter::All))
+            .default_open(
+                search.trim().is_empty() && matches!(asset_filter, AssetBrowserFilter::All),
+            )
             .show(ui, |ui: &mut egui::Ui| {
                 for child in &children {
-                    show_node(ui, child, selected, search, asset_filter, action, dragging_asset);
+                    show_node(
+                        ui,
+                        child,
+                        selected,
+                        search,
+                        asset_filter,
+                        action,
+                        dragging_asset,
+                    );
                 }
             });
 
@@ -488,7 +517,10 @@ fn show_node(
     } else {
         let node_path = node.path.clone();
         let label = format!("{} {}", node.icon(), node.name);
-        let can_drag = is_image_file(&node_path) || is_matr_file(&node_path) || is_rs2_file(&node_path) || is_lua_file(&node_path);
+        let can_drag = is_image_file(&node_path)
+            || is_matr_file(&node_path)
+            || is_rs2_file(&node_path)
+            || is_lua_file(&node_path);
 
         ui.horizontal(|ui: &mut egui::Ui| {
             ui.add_space(8.0);
@@ -515,9 +547,7 @@ fn show_node(
                     }
                     #[cfg(not(target_os = "windows"))]
                     {
-                        let _ = std::process::Command::new("code")
-                            .arg(&node_path)
-                            .spawn();
+                        let _ = std::process::Command::new("code").arg(&node_path).spawn();
                     }
                 }
             }
@@ -527,16 +557,18 @@ fn show_node(
             }
 
             response.context_menu(|ui: &mut egui::Ui| {
-                                if node_path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                                    if ui.button("📝 Abrir em IDE").clicked() {
-                                        #[cfg(target_os = "windows")]
-                                        {
-                                            let _ = std::process::Command::new("cmd").args(["/C", "code", &node_path.to_string_lossy()]).spawn();
-                                        }
-                                        ui.close_menu();
-                                    }
-                                    ui.separator();
-                                }
+                if node_path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                    if ui.button("📝 Abrir em IDE").clicked() {
+                        #[cfg(target_os = "windows")]
+                        {
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/C", "code", &node_path.to_string_lossy()])
+                                .spawn();
+                        }
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                }
                 if is_image_file(&node_path) {
                     if ui.button("🖼 Criar Entidade Sprite").clicked() {
                         *action = Some(AssetAction::CreateSpriteFromAsset(node_path.clone()));
@@ -621,7 +653,10 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
         };
         ui.label(format!("Status: {}", status_text));
         if !record.validation.is_valid {
-            ui.colored_label(egui::Color32::YELLOW, format!("⚠ {}", record.validation.message));
+            ui.colored_label(
+                egui::Color32::YELLOW,
+                format!("⚠ {}", record.validation.message),
+            );
         } else {
             ui.colored_label(egui::Color32::LIGHT_GREEN, "✔ Validação OK");
         }
@@ -640,7 +675,13 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                         Ok(new_path) => {
                             app.assets.refresh();
                             app.selected_asset = Some(new_path.clone());
-                            app.status_msg = format!("🎬 Cena criada: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("nova_cena.scene.json"));
+                            app.status_msg = format!(
+                                "🎬 Cena criada: {}",
+                                new_path
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("nova_cena.scene.json")
+                            );
                         }
                         Err(error) => app.status_msg = format!("❌ {}", error),
                     }
@@ -683,7 +724,9 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
             ui.horizontal_wrapped(|ui| {
                 if ui.button("🖼 Instanciar Sprite na Cena").clicked() {
                     match app.create_sprite_entity_from_asset(&path, Some((0.0, 0.0))) {
-                        Ok(name) => app.status_msg = format!("🖼 Sprite '{}' adicionado à cena.", name),
+                        Ok(name) => {
+                            app.status_msg = format!("🖼 Sprite '{}' adicionado à cena.", name)
+                        }
                         Err(e) => app.status_msg = format!("❌ {}", e),
                     }
                 }
@@ -705,23 +748,33 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
         }
 
         ui.horizontal_wrapped(|ui| {
-        if ui.button("🧱 Exportar entidade selecionada como Prefab").clicked() {
-            if let Some(selected_id) = app.selected_entity_id.clone() {
-                if let Some(entity) = app.scene.find_entity(&selected_id).cloned() {
-                    match app.export_entity_as_matr(&entity) {
-                        Ok(prefab_path) => {
-                            app.assets.refresh();
-                            app.status_msg = format!("🧱 Prefab exportado: {}", prefab_path.file_name().and_then(|n| n.to_str()).unwrap_or("prefab.prefab.json"));
+            if ui
+                .button("🧱 Exportar entidade selecionada como Prefab")
+                .clicked()
+            {
+                if let Some(selected_id) = app.selected_entity_id.clone() {
+                    if let Some(entity) = app.scene.find_entity(&selected_id).cloned() {
+                        match app.export_entity_as_matr(&entity) {
+                            Ok(prefab_path) => {
+                                app.assets.refresh();
+                                app.status_msg = format!(
+                                    "🧱 Prefab exportado: {}",
+                                    prefab_path
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or("prefab.prefab.json")
+                                );
+                            }
+                            Err(error) => app.status_msg = format!("❌ {}", error),
                         }
-                        Err(error) => app.status_msg = format!("❌ {}", error),
+                    } else {
+                        app.status_msg = "❌ Entidade selecionada não encontrada.".to_string();
                     }
                 } else {
-                    app.status_msg = "❌ Entidade selecionada não encontrada.".to_string();
+                    app.status_msg =
+                        "❌ Selecione uma entidade para exportar como prefab.".to_string();
                 }
-            } else {
-                app.status_msg = "❌ Selecione uma entidade para exportar como prefab.".to_string();
             }
-        }
             if ui.button("📋 Copiar caminho").clicked() {
                 let copied = relative.unwrap_or_else(|| path.to_string_lossy().to_string());
                 ui.output_mut(|o| {
@@ -734,7 +787,13 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
                     Ok(new_path) => {
                         app.assets.refresh();
                         app.selected_asset = Some(new_path.clone());
-                        app.status_msg = format!("📄 Duplicado: {}", new_path.file_name().and_then(|n| n.to_str()).unwrap_or("asset"));
+                        app.status_msg = format!(
+                            "📄 Duplicado: {}",
+                            new_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("asset")
+                        );
                     }
                     Err(error) => app.status_msg = format!("❌ {}", error),
                 }
@@ -754,7 +813,6 @@ fn show_selected_asset_panel(app: &mut EditorApp, ui: &mut egui::Ui, assets_root
         });
     });
 }
-
 
 fn is_rs2_file(path: &Path) -> bool {
     path.extension()
@@ -786,10 +844,8 @@ fn import_sprite_file(app: &mut EditorApp, assets_root: &Path) {
 
             match app.create_sprite_entity_from_asset(&imported_path, Some((0.0, 0.0))) {
                 Ok(name) => {
-                    app.status_msg = format!(
-                        "📥 Sprite importado e instanciado para teste: '{}'",
-                        name
-                    );
+                    app.status_msg =
+                        format!("📥 Sprite importado e instanciado para teste: '{}'", name);
                 }
                 Err(e) => {
                     app.status_msg = format!("⚠ Sprite importado, mas não foi instanciado: {}", e);
@@ -821,7 +877,10 @@ fn matches_filter(node: &AssetNode, search: &str, asset_filter: AssetBrowserFilt
     let type_matches = node.is_dir || asset_matches_filter(&node.path, asset_filter);
 
     (search_matches && type_matches)
-        || node.children.iter().any(|child| matches_filter(child, search, asset_filter))
+        || node
+            .children
+            .iter()
+            .any(|child| matches_filter(child, search, asset_filter))
 }
 
 fn asset_matches_filter(path: &Path, asset_filter: AssetBrowserFilter) -> bool {
@@ -835,11 +894,17 @@ fn asset_matches_filter(path: &Path, asset_filter: AssetBrowserFilter) -> bool {
         ),
         AssetBrowserFilter::Prefabs => is_matr_file(path),
         AssetBrowserFilter::Audio => matches!(
-            path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+            path.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .as_deref(),
             Some("wav") | Some("ogg") | Some("mp3")
         ),
         AssetBrowserFilter::Fonts => matches!(
-            path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+            path.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .as_deref(),
             Some("ttf") | Some("otf")
         ),
     }

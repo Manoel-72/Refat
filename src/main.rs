@@ -3,20 +3,19 @@
 //  RS2BR-Engine - Entry point do editor
 // ============================================================
 
+pub mod assets;
 pub mod core;
+pub mod editor;
 /// Reexportações legadas; modelo de dados canônico está em [`core`].
 pub mod engine;
-pub mod assets;
-pub mod serialization;
-pub mod runtime;
-pub mod editor;
 pub mod renderer;
+pub mod runtime;
+pub mod serialization;
 pub mod standalone;
 
 use editor::EditorApp;
 
 pub use crate::core::{component, entity, prefab, project, scene, version};
-
 
 fn load_app_icon() -> Option<egui::IconData> {
     const EMBEDDED_PNG: &[u8] = include_bytes!("../assets/icon/rs2br_engine_icon.png");
@@ -31,11 +30,18 @@ fn load_app_icon() -> Option<egui::IconData> {
     }
 
     let cwd = std::env::current_dir().ok();
-    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf()));
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
     let candidates = [
-        cwd.as_ref().map(|p| p.join("assets/icon/rs2br_engine_icon.png")),
-        exe_dir.as_ref().map(|p| p.join("assets/icon/rs2br_engine_icon.png")),
-        exe_dir.as_ref().map(|p| p.join("../assets/icon/rs2br_engine_icon.png")),
+        cwd.as_ref()
+            .map(|p| p.join("assets/icon/rs2br_engine_icon.png")),
+        exe_dir
+            .as_ref()
+            .map(|p| p.join("assets/icon/rs2br_engine_icon.png")),
+        exe_dir
+            .as_ref()
+            .map(|p| p.join("../assets/icon/rs2br_engine_icon.png")),
     ];
 
     for candidate in candidates.into_iter().flatten() {
@@ -75,13 +81,11 @@ fn main() {
         .with_title(&window_title)
         .with_inner_size([1366.0, 768.0])
         .with_min_inner_size([800.0, 600.0])
-        .with_icon(
-            load_app_icon().unwrap_or_else(|| egui::IconData {
-                rgba: vec![255, 255, 255, 255],
-                width: 1,
-                height: 1,
-            }),
-        );
+        .with_icon(load_app_icon().unwrap_or_else(|| egui::IconData {
+            rgba: vec![255, 255, 255, 255],
+            width: 1,
+            height: 1,
+        }));
 
     if standalone_root.is_some() {
         // Standalone sempre abre maximizado para cobrir o monitor inteiro,
@@ -105,7 +109,12 @@ fn main() {
         eframe::run_native(
             &window_title,
             options,
-            Box::new(move |cc| Ok(Box::new(standalone::StandaloneApp::new(cc, project_root.clone())))),
+            Box::new(move |cc| {
+                Ok(Box::new(standalone::StandaloneApp::new(
+                    cc,
+                    project_root.clone(),
+                )))
+            }),
         )
         .expect("Falha ao iniciar o jogo standalone");
     } else {

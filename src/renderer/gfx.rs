@@ -1,11 +1,8 @@
-use egui::{self, Painter, TextureId, Pos2, Vec2, Color32, Stroke};
+use egui::{self, Color32, Painter, Pos2, Stroke, TextureId, Vec2};
 
 pub fn rotate_vec2(vec: Vec2, rotation_deg: f32) -> Vec2 {
     let (sin, cos) = rotation_deg.to_radians().sin_cos();
-    egui::vec2(
-        vec.x * cos - vec.y * sin,
-        vec.x * sin + vec.y * cos,
-    )
+    egui::vec2(vec.x * cos - vec.y * sin, vec.x * sin + vec.y * cos)
 }
 
 pub fn rotated_rect_points(center: Pos2, size: Vec2, rotation_deg: f32) -> [Pos2; 4] {
@@ -55,11 +52,28 @@ pub fn paint_rotated_image(
     let (v0, v1) = if flip_y { (1.0, 0.0) } else { (0.0, 1.0) };
     let mut mesh = egui::epaint::Mesh::with_texture(texture_id);
     let base = mesh.vertices.len() as u32;
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[0], uv: egui::pos2(u0, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[1], uv: egui::pos2(u1, v0), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[2], uv: egui::pos2(u1, v1), color: tint });
-    mesh.vertices.push(egui::epaint::Vertex { pos: points[3], uv: egui::pos2(u0, v1), color: tint });
-    mesh.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[0],
+        uv: egui::pos2(u0, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[1],
+        uv: egui::pos2(u1, v0),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[2],
+        uv: egui::pos2(u1, v1),
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: points[3],
+        uv: egui::pos2(u0, v1),
+        color: tint,
+    });
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     painter.add(egui::Shape::mesh(mesh));
     rect_from_points(&points)
 }

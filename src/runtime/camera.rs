@@ -1,4 +1,7 @@
-use crate::{core::{component::Component, entity::Entity}, runtime::renderer::CameraView};
+use crate::{
+    core::{component::Component, entity::Entity},
+    runtime::renderer::CameraView,
+};
 
 pub fn find_main_camera(entities: &[Entity]) -> CameraView {
     for entity in entities {

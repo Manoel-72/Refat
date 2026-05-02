@@ -15,9 +15,15 @@ pub mod script_system;
 #[path = "systems/ui_system.rs"]
 pub mod ui_system;
 
-use std::{collections::{HashMap, HashSet}, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
-use crate::core::{component::{BodyType, Component, Shape2D}, entity::Entity};
+use crate::core::{
+    component::{BodyType, Component, Shape2D},
+    entity::Entity,
+};
 use crate::runtime::{camera, script::ScriptAction};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,7 +31,6 @@ pub enum RuntimeCommand {
     ChangeScene(String),
     ReloadScene,
 }
-
 
 #[inline]
 fn push_unique_string(values: &mut Vec<String>, value: &str) {
@@ -63,7 +68,10 @@ fn build_contact_diff(
     let mut diff = ContactDiff::default();
 
     for (index, current_id) in current_ids.iter().enumerate() {
-        let current_name = current_names.get(index).cloned().unwrap_or_else(|| current_id.clone());
+        let current_name = current_names
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| current_id.clone());
         if previous_ids.iter().any(|id| id == current_id) {
             push_unique_string(&mut diff.stay_ids, current_id);
             push_unique_string(&mut diff.stay_names, &current_name);
@@ -204,15 +212,24 @@ fn update_entities_runtime_recursive(
     camera_snapshot: (f32, f32, f32),
 ) -> Option<RuntimeCommand> {
     for entity in entities {
-        let script_data = script_system::scan_script_behavior(entity, project_root, started_scripts);
+        let script_data =
+            script_system::scan_script_behavior(entity, project_root, started_scripts);
         let entity_ptr = entity as *const Entity;
         let my_collider_data = find_entity_collider(entity);
         let old_position = entity.transform().map(|t| (t.x, t.y)).unwrap_or((0.0, 0.0));
 
         // Salva grounded ANTES de apply_gravity, que o reseta para false.
         // Assim o Lua lê o valor correto do frame anterior (estava no chão = pode pular).
-        let grounded_before_physics = entity.components.iter()
-            .find_map(|c| if let crate::core::component::Component::RigidBody2D(rb) = c { Some(rb.grounded) } else { None })
+        let grounded_before_physics = entity
+            .components
+            .iter()
+            .find_map(|c| {
+                if let crate::core::component::Component::RigidBody2D(rb) = c {
+                    Some(rb.grounded)
+                } else {
+                    None
+                }
+            })
             .unwrap_or(false);
 
         script_system::advance_animator(entity, delta_time);
@@ -234,11 +251,29 @@ fn update_entities_runtime_recursive(
 
         // Lua scripts — executam após movimento, antes de colisão
         // (podem ajustar velocidade/posição reativamente)
-        let collision_entries = collect_collision_entries(entity, entity_ptr, &my_collider_data, colliders, collision_grid);
-        let collision_names: Vec<String> = collision_entries.iter().map(|entry| entry.name.clone()).collect();
-        let collision_ids: Vec<String> = collision_entries.iter().map(|entry| entry.id.clone()).collect();
-        let previous_collision_names = previous_collision_contacts.get(&entity.id).map(Vec::as_slice).unwrap_or(&[]);
-        let previous_collision_ids = previous_collision_contact_ids.get(&entity.id).map(Vec::as_slice).unwrap_or(&[]);
+        let collision_entries = collect_collision_entries(
+            entity,
+            entity_ptr,
+            &my_collider_data,
+            colliders,
+            collision_grid,
+        );
+        let collision_names: Vec<String> = collision_entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
+        let collision_ids: Vec<String> = collision_entries
+            .iter()
+            .map(|entry| entry.id.clone())
+            .collect();
+        let previous_collision_names = previous_collision_contacts
+            .get(&entity.id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let previous_collision_ids = previous_collision_contact_ids
+            .get(&entity.id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         collision_contacts.insert(entity.id.clone(), collision_names.clone());
         collision_contact_ids.insert(entity.id.clone(), collision_ids.clone());
 
@@ -301,8 +336,14 @@ fn update_entities_runtime_recursive(
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
 
-        let collision_state =
-            handle_entity_collisions(entity, entity_ptr, my_collider_data, old_position, colliders, collision_grid);
+        let collision_state = handle_entity_collisions(
+            entity,
+            entity_ptr,
+            my_collider_data,
+            old_position,
+            colliders,
+            collision_grid,
+        );
         physics_system::clamp_to_ground(entity, ground_y, script_data.collider_half_height);
 
         let final_contacts = collect_contact_frame(entity, entity_ptr, colliders, collision_grid);
@@ -311,12 +352,18 @@ fn update_entities_runtime_recursive(
         trigger_contacts.insert(entity.id.clone(), final_contacts.trigger_names());
         trigger_contact_ids.insert(entity.id.clone(), final_contacts.trigger_ids());
 
-        apply_camera_follow(entity, script_data.should_follow_camera, camera_follow_target);
+        apply_camera_follow(
+            entity,
+            script_data.should_follow_camera,
+            camera_follow_target,
+        );
 
         if collision_state.collided {
             for action in script_data.collision_actions {
                 match action {
-                    ScriptAction::ChangeScene(path) => return Some(RuntimeCommand::ChangeScene(path)),
+                    ScriptAction::ChangeScene(path) => {
+                        return Some(RuntimeCommand::ChangeScene(path))
+                    }
                     ScriptAction::ReloadScene => return Some(RuntimeCommand::ReloadScene),
                 }
             }
@@ -325,7 +372,9 @@ fn update_entities_runtime_recursive(
         if collision_state.triggered {
             for action in script_data.trigger_actions {
                 match action {
-                    ScriptAction::ChangeScene(path) => return Some(RuntimeCommand::ChangeScene(path)),
+                    ScriptAction::ChangeScene(path) => {
+                        return Some(RuntimeCommand::ChangeScene(path))
+                    }
                     ScriptAction::ReloadScene => return Some(RuntimeCommand::ReloadScene),
                 }
             }
@@ -375,7 +424,6 @@ fn update_entities_runtime_recursive(
     None
 }
 
-
 #[derive(Debug, Default)]
 struct CollisionState {
     collided: bool,
@@ -399,7 +447,9 @@ fn handle_entity_collisions(
     physics_system::reset_contact_flags(entity);
     let mut state = CollisionState::default();
 
-    let body_type = find_entity_collider(entity).map(|c| c.body_type).unwrap_or(BodyType::Static);
+    let body_type = find_entity_collider(entity)
+        .map(|c| c.body_type)
+        .unwrap_or(BodyType::Static);
     if matches!(body_type, BodyType::Static | BodyType::Trigger) {
         return state;
     }
@@ -410,9 +460,15 @@ fn handle_entity_collisions(
         collision_grid.collect_candidates(&current_col, &mut candidate_indices);
         for &candidate_index in &candidate_indices {
             let other = &colliders[candidate_index];
-            if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-            if !collision_system::can_collide(&current_col, other) { continue; }
-            if !collision_system::intersects(&current_col, other) { continue; }
+            if std::ptr::eq(entity_ptr, other.entity_ptr) {
+                continue;
+            }
+            if !collision_system::can_collide(&current_col, other) {
+                continue;
+            }
+            if !collision_system::intersects(&current_col, other) {
+                continue;
+            }
 
             let either_trigger = current_col.is_trigger
                 || other.is_trigger
@@ -461,9 +517,15 @@ fn handle_entity_collisions(
 
         for &candidate_index in &candidate_indices {
             let other = &colliders[candidate_index];
-            if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-            if !collision_system::can_collide(&current_col, other) { continue; }
-            if !collision_system::intersects(&current_col, other) { continue; }
+            if std::ptr::eq(entity_ptr, other.entity_ptr) {
+                continue;
+            }
+            if !collision_system::can_collide(&current_col, other) {
+                continue;
+            }
+            if !collision_system::intersects(&current_col, other) {
+                continue;
+            }
 
             let either_trigger = current_col.is_trigger
                 || other.is_trigger
@@ -483,7 +545,8 @@ fn handle_entity_collisions(
                 let other_top = other.center_y + other.height * 0.5;
                 let new_bottom = current_col.center_y - current_col.height * 0.5;
                 let moving_down = entity.velocity().map(|v| v.y <= 0.0).unwrap_or(true);
-                let crossed_top = old_bottom >= other_top - other.one_way_margin && new_bottom <= other_top + other.one_way_margin;
+                let crossed_top = old_bottom >= other_top - other.one_way_margin
+                    && new_bottom <= other_top + other.one_way_margin;
                 if !(moving_down && crossed_top) {
                     continue;
                 }
@@ -500,14 +563,18 @@ fn handle_entity_collisions(
 
             if mtv.y > CONTACT_EPSILON {
                 if let Some(vel) = entity.velocity_mut() {
-                    if vel.y < 0.0 { vel.y = 0.0; }
+                    if vel.y < 0.0 {
+                        vel.y = 0.0;
+                    }
                 }
                 if falling_or_idle {
                     physics_system::set_grounded(entity, true);
                 }
             } else if mtv.y < -CONTACT_EPSILON {
                 if let Some(vel) = entity.velocity_mut() {
-                    if vel.y > 0.0 { vel.y = 0.0; }
+                    if vel.y > 0.0 {
+                        vel.y = 0.0;
+                    }
                 }
                 physics_system::set_hit_ceiling(entity, true);
             }
@@ -538,13 +605,23 @@ fn collect_contact_frame(
     collision_grid.collect_candidates(&my_col, &mut candidate_indices);
     for &candidate_index in &candidate_indices {
         let other = &colliders[candidate_index];
-        if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-        if !collision_system::can_collide(&my_col, other) { continue; }
-        if !collision_system::intersects(&my_col, other) { continue; }
+        if std::ptr::eq(entity_ptr, other.entity_ptr) {
+            continue;
+        }
+        if !collision_system::can_collide(&my_col, other) {
+            continue;
+        }
+        if !collision_system::intersects(&my_col, other) {
+            continue;
+        }
 
         let entry = CollisionEntry {
             id: other.entity_id.clone(),
-            name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
+            name: if other.entity_name.trim().is_empty() {
+                other.entity_id.clone()
+            } else {
+                other.entity_name.clone()
+            },
         };
         let either_trigger = my_col.is_trigger
             || other.is_trigger
@@ -577,14 +654,20 @@ fn apply_camera_follow(
 
 fn find_entity_collider(entity: &Entity) -> Option<collision_system::RuntimeCollider> {
     let transform = entity.transform()?;
-    let rigidbody = entity.components.iter().find_map(|component| match component {
-        Component::RigidBody2D(rb) => Some(rb),
-        _ => None,
-    });
-    let collider = entity.components.iter().find_map(|component| match component {
-        Component::BoxCollider(c) if c.collision_enabled => Some(c),
-        _ => None,
-    })?;
+    let rigidbody = entity
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::RigidBody2D(rb) => Some(rb),
+            _ => None,
+        });
+    let collider = entity
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::BoxCollider(c) if c.collision_enabled => Some(c),
+            _ => None,
+        })?;
 
     let shape = collider.resolved_shape();
     let (width, height) = match &shape {
@@ -625,10 +708,21 @@ struct ContactFrame {
 }
 
 impl ContactFrame {
-    fn solid_names(&self) -> Vec<String> { self.solid_entries.iter().map(|e| e.name.clone()).collect() }
-    fn solid_ids(&self) -> Vec<String> { self.solid_entries.iter().map(|e| e.id.clone()).collect() }
-    fn trigger_names(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.name.clone()).collect() }
-    fn trigger_ids(&self) -> Vec<String> { self.trigger_entries.iter().map(|e| e.id.clone()).collect() }
+    fn solid_names(&self) -> Vec<String> {
+        self.solid_entries.iter().map(|e| e.name.clone()).collect()
+    }
+    fn solid_ids(&self) -> Vec<String> {
+        self.solid_entries.iter().map(|e| e.id.clone()).collect()
+    }
+    fn trigger_names(&self) -> Vec<String> {
+        self.trigger_entries
+            .iter()
+            .map(|e| e.name.clone())
+            .collect()
+    }
+    fn trigger_ids(&self) -> Vec<String> {
+        self.trigger_entries.iter().map(|e| e.id.clone()).collect()
+    }
 }
 
 #[inline]
@@ -653,13 +747,24 @@ fn collect_collision_entries(
     collision_grid.collect_candidates(my_col, &mut candidate_indices);
     for &candidate_index in &candidate_indices {
         let other = &colliders[candidate_index];
-        if std::ptr::eq(entity_ptr, other.entity_ptr) { continue; }
-        if !collision_system::can_collide(my_col, other) { continue; }
+        if std::ptr::eq(entity_ptr, other.entity_ptr) {
+            continue;
+        }
+        if !collision_system::can_collide(my_col, other) {
+            continue;
+        }
         if collision_system::intersects(my_col, other) {
-            push_unique_entry(&mut entries, CollisionEntry {
-                id: other.entity_id.clone(),
-                name: if other.entity_name.trim().is_empty() { other.entity_id.clone() } else { other.entity_name.clone() },
-            });
+            push_unique_entry(
+                &mut entries,
+                CollisionEntry {
+                    id: other.entity_id.clone(),
+                    name: if other.entity_name.trim().is_empty() {
+                        other.entity_id.clone()
+                    } else {
+                        other.entity_name.clone()
+                    },
+                },
+            );
         }
     }
     entries
@@ -672,12 +777,14 @@ fn collect_tag_index(entities: &[Entity], tag_index: &mut HashMap<String, Vec<(S
             if normalized.is_empty() {
                 continue;
             }
-            tag_index.entry(normalized).or_default().push((entity.id.clone(), entity.name.clone()));
+            tag_index
+                .entry(normalized)
+                .or_default()
+                .push((entity.id.clone(), entity.name.clone()));
         }
         collect_tag_index(&entity.children, tag_index);
     }
 }
-
 
 pub fn apply_player_controller_input(
     entities: &mut [Entity],
@@ -690,9 +797,10 @@ pub fn apply_player_controller_input(
 
         for component in &entity.components {
             if let Component::Script(script) = component {
-                if let Ok(behavior) =
-                    crate::runtime::script::load_script_behavior_checked(project_root, &script.file_path)
-                {
+                if let Ok(behavior) = crate::runtime::script::load_script_behavior_checked(
+                    project_root,
+                    &script.file_path,
+                ) {
                     controller_speed = controller_speed.max(behavior.player_controller_speed.abs());
                 }
             }
@@ -724,8 +832,12 @@ pub fn apply_audio_autoplay(
                     continue;
                 }
 
-                if let Some(audio_path) = audio_system::resolve_audio_path(project_root, &audio.file_path) {
-                    if let Err(error) = audio_runtime.play_once(&key, &audio_path, audio.looped, audio.volume) {
+                if let Some(audio_path) =
+                    audio_system::resolve_audio_path(project_root, &audio.file_path)
+                {
+                    if let Err(error) =
+                        audio_runtime.play_once(&key, &audio_path, audio.looped, audio.volume)
+                    {
                         println!("Audio error: {}", error);
                     }
                 } else {

@@ -3,11 +3,20 @@ pub mod key_code;
 
 use eframe::egui;
 
-use crate::runtime::{camera, context::{RuntimeContext, RuntimePlayState}, systems, state::RuntimeState};
+use crate::runtime::{
+    camera,
+    context::{RuntimeContext, RuntimePlayState},
+    state::RuntimeState,
+    systems,
+};
 
 /// Captura e aplica inputs de câmera/zoom/reload no runtime.
 /// Desacoplado do EditorApp — usa RuntimeContext.
-pub fn apply_runtime_inputs<H: RuntimeContext>(host: &H, runtime: &mut RuntimeState, ctx: &egui::Context) {
+pub fn apply_runtime_inputs<H: RuntimeContext>(
+    host: &H,
+    runtime: &mut RuntimeState,
+    ctx: &egui::Context,
+) {
     let step = if host.play_state() == RuntimePlayState::Paused {
         1.0 / 60.0
     } else {
@@ -18,7 +27,7 @@ pub fn apply_runtime_inputs<H: RuntimeContext>(host: &H, runtime: &mut RuntimeSt
     runtime.input = systems::input_system::capture_runtime_input(ctx, &previous_input);
 
     let camera_input = systems::input_system::camera_axis(&runtime.input);
-    let zoom_input   = systems::input_system::zoom_delta(ctx);
+    let zoom_input = systems::input_system::zoom_delta(ctx);
     let reload_scene = ctx.input(|i| i.key_pressed(egui::Key::R));
 
     if reload_scene {

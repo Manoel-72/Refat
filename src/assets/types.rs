@@ -32,11 +32,17 @@ pub struct AssetValidation {
 
 impl AssetValidation {
     pub fn ok() -> Self {
-        Self { is_valid: true, message: "OK".to_string() }
+        Self {
+            is_valid: true,
+            message: "OK".to_string(),
+        }
     }
 
     pub fn issue(message: impl Into<String>) -> Self {
-        Self { is_valid: false, message: message.into() }
+        Self {
+            is_valid: false,
+            message: message.into(),
+        }
     }
 }
 
@@ -52,7 +58,11 @@ pub struct AssetRecord {
 
 impl AssetRecord {
     pub fn new(path: PathBuf, asset_type: AssetType) -> Self {
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("asset").to_string();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("asset")
+            .to_string();
         let load_status = detect_load_status(&path);
         let validation = validate_asset_path(&path, asset_type);
         Self {
@@ -71,7 +81,11 @@ pub fn detect_asset_type(path: &Path) -> AssetType {
         return AssetType::Folder;
     }
 
-    let lower_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let lower_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if lower_name.ends_with(".scene.json") {
         return AssetType::Scene;
     }
@@ -79,7 +93,12 @@ pub fn detect_asset_type(path: &Path) -> AssetType {
         return AssetType::Prefab;
     }
 
-    match path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase()).as_deref() {
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .as_deref()
+    {
         Some("rs2") => AssetType::ScriptRs2,
         Some("lua") => AssetType::ScriptLua,
         Some("png") | Some("jpg") | Some("jpeg") | Some("webp") => AssetType::Texture,
@@ -125,18 +144,31 @@ pub fn validate_asset_path(path: &Path, asset_type: AssetType) -> AssetValidatio
                 AssetValidation::ok()
             }
         }
-        AssetType::Texture | AssetType::Audio | AssetType::Font | AssetType::ScriptRs2 | AssetType::ScriptLua | AssetType::Json => {
-            if path.is_file() { AssetValidation::ok() } else { AssetValidation::issue("O asset esperado não é um arquivo válido.") }
+        AssetType::Texture
+        | AssetType::Audio
+        | AssetType::Font
+        | AssetType::ScriptRs2
+        | AssetType::ScriptLua
+        | AssetType::Json => {
+            if path.is_file() {
+                AssetValidation::ok()
+            } else {
+                AssetValidation::issue("O asset esperado não é um arquivo válido.")
+            }
         }
-        AssetType::Unknown => AssetValidation::issue("Tipo de asset desconhecido ou não suportado."),
+        AssetType::Unknown => {
+            AssetValidation::issue("Tipo de asset desconhecido ou não suportado.")
+        }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn temp_file(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -150,9 +182,18 @@ mod tests {
 
     #[test]
     fn detects_asset_types_by_extension() {
-        assert_eq!(detect_asset_type(Path::new("fase.scene.json")), AssetType::Scene);
-        assert_eq!(detect_asset_type(Path::new("player.prefab.json")), AssetType::Prefab);
-        assert_eq!(detect_asset_type(Path::new("sprite.png")), AssetType::Texture);
+        assert_eq!(
+            detect_asset_type(Path::new("fase.scene.json")),
+            AssetType::Scene
+        );
+        assert_eq!(
+            detect_asset_type(Path::new("player.prefab.json")),
+            AssetType::Prefab
+        );
+        assert_eq!(
+            detect_asset_type(Path::new("sprite.png")),
+            AssetType::Texture
+        );
         assert_eq!(detect_asset_type(Path::new("som.ogg")), AssetType::Audio);
         assert_eq!(detect_asset_type(Path::new("fonte.ttf")), AssetType::Font);
         assert_eq!(detect_asset_type(Path::new("ai.rs2")), AssetType::ScriptRs2);

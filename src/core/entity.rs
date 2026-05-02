@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use super::component::{BoxCollider, Component, Transform, Velocity};
 
-fn default_entity_hp() -> f32 { 100.0 }
+fn default_entity_hp() -> f32 {
+    100.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
@@ -46,14 +48,16 @@ impl Entity {
         }
     }
 
-
-
     pub fn add_tag(&mut self, tag: impl Into<String>) -> bool {
         let normalized = tag.into().trim().to_string();
         if normalized.is_empty() {
             return false;
         }
-        if self.tags.iter().any(|existing| existing.eq_ignore_ascii_case(&normalized)) {
+        if self
+            .tags
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&normalized))
+        {
             return false;
         }
         self.tags.push(normalized);
@@ -61,18 +65,22 @@ impl Entity {
     }
 
     pub fn has_tag(&self, tag: &str) -> bool {
-        self.tags.iter().any(|existing| existing.eq_ignore_ascii_case(tag))
+        self.tags
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(tag))
     }
 
     pub fn remove_tag(&mut self, tag: &str) -> bool {
-        if let Some(index) = self.tags.iter().position(|existing| existing.eq_ignore_ascii_case(tag)) {
+        if let Some(index) = self
+            .tags
+            .iter()
+            .position(|existing| existing.eq_ignore_ascii_case(tag))
+        {
             self.tags.remove(index);
             return true;
         }
         false
     }
-
-
 
     pub fn hp(&self) -> f32 {
         self.hp
@@ -108,7 +116,11 @@ impl Entity {
 
     pub fn heal(&mut self, amount: f32) -> f32 {
         let amount = amount.max(0.0);
-        let limit = if self.max_hp <= 0.0 { default_entity_hp() } else { self.max_hp };
+        let limit = if self.max_hp <= 0.0 {
+            default_entity_hp()
+        } else {
+            self.max_hp
+        };
         self.hp = (self.hp + amount).min(limit);
         self.is_dead = self.hp <= 0.0;
         self.hp
@@ -119,7 +131,11 @@ impl Entity {
     }
 
     pub fn add_component(&mut self, component: Component) {
-        if let Some(index) = self.components.iter().position(|existing| component_kind(existing) == component_kind(&component)) {
+        if let Some(index) = self
+            .components
+            .iter()
+            .position(|existing| component_kind(existing) == component_kind(&component))
+        {
             self.components[index] = component;
         } else {
             self.components.push(component);
@@ -127,45 +143,57 @@ impl Entity {
     }
 
     pub fn remove_component(&mut self, index: usize) {
-        if index < self.components.len() && !matches!(self.components.get(index), Some(Component::Transform(_))) {
+        if index < self.components.len()
+            && !matches!(self.components.get(index), Some(Component::Transform(_)))
+        {
             self.components.remove(index);
         }
     }
 
     pub fn transform(&self) -> Option<&Transform> {
-        self.components.iter().find_map(|component| match component {
-            Component::Transform(transform) => Some(transform),
-            _ => None,
-        })
+        self.components
+            .iter()
+            .find_map(|component| match component {
+                Component::Transform(transform) => Some(transform),
+                _ => None,
+            })
     }
 
     pub fn transform_mut(&mut self) -> Option<&mut Transform> {
-        self.components.iter_mut().find_map(|component| match component {
-            Component::Transform(transform) => Some(transform),
-            _ => None,
-        })
+        self.components
+            .iter_mut()
+            .find_map(|component| match component {
+                Component::Transform(transform) => Some(transform),
+                _ => None,
+            })
     }
 
-
     pub fn velocity(&self) -> Option<&Velocity> {
-        self.components.iter().find_map(|component| match component {
-            Component::Velocity(velocity) => Some(velocity),
-            _ => None,
-        })
+        self.components
+            .iter()
+            .find_map(|component| match component {
+                Component::Velocity(velocity) => Some(velocity),
+                _ => None,
+            })
     }
 
     pub fn velocity_mut(&mut self) -> Option<&mut Velocity> {
-        self.components.iter_mut().find_map(|component| match component {
-            Component::Velocity(velocity) => Some(velocity),
-            _ => None,
-        })
+        self.components
+            .iter_mut()
+            .find_map(|component| match component {
+                Component::Velocity(velocity) => Some(velocity),
+                _ => None,
+            })
     }
 
     pub fn collision_enabled(&self) -> bool {
-        self.components.iter().find_map(|component| match component {
-            Component::BoxCollider(collider) => Some(collider.collision_enabled),
-            _ => None,
-        }).unwrap_or(false)
+        self.components
+            .iter()
+            .find_map(|component| match component {
+                Component::BoxCollider(collider) => Some(collider.collision_enabled),
+                _ => None,
+            })
+            .unwrap_or(false)
     }
 
     pub fn set_collision_enabled(&mut self, enabled: bool) -> bool {
@@ -179,12 +207,13 @@ impl Entity {
     }
 
     pub fn box_collider_mut(&mut self) -> Option<&mut BoxCollider> {
-        self.components.iter_mut().find_map(|component| match component {
-            Component::BoxCollider(collider) => Some(collider),
-            _ => None,
-        })
+        self.components
+            .iter_mut()
+            .find_map(|component| match component {
+                Component::BoxCollider(collider) => Some(collider),
+                _ => None,
+            })
     }
-
 
     pub fn find(&self, id: &str) -> Option<&Entity> {
         if self.id == id {
@@ -197,7 +226,9 @@ impl Entity {
         if self.id == id {
             return Some(self);
         }
-        self.children.iter_mut().find_map(|child| child.find_mut(id))
+        self.children
+            .iter_mut()
+            .find_map(|child| child.find_mut(id))
     }
 
     pub fn regenerate_ids_recursive(&mut self) {

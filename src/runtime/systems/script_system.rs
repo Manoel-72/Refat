@@ -3,10 +3,14 @@ use std::{collections::HashSet, path::Path};
 use mlua;
 
 use crate::{
-    core::{component::{Component, Animator}, entity::Entity},
+    core::{
+        component::{Animator, Component},
+        entity::Entity,
+    },
     runtime::{
         script::{
-            load_script_behavior_checked, parse_event_instruction, ScriptAction, ScriptEventInstruction,
+            load_script_behavior_checked, parse_event_instruction, ScriptAction,
+            ScriptEventInstruction,
         },
         systems::audio_system,
     },
@@ -23,13 +27,7 @@ fn lua_stage_log(
     let scene = scene_label.unwrap_or("<sem_cena>");
     eprintln!(
         "[Lua][scene={}][entity={}#{}][script={}][stage={}][kind={}] {}",
-        scene,
-        entity.name,
-        entity.id,
-        script_path,
-        stage,
-        kind,
-        message,
+        scene, entity.name, entity.id, script_path, stage, kind, message,
     );
 }
 
@@ -66,32 +64,55 @@ pub fn scan_script_behavior(
                 result.collider_half_height = collider.half_height_for_grounding();
             }
             Component::Script(script) => {
-                if let Ok(behavior) = load_script_behavior_checked(project_root, &script.file_path) {
+                if let Ok(behavior) = load_script_behavior_checked(project_root, &script.file_path)
+                {
                     let script_key = format!("{}::{}", entity.id, script.file_path);
                     let is_first_start = started_scripts.insert(script_key);
 
                     if is_first_start {
                         if let Some(message) = &behavior.start_message {
-                            println!("[RS2][scene=<sem_cena>][entity={}#{}][script={}] {}", entity.name, entity.id, script.file_path, message);
+                            println!(
+                                "[RS2][scene=<sem_cena>][entity={}#{}][script={}] {}",
+                                entity.name, entity.id, script.file_path, message
+                            );
                         } else {
-                            println!("[RS2][scene=<sem_cena>][entity={}#{}][script={}] iniciado", entity.name, entity.id, script.file_path);
+                            println!(
+                                "[RS2][scene=<sem_cena>][entity={}#{}][script={}] iniciado",
+                                entity.name, entity.id, script.file_path
+                            );
                         }
 
                         for event in &behavior.on_start {
-                            execute_event_instruction(event, &entity.name, &script.file_path, &mut result, true);
+                            execute_event_instruction(
+                                event,
+                                &entity.name,
+                                &script.file_path,
+                                &mut result,
+                                true,
+                            );
                         }
                     }
 
                     for event in &behavior.on_update {
-                        execute_event_instruction(event, &entity.name, &script.file_path, &mut result, false);
+                        execute_event_instruction(
+                            event,
+                            &entity.name,
+                            &script.file_path,
+                            &mut result,
+                            false,
+                        );
                     }
 
                     result.move_x += behavior.move_x;
                     result.move_y += behavior.move_y;
                     result.rotate_speed += behavior.rotate_speed;
                     result.should_follow_camera |= behavior.camera_follow;
-                    result.collision_actions.extend(behavior.on_collision.into_iter());
-                    result.trigger_actions.extend(behavior.on_trigger.into_iter());
+                    result
+                        .collision_actions
+                        .extend(behavior.on_collision.into_iter());
+                    result
+                        .trigger_actions
+                        .extend(behavior.on_trigger.into_iter());
                 }
             }
             // LuaScript é tratado separadamente em run_lua_scripts_for_entity,
@@ -146,15 +167,31 @@ pub fn run_lua_scripts_for_entity(
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
-    let lua_scripts: Vec<String> = entity.components.iter()
-        .filter_map(|c| if let Component::LuaScript(s) = c { Some(s.file_path.clone()) } else { None })
+    let lua_scripts: Vec<String> = entity
+        .components
+        .iter()
+        .filter_map(|c| {
+            if let Component::LuaScript(s) = c {
+                Some(s.file_path.clone())
+            } else {
+                None
+            }
+        })
         .collect();
 
     for file_path in lua_scripts {
-        let full_path = match crate::runtime::script::resolve_script_path(project_root, &file_path) {
+        let full_path = match crate::runtime::script::resolve_script_path(project_root, &file_path)
+        {
             Some(p) => p,
             None => {
-                lua_stage_log(scene_label, entity, &file_path, "resolve", "file_not_found", "Arquivo não encontrado");
+                lua_stage_log(
+                    scene_label,
+                    entity,
+                    &file_path,
+                    "resolve",
+                    "file_not_found",
+                    "Arquivo não encontrado",
+                );
                 continue;
             }
         };
@@ -163,7 +200,9 @@ pub fn run_lua_scripts_for_entity(
 
         // Evita syscall de metadata a cada frame. Só repolla periodicamente
         // ou na primeira carga da VM.
-        let cached_meta = lua_vms.get(&vm_key).map(|(_, mtime, last_checked_frame)| (*mtime, *last_checked_frame));
+        let cached_meta = lua_vms
+            .get(&vm_key)
+            .map(|(_, mtime, last_checked_frame)| (*mtime, *last_checked_frame));
         let should_poll_metadata = match cached_meta {
             Some((_, last_checked_frame)) => current_frame.saturating_sub(last_checked_frame) >= 15,
             None => true,
@@ -185,7 +224,8 @@ pub fn run_lua_scripts_for_entity(
             .unwrap_or(true);
 
         if needs_reload {
-            let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
+            let scope_key =
+                crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
             script_state.remove(&scope_key);
             started_scripts.remove(&format!("lua::{}::{}", entity.id, file_path));
             let source = match std::fs::read_to_string(&full_path) {
@@ -220,7 +260,14 @@ pub fn run_lua_scripts_for_entity(
         let source: String = match lua.globals().get("_src") {
             Ok(s) => s,
             Err(_) => {
-                lua_stage_log(scene_label, entity, &file_path, "cache", "source_missing", "Fonte não encontrada no cache");
+                lua_stage_log(
+                    scene_label,
+                    entity,
+                    &file_path,
+                    "cache",
+                    "source_missing",
+                    "Fonte não encontrada no cache",
+                );
                 continue;
             }
         };
@@ -235,7 +282,9 @@ pub fn run_lua_scripts_for_entity(
             input,
             save_data,
             session_state,
-            script_state.get(&crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path)),
+            script_state.get(&crate::runtime::state::make_script_state_scope_key(
+                &entity.id, &file_path,
+            )),
             delta_time,
             elapsed_time,
             already_started,
@@ -262,18 +311,42 @@ pub fn run_lua_scripts_for_entity(
                 lua_runtime::apply_lua_result(entity, &result);
                 lua_runtime::apply_save_ops(save_data, &result.save_ops);
                 lua_runtime::apply_session_ops(session_state, &result.session_ops);
-                let scope_key = crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
+                let scope_key =
+                    crate::runtime::state::make_script_state_scope_key(&entity.id, &file_path);
                 lua_runtime::apply_state_ops(script_state, &scope_key, &result.state_ops);
                 lua_runtime::apply_event_ops(pending_runtime_events, &result.event_ops);
                 for audio_op in &result.audio_ops {
                     match audio_op {
-                        lua_runtime::AudioOp::Play { key, path, looped, volume } => {
-                            if let Some(audio_path) = audio_system::resolve_audio_path(project_root, path) {
-                                if let Err(error) = audio_runtime.play_once(key, &audio_path, *looped, *volume) {
-                                    lua_stage_log(scene_label, entity, &file_path, "audio_play", "runtime_error", error);
+                        lua_runtime::AudioOp::Play {
+                            key,
+                            path,
+                            looped,
+                            volume,
+                        } => {
+                            if let Some(audio_path) =
+                                audio_system::resolve_audio_path(project_root, path)
+                            {
+                                if let Err(error) =
+                                    audio_runtime.play_once(key, &audio_path, *looped, *volume)
+                                {
+                                    lua_stage_log(
+                                        scene_label,
+                                        entity,
+                                        &file_path,
+                                        "audio_play",
+                                        "runtime_error",
+                                        error,
+                                    );
                                 }
                             } else {
-                                lua_stage_log(scene_label, entity, &file_path, "audio_play", "file_not_found", path);
+                                lua_stage_log(
+                                    scene_label,
+                                    entity,
+                                    &file_path,
+                                    "audio_play",
+                                    "file_not_found",
+                                    path,
+                                );
                             }
                         }
                         lua_runtime::AudioOp::Stop { key } => {
@@ -298,7 +371,9 @@ pub fn run_lua_scripts_for_entity(
                 }
                 for spawn in &result.spawn_prefabs {
                     pending_spawns.push(crate::runtime::state::PendingSpawnRequest {
-                        kind: crate::runtime::state::PendingSpawnKind::PrefabPath(spawn.path.clone()),
+                        kind: crate::runtime::state::PendingSpawnKind::PrefabPath(
+                            spawn.path.clone(),
+                        ),
                         x: spawn.x,
                         y: spawn.y,
                         velocity: spawn.init.velocity,
@@ -310,7 +385,14 @@ pub fn run_lua_scripts_for_entity(
                 }
                 for (x, y, vx, vy, life, r, g, b, scale) in &result.spawn_particles {
                     pending_particles.push(crate::runtime::state::RuntimeParticle {
-                        x: *x, y: *y, vx: *vx, vy: *vy, life: *life, max_life: *life, color: [*r, *g, *b, 1.0], scale: *scale,
+                        x: *x,
+                        y: *y,
+                        vx: *vx,
+                        vy: *vy,
+                        life: *life,
+                        max_life: *life,
+                        color: [*r, *g, *b, 1.0],
+                        scale: *scale,
                     });
                 }
                 for emitter in &result.spawn_emitters {
@@ -365,7 +447,10 @@ fn execute_event_instruction(
     match instruction {
         ScriptEventInstruction::Print(text) => {
             let stage = if is_start { "on_start" } else { "on_update" };
-            println!("[RS2][{}][entity={}][script={}] {}", stage, entity_name, script_path, text);
+            println!(
+                "[RS2][{}][entity={}][script={}] {}",
+                stage, entity_name, script_path, text
+            );
         }
         ScriptEventInstruction::MoveX(value) => {
             result.move_x += value;
@@ -375,7 +460,6 @@ fn execute_event_instruction(
         }
     }
 }
-
 
 pub fn advance_animator(entity: &mut Entity, delta_time: f32) {
     let next_frame = next_animator_frame(entity, delta_time);
@@ -392,21 +476,29 @@ pub fn advance_animator(entity: &mut Entity, delta_time: f32) {
 }
 
 fn next_animator_frame(entity: &mut Entity, delta_time: f32) -> Option<String> {
-    let velocity = entity.components.iter().find_map(|component| {
-        if let Component::Velocity(velocity) = component {
-            Some((velocity.x, velocity.y))
-        } else {
-            None
-        }
-    }).unwrap_or((0.0, 0.0));
+    let velocity = entity
+        .components
+        .iter()
+        .find_map(|component| {
+            if let Component::Velocity(velocity) = component {
+                Some((velocity.x, velocity.y))
+            } else {
+                None
+            }
+        })
+        .unwrap_or((0.0, 0.0));
 
-    let grounded = entity.components.iter().find_map(|component| {
-        if let Component::RigidBody2D(rb) = component {
-            Some(rb.grounded)
-        } else {
-            None
-        }
-    }).unwrap_or(false);
+    let grounded = entity
+        .components
+        .iter()
+        .find_map(|component| {
+            if let Component::RigidBody2D(rb) = component {
+                Some(rb.grounded)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(false);
 
     for component in &mut entity.components {
         if let Component::Animator(animator) = component {
@@ -487,7 +579,10 @@ fn sync_animator_state(animator: &mut Animator, velocity: (f32, f32), grounded: 
 
     let queued_state = animator.queued_state.trim().to_string();
     if !queued_state.is_empty() && animator.states.contains_key(queued_state.as_str()) {
-        let interruptible = current_state.as_ref().map(|state| state.interruptible).unwrap_or(true);
+        let interruptible = current_state
+            .as_ref()
+            .map(|state| state.interruptible)
+            .unwrap_or(true);
         if interruptible || current_finished || queued_state == current_state_name {
             apply_animator_state(animator, queued_state.as_str());
             animator.queued_state.clear();
@@ -518,7 +613,10 @@ fn sync_animator_state(animator: &mut Animator, velocity: (f32, f32), grounded: 
     let speed_x = velocity.0.abs();
     let speed_y = velocity.1;
 
-    let desired_state = if !grounded && speed_y < -locomotion_threshold && animator.states.contains_key("jump") {
+    let desired_state = if !grounded
+        && speed_y < -locomotion_threshold
+        && animator.states.contains_key("jump")
+    {
         "jump".to_string()
     } else if !grounded && speed_y > locomotion_threshold && animator.states.contains_key("fall") {
         "fall".to_string()
@@ -559,13 +657,22 @@ fn is_current_state_finished(animator: &Animator) -> bool {
     } else {
         animator.current_state.as_str()
     };
-    let Some(state) = animator.states.get(state_name) else { return false; };
-    let Some(clip) = animator.clips.get(state.clip.as_str()) else { return false; };
-    !state.looped && clip.fps > f32::EPSILON && !clip.frames.is_empty() && animator.timer >= (clip.frames.len() as f32 / clip.fps)
+    let Some(state) = animator.states.get(state_name) else {
+        return false;
+    };
+    let Some(clip) = animator.clips.get(state.clip.as_str()) else {
+        return false;
+    };
+    !state.looped
+        && clip.fps > f32::EPSILON
+        && !clip.frames.is_empty()
+        && animator.timer >= (clip.frames.len() as f32 / clip.fps)
 }
 
 fn apply_animator_state(animator: &mut Animator, state_name: &str) {
-    let Some(state) = animator.states.get(state_name).cloned() else { return; };
+    let Some(state) = animator.states.get(state_name).cloned() else {
+        return;
+    };
     animator.current_state = state_name.to_string();
     apply_state_clip(animator, &state);
 }
