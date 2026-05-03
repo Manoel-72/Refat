@@ -5,6 +5,7 @@
 // ============================================================
 
 use super::{warnings::EditorWarningSeverity, EditorApp};
+use crate::core::scene::SceneTilemapRef;
 use crate::runtime::script::is_valid_rs2_script;
 use crate::{
     assets::is_rs2_script_file,
@@ -148,6 +149,60 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
             let (preview_rect, _) = ui
                 .allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::hover());
             ui.painter().rect_filled(preview_rect, 4.0, preview_color);
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            ui.label(egui::RichText::new("🗺 Tilemaps (Tiled JSON)").strong());
+            ui.label(
+                egui::RichText::new(
+                    "Caminhos relativos à raiz do projeto. Guardados na cena; pré-visualização na viewport e carregamento automático no Play.",
+                )
+                .small()
+                .color(egui::Color32::from_rgb(100, 115, 135)),
+            );
+            ui.add_space(4.0);
+
+            let mut remove_idx: Option<usize> = None;
+            for i in 0..app.scene.tilemaps.len() {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(format!("#{}", i + 1)).small());
+                    let edit = egui::TextEdit::singleline(&mut app.scene.tilemaps[i].path)
+                        .hint_text("assets/tilemaps/mapa.json")
+                        .desired_width((ui.available_width() - 72.0).max(120.0));
+                    let resp = ui.add(edit);
+                    if resp.changed() {
+                        app.sync_active_scene_document();
+                    }
+                    if ui
+                        .small_button("📂")
+                        .on_hover_text("Escolher ficheiro JSON")
+                        .clicked()
+                    {
+                        if let Some(picked) = rfd::FileDialog::new().pick_file() {
+                            let path = if let Ok(rel) = picked.strip_prefix(&app.project_root) {
+                                rel.to_string_lossy().replace('\\', "/")
+                            } else {
+                                picked.to_string_lossy().to_string()
+                            };
+                            app.scene.tilemaps[i].path = path;
+                            app.sync_active_scene_document();
+                        }
+                    }
+                    if ui.small_button("🗑").clicked() {
+                        remove_idx = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = remove_idx {
+                app.scene.tilemaps.remove(i);
+                app.sync_active_scene_document();
+            }
+            if ui.button("➕ Adicionar tilemap").clicked() {
+                app.scene.tilemaps.push(SceneTilemapRef::default());
+                app.sync_active_scene_document();
+            }
 
             ui.add_space(10.0);
             ui.separator();
@@ -716,7 +771,7 @@ fn show_inspector_contents(app: &mut EditorApp, ui: &mut egui::Ui) {
         });
     });
     ui.label(
-        egui::RichText::new("Use o botão acima para adicionar componentes. Botão direito continua disponível na Hierarquia e na Cena.")
+        egui::RichText::new("Use o botão acima para adicionar componentes (em «📷 Cena» também: tilemap Tiled). Botão direito na Hierarquia e na viewport.")
             .small()
             .color(egui::Color32::from_rgb(150, 160, 180)),
     );
@@ -1539,6 +1594,17 @@ fn show_add_component_menu_inspector(ui: &mut egui::Ui, app: &mut EditorApp, ent
             "📷 Camera2D",
             Component::Camera2D(Camera2D::default()),
         );
+        ui.separator();
+        if ui
+            .button("🗺 Tilemap (Tiled JSON)…")
+            .on_hover_text(
+                "Adiciona um mapa à cena inteira (lista em Inspector sem seleção), não a esta entidade.",
+            )
+            .clicked()
+        {
+            app.add_scene_tilemap_from_file_dialog();
+            ui.close_menu();
+        }
     });
 }
 

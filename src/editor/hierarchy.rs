@@ -225,6 +225,17 @@ fn show_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_id: &s
             "📷 Camera2D",
             Component::Camera2D(Camera2D::default()),
         );
+        ui.separator();
+        if ui
+            .button("🗺 Tilemap (Tiled JSON)…")
+            .on_hover_text(
+                "Adiciona um mapa à cena inteira (lista em Inspector sem seleção), não a esta entidade.",
+            )
+            .clicked()
+        {
+            app.add_scene_tilemap_from_file_dialog();
+            ui.close_menu();
+        }
     });
 }
 

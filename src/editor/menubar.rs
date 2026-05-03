@@ -257,6 +257,20 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                             app.select_single_entity(Some(id));
                             ui.close_menu();
                         }
+
+                        ui.separator();
+                        section_label(ui, "CENA");
+                        if menu_item(
+                            ui,
+                            "🗺",
+                            "Tilemap (Tiled JSON)…",
+                            "Adiciona referência na cena (Tiled); não cria entidade",
+                        )
+                        .clicked()
+                        {
+                            app.add_scene_tilemap_from_file_dialog();
+                            ui.close_menu();
+                        }
                     });
 
                     ui.menu_button("Scene", |ui| {
@@ -310,6 +324,20 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                             egui::Sense::hover(),
                         );
                         ui.painter().rect_filled(r, 3.0, preview);
+
+                        ui.separator();
+                        section_label(ui, "TILEMAPS");
+                        if menu_item(
+                            ui,
+                            "🗺",
+                            "Adicionar tilemap à cena…",
+                            "Escolhe um JSON do Tiled; lista em Inspector → cena e pré-visualização na viewport",
+                        )
+                        .clicked()
+                        {
+                            app.add_scene_tilemap_from_file_dialog();
+                            ui.close_menu();
+                        }
                     });
 
                     ui.menu_button("Editor", |ui| {
@@ -376,6 +404,20 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         .clicked()
                         {
                             app.request_delete_selected();
+                            ui.close_menu();
+                        }
+
+                        ui.separator();
+                        section_label(ui, "CENA");
+                        if menu_item(
+                            ui,
+                            "🗺",
+                            "Adicionar tilemap à cena…",
+                            "JSON do Tiled; mesma ação do menu Scene e do clique direito na viewport",
+                        )
+                        .clicked()
+                        {
+                            app.add_scene_tilemap_from_file_dialog();
                             ui.close_menu();
                         }
 
@@ -532,10 +574,14 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                                 if let Some(doc) = active_doc {
                                     let label = doc.display_name();
                                     let source_path = doc.file_path.clone();
-                                    app.runtime.start_from_document(&doc.scene, source_path);
+                                    app.runtime.start_from_document(
+                                        &doc.scene,
+                                        source_path,
+                                        &app.project_root,
+                                    );
                                     app.status_msg = format!("▶ Play: '{}'", label);
                                 } else {
-                                    app.runtime.start_from_scene(&app.scene);
+                                    app.runtime.start_from_scene(&app.scene, &app.project_root);
                                     app.status_msg = "▶ Play iniciado.".to_string();
                                 }
                             }

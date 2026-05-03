@@ -29,7 +29,7 @@ use crate::{
         component::{Component, Sprite},
         entity::Entity,
         project::{create_basic_project_template_at, ProjectConfig},
-        scene::Scene,
+        scene::{Scene, SceneTilemapRef},
     },
     runtime::{
         self,
@@ -39,6 +39,7 @@ use crate::{
     standalone_export::{
         self, find_engine_root, find_prebuilt_runtime_exe, sanitize_filename,
     },
+    world::tilemap::TilemapNode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -301,6 +302,9 @@ pub struct EditorApp {
     build_job: Option<BuildJobState>,
     /// Diálogo de escolha de destino em aberto (não bloqueia o editor)
     build_dialog_pending: Option<BuildDialogPending>,
+    /// Pré-visualização dos tilemaps da cena (modo edição) — chave = lista de paths concatenados.
+    pub tilemap_preview_cache: HashMap<u32, TilemapNode>,
+    tilemap_preview_key: String,
 }
 
 impl EditorApp {
@@ -393,7 +397,69 @@ impl EditorApp {
             animator_state_rename_buffer: String::new(),
             build_job: None,
             build_dialog_pending: None,
+            tilemap_preview_cache: HashMap::new(),
+            tilemap_preview_key: String::new(),
         }
+    }
+
+    /// Recarrega o cache de tilemaps para a viewport (só quando a lista de paths muda).
+    pub fn refresh_tilemap_preview_cache(&mut self) {
+        use std::path::Path;
+        let key = format!(
+            "{}|{}",
+            self.scene.tilemaps.len(),
+            self.scene
+                .tilemaps
+                .iter()
+                .map(|t| t.path.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        if key == self.tilemap_preview_key {
+            return;
+        }
+        self.tilemap_preview_key = key;
+        self.tilemap_preview_cache.clear();
+        let mut next_id = 1u32;
+        for t in &self.scene.tilemaps {
+            let trimmed = t.path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let abs = if Path::new(trimmed).is_absolute() {
+                PathBuf::from(trimmed)
+            } else {
+                self.project_root.join(trimmed)
+            };
+            let Some(s) = abs.to_str() else {
+                continue;
+            };
+            if let Ok(node) = TilemapNode::load_tiled_json(s) {
+                self.tilemap_preview_cache.insert(next_id, node);
+                next_id = next_id.saturating_add(1);
+            }
+        }
+    }
+
+    /// Diálogo de ficheiro: adiciona um mapa Tiled (`.json` / `.tmj`) à lista `scene.tilemaps`.
+    pub fn add_scene_tilemap_from_file_dialog(&mut self) {
+        let Some(picked) = rfd::FileDialog::new()
+            .add_filter("Tiled / JSON", &["json", "tmj"])
+            .pick_file()
+        else {
+            return;
+        };
+        let path = if let Ok(rel) = picked.strip_prefix(&self.project_root) {
+            rel.to_string_lossy().replace('\\', "/")
+        } else {
+            picked.to_string_lossy().to_string()
+        };
+        if path.trim().is_empty() {
+            return;
+        }
+        self.scene.tilemaps.push(SceneTilemapRef { path });
+        self.sync_active_scene_document();
+        self.status_msg = "🗺 Tilemap adicionado à cena.".to_string();
     }
 
     fn push_console_message(&mut self, message: impl Into<String>) {

@@ -321,38 +321,84 @@ impl RuntimeState {
         }
     }
 
-    pub fn start_from_scene(&mut self, scene: &Scene) {
-        self.start_from_document(scene, None);
+    /// Carrega os ficheiros Tiled referenciados em `scene.tilemaps` para `self.tilemaps`.
+    pub fn hydrate_scene_tilemaps(&mut self, scene: &Scene, project_root: &Path) {
+        for entry in &scene.tilemaps {
+            let trimmed = entry.path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let abs = if Path::new(trimmed).is_absolute() {
+                PathBuf::from(trimmed)
+            } else {
+                project_root.join(trimmed)
+            };
+            let Some(path_str) = abs.to_str() else {
+                continue;
+            };
+            match TilemapNode::load_tiled_json(path_str) {
+                Ok(node) => {
+                    let id = self.tilemap_next_id.max(1);
+                    self.tilemap_next_id = self.tilemap_next_id.saturating_add(1);
+                    self.tilemaps.insert(id, node);
+                }
+                Err(e) => {
+                    log::warn!("hydrate_scene_tilemaps '{}': {}", trimmed, e);
+                }
+            }
+        }
     }
 
-    pub fn start_from_scene_as_new_game(&mut self, scene: &Scene) {
+    pub fn start_from_scene(&mut self, scene: &Scene, project_root: &Path) {
+        self.start_from_document(scene, None, project_root);
+    }
+
+    pub fn start_from_scene_as_new_game(&mut self, scene: &Scene, project_root: &Path) {
         self.start_new_game_session();
-        self.start_from_document(scene, None);
+        self.start_from_document(scene, None, project_root);
     }
 
-    pub fn start_from_document(&mut self, scene: &Scene, source_path: Option<PathBuf>) {
+    pub fn start_from_document(
+        &mut self,
+        scene: &Scene,
+        source_path: Option<PathBuf>,
+        project_root: &Path,
+    ) {
         self.scene_manager.set_editor_scene(scene.clone());
         self.scene_manager.current_path = source_path;
         self.active_scene = self.scene_manager.current_scene.clone();
         self.reset_timing_state();
+        self.hydrate_scene_tilemaps(scene, project_root);
         self.game_state.flow = RuntimeGameFlow::Playing;
     }
 
-    pub fn start_from_path(&mut self, path: PathBuf) -> Result<(), String> {
+    pub fn start_from_path(&mut self, path: PathBuf, project_root: &Path) -> Result<(), String> {
         self.scene_manager.load_scene(path)?;
         self.active_scene = self.scene_manager.current_scene.clone();
         self.reset_timing_state();
+        let scene_for_tilemaps = self.active_scene.clone();
+        if let Some(ref sc) = scene_for_tilemaps {
+            self.hydrate_scene_tilemaps(sc, project_root);
+        }
         self.game_state.flow = RuntimeGameFlow::Playing;
         Ok(())
     }
 
-    pub fn start_from_path_as_new_game(&mut self, path: PathBuf) -> Result<(), String> {
+    pub fn start_from_path_as_new_game(
+        &mut self,
+        path: PathBuf,
+        project_root: &Path,
+    ) -> Result<(), String> {
         self.start_new_game_session();
-        self.start_from_path(path)
+        self.start_from_path(path, project_root)
     }
 
-    pub fn load_scene_as_new_game(&mut self, path: PathBuf) -> Result<(), String> {
-        self.start_from_path_as_new_game(path)
+    pub fn load_scene_as_new_game(
+        &mut self,
+        path: PathBuf,
+        project_root: &Path,
+    ) -> Result<(), String> {
+        self.start_from_path_as_new_game(path, project_root)
     }
 
     /// Continua um jogo salvo sem reaproveitar estados temporários da sessão anterior.
@@ -387,13 +433,13 @@ impl RuntimeState {
 
         if let Some(saved_scene) = saved_scene {
             if let Some(scene_path) = Self::resolve_saved_scene_path(project_root, &saved_scene) {
-                self.start_from_path(scene_path)?;
+                self.start_from_path(scene_path, project_root)?;
                 self.restore_continue_runtime_state();
                 return Ok(());
             }
         }
 
-        self.start_from_scene(fallback_scene);
+        self.start_from_scene(fallback_scene, project_root);
         self.restore_continue_runtime_state();
         Ok(())
     }
@@ -472,13 +518,17 @@ impl RuntimeState {
         self.scene_manager.change_scene_snapshot(scene, source_path);
     }
 
-    pub fn reload_current_scene(&mut self, fallback_scene: &Scene) {
+    pub fn reload_current_scene(&mut self, fallback_scene: &Scene, project_root: &Path) {
         self.game_state.flow = RuntimeGameFlow::Loading;
         if self.scene_manager.reload_scene().is_err() {
-            self.start_from_scene(fallback_scene);
+            self.start_from_scene(fallback_scene, project_root);
         } else {
             self.active_scene = self.scene_manager.current_scene.clone();
             self.reset_timing_state();
+            let scene_for_tilemaps = self.active_scene.clone();
+            if let Some(ref sc) = scene_for_tilemaps {
+                self.hydrate_scene_tilemaps(sc, project_root);
+            }
             self.game_state.flow = RuntimeGameFlow::Playing;
             self.game_state.loading_label = None;
         }
@@ -1015,6 +1065,10 @@ impl RuntimeState {
             self.reset_timing_state();
             self.game_state.flow = RuntimeGameFlow::Playing;
             self.game_state.loading_label = None;
+            let scene_for_tilemaps = self.active_scene.clone();
+            if let Some(ref sc) = scene_for_tilemaps {
+                self.hydrate_scene_tilemaps(sc, project_root);
+            }
         }
 
         match *mode {
@@ -1027,7 +1081,7 @@ impl RuntimeState {
             }
             RuntimePlayState::Playing => {
                 if self.active_scene.is_none() {
-                    self.start_from_scene(source_scene);
+                    self.start_from_scene(source_scene, project_root);
                 }
                 self.window_open = true;
                 self.game_state.flow = RuntimeGameFlow::Playing;
@@ -1035,7 +1089,7 @@ impl RuntimeState {
             }
             RuntimePlayState::Paused => {
                 if self.active_scene.is_none() {
-                    self.start_from_scene(source_scene);
+                    self.start_from_scene(source_scene, project_root);
                 }
                 self.window_open = true;
                 self.delta_time = 0.0;

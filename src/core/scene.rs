@@ -14,11 +14,20 @@ use super::{
 
 pub const SCENE_FILE_EXTENSION: &str = "scene.json";
 
+/// Referência a um mapa Tiled (JSON) guardada na cena — carregada no Play e na pré-visualização do editor.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SceneTilemapRef {
+    /// Caminho relativo à raiz do projeto (ex.: `assets/tilemaps/nivel.json`).
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scene {
     pub name: String,
     pub entities: Vec<Entity>,
     pub background_color: [f32; 3],
+    #[serde(default)]
+    pub tilemaps: Vec<SceneTilemapRef>,
 }
 
 #[allow(dead_code)]
@@ -31,6 +40,7 @@ impl Scene {
             name: name.into(),
             entities: vec![camera],
             background_color: [0.15, 0.15, 0.18],
+            tilemaps: Vec::new(),
         }
     }
 

@@ -32,7 +32,7 @@ pub fn apply_runtime_inputs<H: RuntimeContext>(
 
     if reload_scene {
         let fallback = host.active_scene_snapshot().clone();
-        runtime.reload_current_scene(&fallback);
+        runtime.reload_current_scene(&fallback, host.project_root());
         return;
     }
 

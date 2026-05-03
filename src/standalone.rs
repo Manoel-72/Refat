@@ -54,7 +54,7 @@ impl StandaloneApp {
 
         let mut runtime = RuntimeState::new();
         runtime.window_open = true;
-        runtime.start_from_scene_as_new_game(&scene);
+        runtime.start_from_scene_as_new_game(&scene, &project_root);
 
         Self {
             project_root,

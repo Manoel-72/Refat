@@ -85,7 +85,8 @@ pub fn show_viewport<H: RuntimeContext>(
                         host.set_play_state(RuntimePlayState::Playing);
                         runtime.window_open = true;
                         let scene = host.active_scene_snapshot().clone();
-                        runtime.start_from_scene_as_new_game(&scene);
+                        let project_root = host.project_root().to_path_buf();
+                        runtime.start_from_scene_as_new_game(&scene, &project_root);
                         host.set_status("▶ Novo jogo iniciado".to_string());
                     }
                     if ui.button("⤴ Continuar").clicked() {
@@ -96,7 +97,7 @@ pub fn show_viewport<H: RuntimeContext>(
                         match runtime.continue_from_save(&project_root, &scene) {
                             Ok(_) => host.set_status("⤴ Jogo continuado do save".to_string()),
                             Err(err) => {
-                                runtime.start_from_scene(&scene);
+                                runtime.start_from_scene(&scene, host.project_root());
                                 host.set_status(format!("ℹ {} Abrindo cena atual do editor.", err));
                             }
                         }
@@ -109,7 +110,7 @@ pub fn show_viewport<H: RuntimeContext>(
                     }
                     if ui.button("↻ Recarregar Cena").clicked() {
                         let scene = host.active_scene_snapshot().clone();
-                        runtime.reload_current_scene(&scene);
+                        runtime.reload_current_scene(&scene, host.project_root());
                         host.set_status("↻ Cena recarregada".to_string());
                     }
                     ui.separator();

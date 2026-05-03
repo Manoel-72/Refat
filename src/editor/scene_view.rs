@@ -14,6 +14,7 @@ use crate::{
         TextLabel, UIButton, Velocity,
     },
     entity::Entity,
+    runtime::{camera, renderer},
 };
 
 /// Ação disparada por interação do mouse dentro da viewport.
@@ -178,6 +179,16 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
             create_at = Some(QuickCreateKind::Camera);
             ui.close_menu();
         }
+        ui.separator();
+        ui.label(egui::RichText::new("Cena").strong());
+        if ui
+            .button("🗺 Adicionar tilemap (Tiled JSON)…")
+            .on_hover_text("JSON exportado do Tiled; guardado na cena e visível na viewport")
+            .clicked()
+        {
+            app.add_scene_tilemap_from_file_dialog();
+            ui.close_menu();
+        }
     });
 
     // ── Grid ──
@@ -204,6 +215,25 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         ],
         egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(80, 255, 80, 120)),
     );
+
+    // Tilemaps da cena (Tiled JSON) — só em modo edição; no Play o runtime já hidrata a mesma lista.
+    if app.play_state == EditorPlayState::Edit {
+        app.refresh_tilemap_preview_cache();
+        if !app.tilemap_preview_cache.is_empty() {
+            let camera = camera::find_main_camera(&app.scene.entities);
+            renderer::draw_runtime_tilemaps(
+                ui,
+                &painter,
+                &app.project_root,
+                None,
+                &mut app.sprite_textures,
+                center,
+                camera,
+                &app.tilemap_preview_cache,
+                available,
+            );
+        }
+    }
 
     // Indicação visual de drag-and-drop vindo do painel Assets
     if let Some(path) = app.dragging_asset_path.clone() {
@@ -879,6 +909,17 @@ fn show_scene_add_component_menu(ui: &mut egui::Ui, app: &mut EditorApp, entity_
             "📷 Camera2D",
             Component::Camera2D(Camera2D::default()),
         );
+        ui.separator();
+        if ui
+            .button("🗺 Tilemap (Tiled JSON)…")
+            .on_hover_text(
+                "Adiciona um mapa à cena inteira (lista em Inspector sem seleção), não a esta entidade.",
+            )
+            .clicked()
+        {
+            app.add_scene_tilemap_from_file_dialog();
+            ui.close_menu();
+        }
     });
 }
 

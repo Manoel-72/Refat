@@ -31,10 +31,16 @@ pub fn try_scene_from_json(json: &str) -> Result<Scene, String> {
         .cloned()
         .unwrap_or_else(|| serde_json::json!([0.15, 0.15, 0.18]));
 
+    let tilemaps = value
+        .get("tilemaps")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+
     serde_json::from_value(serde_json::json!({
         "name": name,
         "entities": entities,
         "background_color": background_color,
+        "tilemaps": tilemaps,
     }))
     .map_err(|error| format!("Falha ao desserializar cena: {}", error))
 }
@@ -101,6 +107,7 @@ mod tests {
         assert_eq!(loaded.name, "SemCampos");
         assert!(loaded.entities.is_empty());
         assert_eq!(loaded.background_color, [0.15, 0.15, 0.18]);
+        assert!(loaded.tilemaps.is_empty());
     }
 
     #[test]
