@@ -1,0 +1,39 @@
+{
+  "name": "MeuProjeto",
+  "entities": [
+    {
+      "id": "ee6b4c05-e570-45e0-96ea-253ee75525ae",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
+  ],
+  "tilemaps": []
+}

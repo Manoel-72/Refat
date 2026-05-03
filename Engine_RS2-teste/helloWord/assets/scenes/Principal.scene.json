@@ -1,0 +1,39 @@
+{
+  "name": "Principal",
+  "entities": [
+    {
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    }
+  ],
+  "background_color": [
+    0.12,
+    0.14,
+    0.18
+  ],
+  "tilemaps": []
+}

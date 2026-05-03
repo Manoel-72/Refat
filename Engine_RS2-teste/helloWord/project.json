@@ -1,0 +1,6 @@
+{
+  "name": "Projeto Inicial",
+  "initial_scene": "assets/scenes/Principal.scene.json",
+  "engine_version": "0.9.5-7",
+  "start_fullscreen": false
+}

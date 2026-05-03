@@ -1,0 +1,14 @@
+RS2BR Engine - Build Standalone PC
+
+Projeto: Projeto Inicial
+Cena inicial: Principal.scene.json
+Executável: helloWord.exe
+Modo: Runtime pré-compilado
+
+Para rodar:
+1. Deixe esta pasta inteira junta.
+2. Execute helloWord.exe.
+
+Requisitos:
+- Não precisa de Rust ou Cargo.
+- Se o Windows reclamar de runtime C++, instale o Microsoft Visual C++ Redistributable 2015-2022 (x64).

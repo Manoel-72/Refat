@@ -1,0 +1,37 @@
+================================================================================
+  RS2BR Engine — pacote de teste / análise (Engine_RS2-teste)
+  Versão do binário: 0.9.5-7
+================================================================================
+
+O QUE ESTÁ AQUI
+---------------
+  rs2br-engine.exe     Editor + runtime 2D (Rust). Executável Windows x64.
+  ProjetoInicial/     Projeto mínimo válido (project.json, cena com câmara,
+                       pastas assets/save). Pode abrir esta pasta no hub.
+
+COMO USAR (primeira vez)
+------------------------
+  1. Execute rs2br-engine.exe (duplo clique).
+  2. No hub de projetos, escolha "Abrir projeto" e selecione a pasta
+     ProjetoInicial (deve conter project.json).
+  3. No editor: crie entidades, adicione componentes, scripts Lua em
+     assets/scripts/, cenas em assets/scenes/, guarde com Ctrl+S.
+
+EXPORTAR JOGO (PC)
+------------------
+  No editor: menu Editor → Build Standalone PC (ou linha de comandos):
+    rs2br-engine.exe build --project "caminho\para\ProjetoInicial"
+
+REQUISITOS
+----------
+  • Windows 64 bits.
+  • Se a build ou o jogo pedirem runtime Visual C++, instale o
+    "Microsoft Visual C++ Redistributable 2015-2022 (x64)".
+
+DOCUMENTAÇÃO
+------------
+  Este ficheiro é o ponto de partida para documentação externa.
+  O código-fonte completo da engine não está incluído neste ZIP —
+  apenas o binário e um projeto vazio de exemplo.
+
+================================================================================
