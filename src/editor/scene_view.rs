@@ -102,7 +102,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     ui.label(
         egui::RichText::new(
-            "Clique = selecionar  |  Ctrl+Clique = multi  |  Arraste = mover  |  Scroll = zoom  |  Clique direito = criar"
+            "Clique = selecionar  |  Arraste no vazio = mover grade  |  Ctrl+Arraste = seleção  |  Scroll = zoom  |  Clique direito = criar"
         )
         .small()
         .color(egui::Color32::from_rgb(80, 92, 110)),
@@ -127,9 +127,15 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         app.scene_zoom = (app.scene_zoom * zoom_factor).clamp(0.25, 4.0);
     }
 
-    // Pan da câmera do editor com botão do meio ou direito
+    // Pan da câmera do editor: igual editores profissionais, arrastar o vazio move a grade.
+    // Ctrl/Shift + arraste continua reservado para seleção por caixa.
+    let selection_modifier = ui.ctx().input(|i| i.modifiers.command || i.modifiers.ctrl || i.modifiers.shift);
     if response.dragged_by(egui::PointerButton::Middle)
         || response.dragged_by(egui::PointerButton::Secondary)
+        || (response.dragged_by(egui::PointerButton::Primary)
+            && !selection_modifier
+            && app.dragging_asset_path.is_none()
+            && app.active_drag_entity_id.is_none())
     {
         let delta = ui.ctx().input(|i| i.pointer.delta());
         app.scene_pan += delta;
@@ -256,6 +262,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
         && app.dragging_asset_path.is_none()
         && response.hovered()
         && primary_down
+        && selection_modifier
     {
         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
             if app.selection_box_start.is_none() {

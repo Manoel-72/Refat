@@ -4,6 +4,7 @@
 // ============================================================
 
 pub mod camera;
+pub mod command;
 pub mod context;
 pub mod input;
 pub mod lua_runtime;
@@ -26,6 +27,7 @@ use self::{
 };
 use crate::core::version;
 
+pub use command::RuntimeCommand;
 pub use state::{RuntimeInput, RuntimeState};
 
 const GROUND_Y: f32 = -260.0;
@@ -302,7 +304,7 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
             }
         }
 
-        renderer::paint_screen_fx_overlay(&painter, available, &runtime.screen_fx);
+        renderer::draw_runtime_screen_fx_after_scene(&runtime.screen_fx, &painter, available);
     }
 
     // ── ações de UI (UIButton) ───────────────────────────────

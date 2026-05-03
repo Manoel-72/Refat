@@ -17,7 +17,8 @@ use crate::{
         input::{input_state::InputState, key_code::KeyCode},
         save::{SaveData, SaveValue},
         scene_manager::SceneManager,
-        systems::{self, audio_system::AudioRuntime, RuntimeCommand},
+        command::RuntimeCommand,
+        systems::{self, audio_system::AudioRuntime},
     },
     world::{nav_grid::NavGrid, tilemap::TilemapNode},
 };
@@ -193,8 +194,6 @@ pub struct RuntimeState {
     pub last_stage: RuntimeFrameStage,
     pub started_audio: HashSet<String>,
     pub audio_runtime: AudioRuntime,
-    pub screen_fx: ScreenFx,
-    pending_runtime_commands: Vec<RuntimeCommand>,
     pub pending_spawns: Vec<PendingSpawnRequest>,
     pub pending_destroys: Vec<PendingDestroyRequest>,
     pub last_spawned_entity_id: Option<String>,
@@ -210,6 +209,7 @@ pub struct RuntimeState {
     pub nav_grids: HashMap<u32, NavGrid>,
     pub nav_grid_next_id: u32,
     pub tween_manager: TweenManager,
+    pub screen_fx: ScreenFx,
     pub pending_tilemap_colliders: Vec<PendingTilemapCollider>,
     /// Estado persistente do jogo (save/load em save/save.json).
     pub save_data: SaveData,
@@ -274,8 +274,6 @@ impl RuntimeState {
             last_stage: RuntimeFrameStage::Idle,
             started_audio: HashSet::new(),
             audio_runtime: AudioRuntime::new(),
-            screen_fx: ScreenFx::default(),
-            pending_runtime_commands: Vec::new(),
             pending_spawns: Vec::new(),
             pending_destroys: Vec::new(),
             last_spawned_entity_id: None,
@@ -291,6 +289,7 @@ impl RuntimeState {
             nav_grids: HashMap::new(),
             nav_grid_next_id: 1,
             tween_manager: TweenManager::new(),
+            screen_fx: ScreenFx::default(),
             pending_tilemap_colliders: Vec::new(),
             save_data: SaveData::new(),
             session_state: HashMap::new(),
@@ -497,8 +496,6 @@ impl RuntimeState {
         self.started_scripts.clear();
         self.started_audio.clear();
         self.audio_runtime.stop_all();
-        self.screen_fx = ScreenFx::default();
-        self.pending_runtime_commands.clear();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
         self.pending_spawns.clear();
@@ -511,6 +508,7 @@ impl RuntimeState {
         self.scene_cache.clear();
         self.clear_lua_runtime_events();
         self.tween_manager = TweenManager::new();
+        self.screen_fx = ScreenFx::default();
         self.clear_collision_tracking();
     }
 
@@ -525,6 +523,7 @@ impl RuntimeState {
         self.game_state.score = 0;
         self.game_state.loading_label = None;
         self.tween_manager = TweenManager::new();
+        self.screen_fx = ScreenFx::default();
     }
 
     pub fn clear_session_state(&mut self) {
@@ -915,8 +914,6 @@ impl RuntimeState {
         self.started_scripts.clear();
         self.started_audio.clear();
         self.audio_runtime.stop_all();
-        self.screen_fx = ScreenFx::default();
-        self.pending_runtime_commands.clear();
         self.input = RuntimeInput::default();
         self.last_stage = RuntimeFrameStage::Idle;
         self.pending_spawns.clear();
@@ -939,6 +936,7 @@ impl RuntimeState {
         self.scene_cache.clear();
         self.clear_lua_runtime_events();
         self.tween_manager = TweenManager::new();
+        self.screen_fx = ScreenFx::default();
         self.clear_collision_tracking();
     }
 
@@ -1156,8 +1154,6 @@ impl RuntimeState {
         self.elapsed_time += self.delta_time;
         self.last_stage = RuntimeFrameStage::UpdateScriptsAndMovement;
 
-        self.pending_runtime_commands.clear();
-
         self.current_runtime_events = std::mem::take(&mut self.pending_runtime_events);
 
         self.previous_collision_contacts = self.collision_contacts.clone();
@@ -1173,6 +1169,7 @@ impl RuntimeState {
         let mut camera_follow_target: Option<(f32, f32)> = None;
         let mut camera_shake: Option<(f32, f32)> = None;
         let mut camera_zoom: Option<f32> = None;
+        let mut pending_runtime_commands: Vec<RuntimeCommand> = Vec::new();
 
         let command = if let Some(scene) = &mut self.active_scene {
             let scene_label_owned = scene.name.clone();
@@ -1215,34 +1212,23 @@ impl RuntimeState {
                 &mut self.nav_grid_next_id,
                 &mut self.tween_manager,
                 &mut self.audio_runtime,
-                &mut self.pending_runtime_commands,
+                &mut pending_runtime_commands,
             )
         } else {
             None
         };
 
-        for cmd in std::mem::take(&mut self.pending_runtime_commands) {
+        for cmd in pending_runtime_commands {
             match cmd {
-                RuntimeCommand::FadeIn { duration_secs } => {
-                    self.screen_fx.fade_in(duration_secs);
-                }
-                RuntimeCommand::FadeOut { duration_secs } => {
-                    self.screen_fx.fade_out(duration_secs);
-                }
-                RuntimeCommand::FlashScreen {
-                    r,
-                    g,
-                    b,
-                    duration_secs,
-                } => {
-                    self.screen_fx.flash(r, g, b, duration_secs);
+                RuntimeCommand::ScreenFadeIn { duration } => self.screen_fx.fade_in(duration),
+                RuntimeCommand::ScreenFadeOut { duration } => self.screen_fx.fade_out(duration),
+                RuntimeCommand::ScreenFlash { r, g, b, duration } => {
+                    self.screen_fx.flash(r, g, b, duration);
                 }
                 RuntimeCommand::ChangeScene(_) | RuntimeCommand::ReloadScene => {}
             }
         }
-
         self.screen_fx.update(self.delta_time);
-        self.audio_runtime.maintain(self.delta_time);
 
         if let Some(scene) = &mut self.active_scene {
             self.tween_manager.update(&mut scene.entities, self.delta_time);
@@ -1371,9 +1357,9 @@ impl RuntimeState {
                         self.game_state.loading_label = None;
                     }
                 }
-                RuntimeCommand::FadeIn { .. }
-                | RuntimeCommand::FadeOut { .. }
-                | RuntimeCommand::FlashScreen { .. } => {}
+                RuntimeCommand::ScreenFadeIn { .. }
+                | RuntimeCommand::ScreenFadeOut { .. }
+                | RuntimeCommand::ScreenFlash { .. } => {}
             }
         }
 

@@ -14,7 +14,6 @@
 //    input.key_held(name), input.key_pressed(name), input.mouse_pos()
 //    game.delta_time(), game.elapsed_time(), game.log(msg)
 //    game.change_scene(path)
-//    game.fade_in(duration), game.fade_out(duration), game.flash_screen(r,g,b,duration)
 //    game.get_collisions() → lista de nomes das entidades em contato
 //    game.collision_enter(name) → bool, true apenas no frame de entrada
 //    game.collision_stay(name)  → bool, true enquanto continuar em contato
@@ -44,9 +43,9 @@ use crate::{
         input::key_code::KeyCode,
         save::{SaveData, SaveValue},
         state::RuntimeInput,
-        systems::RuntimeCommand,
     },
 };
+use crate::runtime::command::RuntimeCommand;
 
 // ── contexto que o script pode modificar ─────────────────────
 
@@ -249,30 +248,6 @@ pub enum AudioOp {
         key: String,
         volume: f32,
     },
-    PlayAt {
-        path: String,
-        world_x: f32,
-        world_y: f32,
-        max_dist: f32,
-        volume: f32,
-    },
-    CrossfadeTo {
-        key: String,
-        path: String,
-        duration_secs: f32,
-    },
-    PlayMusicLooped {
-        intro_path: String,
-        loop_path: String,
-    },
-    SetSfxVolume {
-        volume: f32,
-    },
-    SetMusicVolume {
-        volume: f32,
-    },
-    PauseMusic,
-    ResumeMusic,
 }
 
 // ── execução ─────────────────────────────────────────────────
@@ -307,7 +282,6 @@ pub fn run_lua_script(
     scene_label: Option<&str>,
     script_path: Option<&str>,
     camera_snapshot: (f32, f32, f32, f32, f32),
-    music_playing_snapshot: bool,
     tilemaps_snapshot: &HashMap<u32, crate::world::tilemap::TilemapNode>,
     tilemap_next_id: u32,
     nav_grids_snapshot: &HashMap<u32, crate::world::nav_grid::NavGrid>,
@@ -345,7 +319,6 @@ pub fn run_lua_script(
             scene_label,
             script_path,
             camera_snapshot,
-            music_playing_snapshot,
             tilemaps_snapshot,
             tilemap_next_id,
             nav_grids_snapshot,
@@ -383,7 +356,6 @@ pub fn run_lua_script_with_vm(
     scene_label: Option<&str>,
     script_path: Option<&str>,
     camera_snapshot: (f32, f32, f32, f32, f32),
-    music_playing_snapshot: bool,
     tilemaps_snapshot: &HashMap<u32, crate::world::tilemap::TilemapNode>,
     tilemap_next_id: u32,
     nav_grids_snapshot: &HashMap<u32, crate::world::nav_grid::NavGrid>,
@@ -638,6 +610,8 @@ pub fn run_lua_script_with_vm(
         wrapper.set_metatable(Some(mt));
         Ok(wrapper)
     }
+
+    let (cam_x, cam_y, zoom, view_w, view_h) = camera_snapshot;
 
     // ── tabela `entity` ──────────────────────────────────────
     let entity_tbl = lua.create_table().map_err(|e| e.to_string())?;
@@ -1079,7 +1053,6 @@ pub fn run_lua_script_with_vm(
         let mouse_pos = make_vec2_callable(&lua, mx, my)?;
         input_tbl.set("mouse_pos", mouse_pos).ok();
 
-        let (cam_x, cam_y, zoom, _view_w, _view_h) = camera_snapshot;
         let safe_zoom = zoom.max(0.0001);
         let world_x = (mx / safe_zoom) + cam_x;
         let world_y = cam_y - (my / safe_zoom);
@@ -1475,9 +1448,6 @@ pub fn run_lua_script_with_vm(
             game_tbl.set("camera_off", camera_off).ok();
         }
         {
-            let (cam_x, cam_y, zoom, view_w, view_h) = camera_snapshot;
-            let camera_x_ret = cam_x;
-            let camera_y_ret = cam_y;
             let screen_to_world = lua
                 .create_function(move |lua_ctx, (sx, sy): (f32, f32)| {
                     let controller = CameraController {
@@ -1499,16 +1469,59 @@ pub fn run_lua_script_with_vm(
                 })
                 .map_err(|e| e.to_string())?;
             game_tbl.set("screen_to_world", screen_to_world).ok();
-
-            let camera_x = lua
-                .create_function(move |_, ()| Ok(camera_x_ret))
-                .map_err(|e| e.to_string())?;
+        }
+        {
+            let camera_x = lua.create_function(move |_, ()| Ok(cam_x)).map_err(|e| e.to_string())?;
             game_tbl.set("camera_x", camera_x).ok();
-
-            let camera_y = lua
-                .create_function(move |_, ()| Ok(camera_y_ret))
-                .map_err(|e| e.to_string())?;
+        }
+        {
+            let camera_y = lua.create_function(move |_, ()| Ok(cam_y)).map_err(|e| e.to_string())?;
             game_tbl.set("camera_y", camera_y).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let fade_in = lua
+                .create_function(move |_, duration: f32| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("screen_fx_seq").unwrap_or(0) + 1;
+                    cmds.set("screen_fx_seq", seq)?;
+                    cmds.set(format!("screen_fx_kind:{}", seq), "fade_in")?;
+                    cmds.set(format!("screen_fx_p0:{}", seq), duration)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("fade_in", fade_in).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let fade_out = lua
+                .create_function(move |_, duration: f32| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("screen_fx_seq").unwrap_or(0) + 1;
+                    cmds.set("screen_fx_seq", seq)?;
+                    cmds.set(format!("screen_fx_kind:{}", seq), "fade_out")?;
+                    cmds.set(format!("screen_fx_p0:{}", seq), duration)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("fade_out", fade_out).ok();
+        }
+        {
+            let game_tbl_clone = game_tbl.clone();
+            let flash_screen = lua
+                .create_function(move |_, (r, g, b, duration): (f32, f32, f32, f32)| {
+                    let cmds: Table = game_tbl_clone.get("_cmds")?;
+                    let seq = cmds.get::<i64>("screen_fx_seq").unwrap_or(0) + 1;
+                    cmds.set("screen_fx_seq", seq)?;
+                    cmds.set(format!("screen_fx_kind:{}", seq), "flash")?;
+                    cmds.set(format!("screen_fx_p0:{}", seq), r)?;
+                    cmds.set(format!("screen_fx_p1:{}", seq), g)?;
+                    cmds.set(format!("screen_fx_p2:{}", seq), b)?;
+                    cmds.set(format!("screen_fx_p3:{}", seq), duration)?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("flash_screen", flash_screen).ok();
         }
 
         {
@@ -1868,43 +1881,6 @@ pub fn run_lua_script_with_vm(
             })
             .map_err(|e| e.to_string())?;
         game_tbl.set("change_scene", change_scene).ok();
-
-        let gc_fade_in = game_cmds.clone();
-        let fade_in_fn = lua
-            .create_function(move |_, duration: f32| {
-                let seq = gc_fade_in.get::<i64>("fade_in_seq").unwrap_or(0) + 1;
-                gc_fade_in.set("fade_in_seq", seq)?;
-                gc_fade_in.set(format!("fade_in_duration:{}", seq), duration)?;
-                Ok(())
-            })
-            .map_err(|e| e.to_string())?;
-        game_tbl.set("fade_in", fade_in_fn).ok();
-
-        let gc_fade_out = game_cmds.clone();
-        let fade_out_fn = lua
-            .create_function(move |_, duration: f32| {
-                let seq = gc_fade_out.get::<i64>("fade_out_seq").unwrap_or(0) + 1;
-                gc_fade_out.set("fade_out_seq", seq)?;
-                gc_fade_out.set(format!("fade_out_duration:{}", seq), duration)?;
-                Ok(())
-            })
-            .map_err(|e| e.to_string())?;
-        game_tbl.set("fade_out", fade_out_fn).ok();
-
-        let gc_flash = game_cmds.clone();
-        let flash_screen_fn = lua
-            .create_function(move |_, (r, g, b, duration): (f32, f32, f32, f32)| {
-                let seq = gc_flash.get::<i64>("flash_screen_seq").unwrap_or(0) + 1;
-                gc_flash.set("flash_screen_seq", seq)?;
-                gc_flash.set(format!("flash_screen_r:{}", seq), r)?;
-                gc_flash.set(format!("flash_screen_g:{}", seq), g)?;
-                gc_flash.set(format!("flash_screen_b:{}", seq), b)?;
-                gc_flash.set(format!("flash_screen_duration:{}", seq), duration)?;
-                Ok(())
-            })
-            .map_err(|e| e.to_string())?;
-        game_tbl.set("flash_screen", flash_screen_fn).ok();
-
         game_tbl.set("_cmds", game_cmds).ok();
 
         // game.get_collisions() → lista de nomes das entidades em contato
@@ -2215,115 +2191,6 @@ pub fn run_lua_script_with_vm(
             )
             .map_err(|e| e.to_string())?;
         game_tbl.set("raycast", raycast_fn).ok();
-
-        // game.audio.* — mesma fila `_cmds` do `audio` global
-        {
-            let audio_cmds_for_game: Table = lua
-                .globals()
-                .get::<Table>("audio")
-                .map_err(|e| e.to_string())?
-                .get::<Table>("_cmds")
-                .map_err(|e| e.to_string())?;
-            let game_audio = lua.create_table().map_err(|e| e.to_string())?;
-
-            let ac = audio_cmds_for_game.clone();
-            let play_at_fn = lua
-                .create_function(
-                    move |_, (path, x, y, opts): (String, f32, f32, Option<Table>)| {
-                        let (max_dist, volume) = if let Some(t) = opts {
-                            let md = t.get::<f32>("max_dist").unwrap_or(400.0);
-                            let vol = t.get::<f32>("volume").unwrap_or(1.0);
-                            (md, vol)
-                        } else {
-                            (400.0_f32, 1.0_f32)
-                        };
-                        let seq = ac.get::<i64>("play_at_seq").unwrap_or(0) + 1;
-                        ac.set("play_at_seq", seq)?;
-                        ac.set(format!("play_at_path:{}", seq), path)?;
-                        ac.set(format!("play_at_x:{}", seq), x)?;
-                        ac.set(format!("play_at_y:{}", seq), y)?;
-                        ac.set(format!("play_at_max_dist:{}", seq), max_dist)?;
-                        ac.set(format!("play_at_volume:{}", seq), volume)?;
-                        Ok(())
-                    },
-                )
-                .map_err(|e| e.to_string())?;
-            game_audio.set("play_at", play_at_fn).ok();
-
-            let ac2 = audio_cmds_for_game.clone();
-            let crossfade_fn = lua
-                .create_function(move |_, (path, duration): (String, f32)| {
-                    let seq = ac2.get::<i64>("crossfade_seq").unwrap_or(0) + 1;
-                    ac2.set("crossfade_seq", seq)?;
-                    ac2.set(format!("crossfade_path:{}", seq), path)?;
-                    ac2.set(format!("crossfade_duration:{}", seq), duration)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("crossfade_to", crossfade_fn).ok();
-
-            let ac3 = audio_cmds_for_game.clone();
-            let play_looped_fn = lua
-                .create_function(move |_, (intro_path, loop_path): (String, String)| {
-                    let seq = ac3.get::<i64>("play_looped_seq").unwrap_or(0) + 1;
-                    ac3.set("play_looped_seq", seq)?;
-                    ac3.set(format!("play_looped_intro:{}", seq), intro_path)?;
-                    ac3.set(format!("play_looped_loop:{}", seq), loop_path)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("play_looped", play_looped_fn).ok();
-
-            let ac4 = audio_cmds_for_game.clone();
-            let set_sfx_fn = lua
-                .create_function(move |_, v: f32| {
-                    let seq = ac4.get::<i64>("sfx_vol_seq").unwrap_or(0) + 1;
-                    ac4.set("sfx_vol_seq", seq)?;
-                    ac4.set(format!("sfx_vol_value:{}", seq), v)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("set_sfx_volume", set_sfx_fn).ok();
-
-            let ac5 = audio_cmds_for_game.clone();
-            let set_music_fn = lua
-                .create_function(move |_, v: f32| {
-                    let seq = ac5.get::<i64>("music_vol_seq").unwrap_or(0) + 1;
-                    ac5.set("music_vol_seq", seq)?;
-                    ac5.set(format!("music_vol_value:{}", seq), v)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("set_music_volume", set_music_fn).ok();
-
-            let ac6 = audio_cmds_for_game.clone();
-            let pause_fn = lua
-                .create_function(move |_, ()| {
-                    let seq = ac6.get::<i64>("pause_music_seq").unwrap_or(0) + 1;
-                    ac6.set("pause_music_seq", seq)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("pause_music", pause_fn).ok();
-
-            let ac7 = audio_cmds_for_game.clone();
-            let resume_fn = lua
-                .create_function(move |_, ()| {
-                    let seq = ac7.get::<i64>("resume_music_seq").unwrap_or(0) + 1;
-                    ac7.set("resume_music_seq", seq)?;
-                    Ok(())
-                })
-                .map_err(|e| e.to_string())?;
-            game_audio.set("resume_music", resume_fn).ok();
-
-            let mplay = music_playing_snapshot;
-            let music_playing_fn = lua
-                .create_function(move |_, ()| Ok(mplay))
-                .map_err(|e| e.to_string())?;
-            game_audio.set("music_playing", music_playing_fn).ok();
-
-            game_tbl.set("audio", game_audio).ok();
-        }
 
         lua.globals()
             .set("game", game_tbl)
@@ -2757,57 +2624,6 @@ pub fn run_lua_script_with_vm(
             if let Ok(path) = gcmds.get::<String>("change_scene") {
                 result.change_scene = Some(path);
             }
-
-            let fade_in_seq = gcmds.get::<i64>("fade_in_seq").unwrap_or(0);
-            for seq in 1..=fade_in_seq {
-                let d = gcmds
-                    .get::<f32>(format!("fade_in_duration:{}", seq))
-                    .unwrap_or(0.0);
-                result
-                    .runtime_commands
-                    .push(RuntimeCommand::FadeIn { duration_secs: d });
-                let _ = gcmds.raw_remove(format!("fade_in_duration:{}", seq));
-            }
-            let _ = gcmds.set("fade_in_seq", 0);
-
-            let fade_out_seq = gcmds.get::<i64>("fade_out_seq").unwrap_or(0);
-            for seq in 1..=fade_out_seq {
-                let d = gcmds
-                    .get::<f32>(format!("fade_out_duration:{}", seq))
-                    .unwrap_or(0.0);
-                result
-                    .runtime_commands
-                    .push(RuntimeCommand::FadeOut { duration_secs: d });
-                let _ = gcmds.raw_remove(format!("fade_out_duration:{}", seq));
-            }
-            let _ = gcmds.set("fade_out_seq", 0);
-
-            let flash_screen_seq = gcmds.get::<i64>("flash_screen_seq").unwrap_or(0);
-            for seq in 1..=flash_screen_seq {
-                let r = gcmds
-                    .get::<f32>(format!("flash_screen_r:{}", seq))
-                    .unwrap_or(1.0);
-                let g = gcmds
-                    .get::<f32>(format!("flash_screen_g:{}", seq))
-                    .unwrap_or(1.0);
-                let b = gcmds
-                    .get::<f32>(format!("flash_screen_b:{}", seq))
-                    .unwrap_or(1.0);
-                let d = gcmds
-                    .get::<f32>(format!("flash_screen_duration:{}", seq))
-                    .unwrap_or(0.0);
-                result.runtime_commands.push(RuntimeCommand::FlashScreen {
-                    r,
-                    g,
-                    b,
-                    duration_secs: d,
-                });
-                let _ = gcmds.raw_remove(format!("flash_screen_r:{}", seq));
-                let _ = gcmds.raw_remove(format!("flash_screen_g:{}", seq));
-                let _ = gcmds.raw_remove(format!("flash_screen_b:{}", seq));
-                let _ = gcmds.raw_remove(format!("flash_screen_duration:{}", seq));
-            }
-            let _ = gcmds.set("flash_screen_seq", 0);
             if let (Ok(intensity), Ok(duration)) = (
                 gcmds.get::<f32>("camera_shake_intensity"),
                 gcmds.get::<f32>("camera_shake_duration"),
@@ -3165,6 +2981,46 @@ pub fn run_lua_script_with_vm(
                 let _ = gcmds.raw_remove(format!("sequence_stop_handle:{}", seq));
             }
 
+            let screen_fx_seq = gcmds.get::<i64>("screen_fx_seq").unwrap_or(0);
+            for seq in 1..=screen_fx_seq {
+                let kind = gcmds
+                    .get::<String>(format!("screen_fx_kind:{}", seq))
+                    .unwrap_or_default();
+                let p0 = gcmds
+                    .get::<f32>(format!("screen_fx_p0:{}", seq))
+                    .unwrap_or(0.0);
+                let p1 = gcmds
+                    .get::<f32>(format!("screen_fx_p1:{}", seq))
+                    .unwrap_or(0.0);
+                let p2 = gcmds
+                    .get::<f32>(format!("screen_fx_p2:{}", seq))
+                    .unwrap_or(0.0);
+                let p3 = gcmds
+                    .get::<f32>(format!("screen_fx_p3:{}", seq))
+                    .unwrap_or(0.5);
+                match kind.as_str() {
+                    "fade_in" => result.runtime_commands.push(RuntimeCommand::ScreenFadeIn {
+                        duration: p0.max(1e-6),
+                    }),
+                    "fade_out" => result.runtime_commands.push(RuntimeCommand::ScreenFadeOut {
+                        duration: p0.max(1e-6),
+                    }),
+                    "flash" => result.runtime_commands.push(RuntimeCommand::ScreenFlash {
+                        r: p0,
+                        g: p1,
+                        b: p2,
+                        duration: p3.max(1e-6),
+                    }),
+                    _ => {}
+                }
+                let _ = gcmds.raw_remove(format!("screen_fx_kind:{}", seq));
+                let _ = gcmds.raw_remove(format!("screen_fx_p0:{}", seq));
+                let _ = gcmds.raw_remove(format!("screen_fx_p1:{}", seq));
+                let _ = gcmds.raw_remove(format!("screen_fx_p2:{}", seq));
+                let _ = gcmds.raw_remove(format!("screen_fx_p3:{}", seq));
+            }
+            let _ = gcmds.set("screen_fx_seq", 0);
+
             let _ = gcmds.set("spawn_entity_seq", 0);
             let _ = gcmds.set("spawn_prefab_seq", 0);
             let _ = gcmds.set("spawn_particle_seq", 0);
@@ -3247,100 +3103,6 @@ pub fn run_lua_script_with_vm(
                 let _ = cmds.raw_remove(format!("volume_value:{}", seq));
             }
             let _ = cmds.set("volume_seq", 0);
-
-            let play_at_seq = cmds.get::<i64>("play_at_seq").unwrap_or(0);
-            for seq in 1..=play_at_seq {
-                let Ok(path) = cmds.get::<String>(format!("play_at_path:{}", seq)) else {
-                    continue;
-                };
-                let x = cmds.get::<f32>(format!("play_at_x:{}", seq)).unwrap_or(0.0);
-                let y = cmds.get::<f32>(format!("play_at_y:{}", seq)).unwrap_or(0.0);
-                let max_dist = cmds
-                    .get::<f32>(format!("play_at_max_dist:{}", seq))
-                    .unwrap_or(400.0);
-                let volume = cmds
-                    .get::<f32>(format!("play_at_volume:{}", seq))
-                    .unwrap_or(1.0);
-                result.audio_ops.push(AudioOp::PlayAt {
-                    path,
-                    world_x: x,
-                    world_y: y,
-                    max_dist,
-                    volume,
-                });
-                let _ = cmds.raw_remove(format!("play_at_path:{}", seq));
-                let _ = cmds.raw_remove(format!("play_at_x:{}", seq));
-                let _ = cmds.raw_remove(format!("play_at_y:{}", seq));
-                let _ = cmds.raw_remove(format!("play_at_max_dist:{}", seq));
-                let _ = cmds.raw_remove(format!("play_at_volume:{}", seq));
-            }
-            let _ = cmds.set("play_at_seq", 0);
-
-            let crossfade_seq = cmds.get::<i64>("crossfade_seq").unwrap_or(0);
-            for seq in 1..=crossfade_seq {
-                let Ok(path) = cmds.get::<String>(format!("crossfade_path:{}", seq)) else {
-                    continue;
-                };
-                let duration = cmds
-                    .get::<f32>(format!("crossfade_duration:{}", seq))
-                    .unwrap_or(0.0);
-                result.audio_ops.push(AudioOp::CrossfadeTo {
-                    key: path.clone(),
-                    path,
-                    duration_secs: duration,
-                });
-                let _ = cmds.raw_remove(format!("crossfade_path:{}", seq));
-                let _ = cmds.raw_remove(format!("crossfade_duration:{}", seq));
-            }
-            let _ = cmds.set("crossfade_seq", 0);
-
-            let play_looped_seq = cmds.get::<i64>("play_looped_seq").unwrap_or(0);
-            for seq in 1..=play_looped_seq {
-                let Ok(intro_path) = cmds.get::<String>(format!("play_looped_intro:{}", seq)) else {
-                    continue;
-                };
-                let Ok(loop_path) = cmds.get::<String>(format!("play_looped_loop:{}", seq)) else {
-                    continue;
-                };
-                result
-                    .audio_ops
-                    .push(AudioOp::PlayMusicLooped { intro_path, loop_path });
-                let _ = cmds.raw_remove(format!("play_looped_intro:{}", seq));
-                let _ = cmds.raw_remove(format!("play_looped_loop:{}", seq));
-            }
-            let _ = cmds.set("play_looped_seq", 0);
-
-            let sfx_vol_seq = cmds.get::<i64>("sfx_vol_seq").unwrap_or(0);
-            for seq in 1..=sfx_vol_seq {
-                let v = cmds
-                    .get::<f32>(format!("sfx_vol_value:{}", seq))
-                    .unwrap_or(1.0);
-                result.audio_ops.push(AudioOp::SetSfxVolume { volume: v });
-                let _ = cmds.raw_remove(format!("sfx_vol_value:{}", seq));
-            }
-            let _ = cmds.set("sfx_vol_seq", 0);
-
-            let music_vol_seq = cmds.get::<i64>("music_vol_seq").unwrap_or(0);
-            for seq in 1..=music_vol_seq {
-                let v = cmds
-                    .get::<f32>(format!("music_vol_value:{}", seq))
-                    .unwrap_or(1.0);
-                result.audio_ops.push(AudioOp::SetMusicVolume { volume: v });
-                let _ = cmds.raw_remove(format!("music_vol_value:{}", seq));
-            }
-            let _ = cmds.set("music_vol_seq", 0);
-
-            let pause_music_seq = cmds.get::<i64>("pause_music_seq").unwrap_or(0);
-            for _ in 1..=pause_music_seq {
-                result.audio_ops.push(AudioOp::PauseMusic);
-            }
-            let _ = cmds.set("pause_music_seq", 0);
-
-            let resume_music_seq = cmds.get::<i64>("resume_music_seq").unwrap_or(0);
-            for _ in 1..=resume_music_seq {
-                result.audio_ops.push(AudioOp::ResumeMusic);
-            }
-            let _ = cmds.set("resume_music_seq", 0);
         }
     }
 
@@ -3809,7 +3571,6 @@ mod tests {
             None,
             None,
             (0.0, 0.0, 1.0, 960.0, 640.0),
-            false,
             &std::collections::HashMap::new(),
             1,
             &std::collections::HashMap::new(),
@@ -3851,7 +3612,6 @@ mod tests {
             None,
             None,
             (0.0, 0.0, 1.0, 960.0, 640.0),
-            false,
             &std::collections::HashMap::new(),
             1,
             &std::collections::HashMap::new(),
@@ -3886,7 +3646,6 @@ mod tests {
             None,
             None,
             (0.0, 0.0, 1.0, 960.0, 640.0),
-            false,
             &std::collections::HashMap::new(),
             1,
             &std::collections::HashMap::new(),
@@ -3927,7 +3686,6 @@ mod tests {
             None,
             None,
             (0.0, 0.0, 1.0, 960.0, 640.0),
-            false,
             &std::collections::HashMap::new(),
             1,
             &std::collections::HashMap::new(),

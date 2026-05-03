@@ -171,7 +171,7 @@ pub fn run_lua_scripts_for_entity(
     tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
     camera_snapshot: (f32, f32, f32, f32, f32),
-    pending_runtime_commands: &mut Vec<crate::runtime::systems::RuntimeCommand>,
+    runtime_commands_accumulator: &mut Vec<crate::runtime::command::RuntimeCommand>,
 ) -> Option<String> {
     use crate::runtime::lua_runtime;
 
@@ -283,8 +283,6 @@ pub fn run_lua_scripts_for_entity(
         let script_key = format!("lua::{}::{}", entity.id, file_path);
         let already_started = !started_scripts.insert(script_key);
 
-        let music_playing_snapshot = audio_runtime.music_playing();
-
         match lua_runtime::run_lua_script_with_vm(
             lua,
             &source,
@@ -315,7 +313,6 @@ pub fn run_lua_scripts_for_entity(
             scene_label,
             Some(&file_path),
             camera_snapshot,
-            music_playing_snapshot,
             tilemaps,
             *tilemap_next_id,
             nav_grids,
@@ -383,7 +380,6 @@ pub fn run_lua_scripts_for_entity(
                         }
                     }
                 }
-                let (cam_x, cam_y, _, _, _) = camera_snapshot;
                 for audio_op in &result.audio_ops {
                     match audio_op {
                         lua_runtime::AudioOp::Play {
@@ -423,127 +419,6 @@ pub fn run_lua_scripts_for_entity(
                         }
                         lua_runtime::AudioOp::SetVolume { key, volume } => {
                             let _ = audio_runtime.set_volume_by_name(key, *volume);
-                        }
-                        lua_runtime::AudioOp::PlayAt {
-                            path,
-                            world_x,
-                            world_y,
-                            max_dist,
-                            volume,
-                        } => {
-                            if let Some(audio_path) =
-                                audio_system::resolve_audio_path(project_root, path)
-                            {
-                                let key = audio_runtime.alloc_play_key();
-                                if let Err(error) = audio_runtime.play_at(
-                                    &key,
-                                    &audio_path,
-                                    *world_x,
-                                    *world_y,
-                                    cam_x,
-                                    cam_y,
-                                    *max_dist,
-                                    *volume,
-                                ) {
-                                    lua_stage_log(
-                                        scene_label,
-                                        entity,
-                                        &file_path,
-                                        "audio_play_at",
-                                        "runtime_error",
-                                        error,
-                                    );
-                                }
-                            } else {
-                                lua_stage_log(
-                                    scene_label,
-                                    entity,
-                                    &file_path,
-                                    "audio_play_at",
-                                    "file_not_found",
-                                    path,
-                                );
-                            }
-                        }
-                        lua_runtime::AudioOp::CrossfadeTo {
-                            key,
-                            path,
-                            duration_secs,
-                        } => {
-                            if let Some(audio_path) =
-                                audio_system::resolve_audio_path(project_root, path)
-                            {
-                                if let Err(error) = audio_runtime.crossfade_to(
-                                    key,
-                                    &audio_path,
-                                    *duration_secs,
-                                ) {
-                                    lua_stage_log(
-                                        scene_label,
-                                        entity,
-                                        &file_path,
-                                        "audio_crossfade",
-                                        "runtime_error",
-                                        error,
-                                    );
-                                }
-                            } else {
-                                lua_stage_log(
-                                    scene_label,
-                                    entity,
-                                    &file_path,
-                                    "audio_crossfade",
-                                    "file_not_found",
-                                    path,
-                                );
-                            }
-                        }
-                        lua_runtime::AudioOp::PlayMusicLooped {
-                            intro_path,
-                            loop_path,
-                        } => {
-                            let intro_res =
-                                audio_system::resolve_audio_path(project_root, intro_path);
-                            let loop_res =
-                                audio_system::resolve_audio_path(project_root, loop_path);
-                            if let (Some(ip), Some(lp)) = (intro_res, loop_res) {
-                                if let Err(error) = audio_runtime.play_music_looped(
-                                    intro_path,
-                                    &ip,
-                                    loop_path,
-                                    &lp,
-                                ) {
-                                    lua_stage_log(
-                                        scene_label,
-                                        entity,
-                                        &file_path,
-                                        "audio_play_looped",
-                                        "runtime_error",
-                                        error,
-                                    );
-                                }
-                            } else {
-                                lua_stage_log(
-                                    scene_label,
-                                    entity,
-                                    &file_path,
-                                    "audio_play_looped",
-                                    "file_not_found",
-                                    intro_path,
-                                );
-                            }
-                        }
-                        lua_runtime::AudioOp::SetSfxVolume { volume } => {
-                            audio_runtime.set_sfx_volume(*volume);
-                        }
-                        lua_runtime::AudioOp::SetMusicVolume { volume } => {
-                            audio_runtime.set_music_volume(*volume);
-                        }
-                        lua_runtime::AudioOp::PauseMusic => {
-                            audio_runtime.pause_music();
-                        }
-                        lua_runtime::AudioOp::ResumeMusic => {
-                            audio_runtime.resume_music();
                         }
                     }
                 }
@@ -623,7 +498,7 @@ pub fn run_lua_scripts_for_entity(
                 if result.camera_off {
                     camera_controller.camera_off();
                 }
-                pending_runtime_commands.extend(result.runtime_commands.iter().cloned());
+                runtime_commands_accumulator.extend(result.runtime_commands.iter().cloned());
                 if result.destroy_entity {
                     pending_destroys.push(crate::runtime::state::PendingDestroyRequest {
                         entity_id: entity.id.clone(),

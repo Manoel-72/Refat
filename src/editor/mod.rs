@@ -65,10 +65,20 @@ pub enum BottomDockTab {
     Console,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeftDockTab {
+    Hierarchy,
+    Assets,
+}
+
 #[derive(Debug, Clone)]
 pub enum DeleteTarget {
     Entities { ids: Vec<String>, label: String },
     Asset { path: PathBuf, label: String },
+}
+
+fn default_left_asset_height() -> f32 {
+    260.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,14 +86,17 @@ pub struct EditorLayout {
     pub hierarchy_width: f32,
     pub inspector_width: f32,
     pub asset_height: f32,
+    #[serde(default = "default_left_asset_height")]
+    pub left_asset_height: f32,
 }
 
 impl Default for EditorLayout {
     fn default() -> Self {
         Self {
-            hierarchy_width: 240.0,
-            inspector_width: 300.0,
+            hierarchy_width: 280.0,
+            inspector_width: 360.0,
             asset_height: 220.0,
+            left_asset_height: 260.0,
         }
     }
 }
@@ -259,6 +272,8 @@ pub struct EditorApp {
     pub open_project_dialog: Option<String>,
     /// Aba ativa do dock inferior
     pub bottom_tab: BottomDockTab,
+    /// Aba ativa do painel esquerdo
+    pub left_tab: LeftDockTab,
     /// Busca textual do Inspector para filtrar componentes
     pub inspector_search: String,
     /// Histórico simples do console do editor
@@ -307,9 +322,10 @@ impl EditorApp {
 
         let assets = AssetManager::new(initial_project_root.clone());
         let mut layout = load_editor_layout(&initial_project_root).unwrap_or_default();
-        layout.hierarchy_width = layout.hierarchy_width.clamp(200.0, 380.0);
-        layout.inspector_width = layout.inspector_width.clamp(260.0, 380.0);
+        layout.hierarchy_width = layout.hierarchy_width.clamp(220.0, 420.0);
+        layout.inspector_width = layout.inspector_width.clamp(320.0, 560.0);
         layout.asset_height = layout.asset_height.clamp(190.0, 420.0);
+        layout.left_asset_height = layout.left_asset_height.clamp(180.0, 420.0);
         let project_config = ProjectConfig::load_or_create(&initial_project_root);
 
         let initial_scene = crate::serialization::scene_serializer::try_load_scene_from_path(
@@ -361,7 +377,8 @@ impl EditorApp {
             project_hub_session,
             new_project_dialog: None,
             open_project_dialog: None,
-            bottom_tab: BottomDockTab::Assets,
+            bottom_tab: BottomDockTab::Animator,
+            left_tab: LeftDockTab::Hierarchy,
             inspector_search: String::new(),
             console_history: vec!["ℹ Editor iniciado.".to_string()],
             last_status_snapshot: "Selecione um projeto para começar.".to_string(),
@@ -2411,15 +2428,16 @@ impl eframe::App for EditorApp {
             });
         self.layout.hierarchy_width = hierarchy_response.response.rect.width().clamp(200.0, 380.0);
 
-        let inspector_response = egui::SidePanel::right("inspector_panel")
-            .default_width(self.layout.inspector_width.clamp(260.0, 380.0))
-            .resizable(true)
-            .min_width(260.0)
-            .max_width(380.0)
+        // Inspector estável: largura fixa pequena, sem resize nativo e sem splitter manual.
+        // Isso evita o efeito de “abrir expandindo” causado pelo conteúdo interno.
+        egui::SidePanel::right("inspector_panel")
+            .exact_width(300.0)
+            .resizable(false)
             .show(ctx, |ui| {
+                ui.set_width(292.0);
                 inspector::show(self, ui);
             });
-        self.layout.inspector_width = inspector_response.response.rect.width().clamp(260.0, 380.0);
+        self.layout.inspector_width = 300.0;
 
         // Barra de status no rodapé — deve vir ANTES do painel de assets e sempre antes do
         // CentralPanel (egui: o painel central deve ser o último entre os painéis principais).
@@ -2472,12 +2490,35 @@ impl eframe::App for EditorApp {
                 });
             });
 
-        let asset_response = egui::TopBottomPanel::bottom("asset_panel")
-            .default_height(self.layout.asset_height.clamp(150.0, 900.0).max(180.0))
-            .resizable(true)
-            .min_height(130.0)
-            .max_height(900.0)
+        // Dock inferior com resize MANUAL e altura estável.
+        //
+        // Assim como no Inspector, evitamos o resizable nativo para impedir que o
+        // conteúdo do Asset Browser/Animator force o painel a crescer sozinho.
+        let asset_height = self.layout.asset_height.clamp(140.0, 520.0);
+        egui::TopBottomPanel::bottom("asset_panel")
+            .exact_height(asset_height)
+            .resizable(false)
             .show(ctx, |ui| {
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 6.0),
+                    egui::Sense::drag(),
+                );
+                let response = response.on_hover_cursor(egui::CursorIcon::ResizeVertical);
+                if response.dragged() {
+                    let dy = ui.ctx().input(|i| i.pointer.delta().y);
+                    self.layout.asset_height =
+                        (self.layout.asset_height - dy).clamp(140.0, 520.0);
+                }
+                let color = if response.hovered() || response.dragged() {
+                    ui.visuals().selection.bg_fill
+                } else {
+                    ui.visuals().widgets.noninteractive.bg_stroke.color
+                };
+                ui.painter().line_segment(
+                    [rect.left_center(), rect.right_center()],
+                    egui::Stroke::new(1.0, color),
+                );
+
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     let assets_selected = self.bottom_tab == BottomDockTab::Assets;
@@ -2487,6 +2528,7 @@ impl eframe::App for EditorApp {
                     {
                         self.bottom_tab = BottomDockTab::Assets;
                     }
+
                     let animator_selected = self.bottom_tab == BottomDockTab::Animator;
                     let animator_tab = ui.selectable_label(animator_selected, "🎞 Animator");
                     if animator_tab.clicked() {
@@ -2496,6 +2538,7 @@ impl eframe::App for EditorApp {
                         self.bottom_tab = BottomDockTab::Animator;
                         self.animator_detached = true;
                     }
+
                     let console_selected = self.bottom_tab == BottomDockTab::Console;
                     if ui.selectable_label(console_selected, "🖥 Console").clicked() {
                         self.bottom_tab = BottomDockTab::Console;
@@ -2568,7 +2611,7 @@ impl eframe::App for EditorApp {
                     }
                 }
             });
-        self.layout.asset_height = asset_response.response.rect.height().clamp(130.0, 900.0);
+        self.layout.asset_height = self.layout.asset_height.clamp(140.0, 520.0);
 
         if self.animator_detached {
             let mut open = self.animator_detached;

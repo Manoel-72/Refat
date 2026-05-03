@@ -2,21 +2,21 @@ use macroquad::color::Color;
 use macroquad::shapes::draw_rectangle;
 use macroquad::window::{screen_height, screen_width};
 
-/// Efeitos de tela em tela cheia (fade + flash).
+/// Efeitos de tela cheia (flash por baixo, fade por cima).
 #[derive(Debug, Clone)]
 pub struct ScreenFx {
-    pub fade_alpha: f32,
-    pub fade_target: f32,
-    pub fade_speed: f32,
-    pub fade_r: f32,
-    pub fade_g: f32,
-    pub fade_b: f32,
+    fade_alpha: f32,
+    fade_target: f32,
+    fade_speed: f32,
+    fade_r: f32,
+    fade_g: f32,
+    fade_b: f32,
 
-    pub flash_alpha: f32,
-    pub flash_decay: f32,
-    pub flash_r: f32,
-    pub flash_g: f32,
-    pub flash_b: f32,
+    flash_alpha: f32,
+    flash_decay: f32,
+    flash_r: f32,
+    flash_g: f32,
+    flash_b: f32,
 }
 
 impl Default for ScreenFx {
@@ -38,7 +38,7 @@ impl Default for ScreenFx {
 }
 
 impl ScreenFx {
-    /// Fade in: overlay de alpha 1.0 → 0.0 (revela a cena).
+    /// Overlay de alpha 1.0 → 0.0 (revela a cena).
     pub fn fade_in(&mut self, duration: f32) {
         let d = duration.max(1e-6);
         self.fade_alpha = 1.0;
@@ -46,7 +46,7 @@ impl ScreenFx {
         self.fade_speed = 1.0 / d;
     }
 
-    /// Fade out: overlay de alpha 0.0 → 1.0 (escurece a cena).
+    /// Overlay de alpha 0.0 → 1.0 (escurece a cena).
     pub fn fade_out(&mut self, duration: f32) {
         let d = duration.max(1e-6);
         self.fade_alpha = 0.0;
@@ -71,6 +71,9 @@ impl ScreenFx {
             let d = self.fade_target - self.fade_alpha;
             if d.abs() <= step || step < 1e-9 {
                 self.fade_alpha = self.fade_target;
+                if (self.fade_alpha - self.fade_target).abs() < f32::EPSILON {
+                    self.fade_speed = 0.0;
+                }
             } else {
                 self.fade_alpha += d.signum() * step;
             }
@@ -81,7 +84,8 @@ impl ScreenFx {
         }
     }
 
-    /// Desenha com macroquad (tela inteira). Flash primeiro, depois fade.
+    /// Desenha com macroquad em tela cheia (`screen_width` / `screen_height`).
+    /// Flash primeiro, depois fade. Só desenha se alpha > 0.001.
     pub fn draw(&self) {
         let w = screen_width();
         let h = screen_height();
@@ -110,7 +114,7 @@ impl ScreenFx {
         }
     }
 
-    /// Mesmo overlay para host egui (editor / standalone com eframe).
+    /// Host egui (editor / janela eframe): mesmo overlay no retângulo da vista, após a cena.
     pub fn paint_egui(&self, painter: &egui::Painter, rect: egui::Rect) {
         if self.flash_alpha > 0.001 {
             painter.rect_filled(

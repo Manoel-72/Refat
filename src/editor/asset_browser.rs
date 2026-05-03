@@ -135,8 +135,8 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
     // Altura do grid nunca pode ser derivada de "available_height" sem teto: no primeiro
     // layout do TopBottomPanel o valor pode ser enorme e o painel "come" o CentralPanel.
-    const MAX_CARD_GRID_H: f32 = 200.0;
-    let grid_h = (ui.available_height() * 0.42).clamp(96.0, MAX_CARD_GRID_H);
+    const MAX_CARD_GRID_H: f32 = 520.0;
+    let grid_h = (ui.available_height() - 110.0).clamp(140.0, MAX_CARD_GRID_H);
 
     ui.vertical(|ui| {
         egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -146,7 +146,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     let available_w = ui.available_width().max(280.0);
-                    let estimated_cols = (available_w / 118.0).floor().max(3.0);
+                    let estimated_cols = (available_w / 118.0).floor().max(1.0);
                     let card_width = ((available_w / estimated_cols) - 12.0).clamp(92.0, 132.0);
                     let card_height = (card_width * 0.72).clamp(68.0, 96.0);
                     ui.horizontal_wrapped(|ui| {
@@ -248,7 +248,7 @@ pub fn show(app: &mut EditorApp, ui: &mut egui::Ui) {
 
         ui.add_space(6.0);
 
-        let details_max = ui.available_height().max(72.0).min(220.0);
+        let details_max = ui.available_height().max(96.0).min(320.0);
         egui::Frame::group(ui.style()).show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .id_source(egui::Id::new("asset_browser_details_scroll"))

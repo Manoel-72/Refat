@@ -26,23 +26,7 @@ use crate::core::{
 };
 use crate::runtime::{camera, script::ScriptAction};
 
-#[derive(Debug, Clone)]
-pub enum RuntimeCommand {
-    ChangeScene(String),
-    ReloadScene,
-    FadeIn {
-        duration_secs: f32,
-    },
-    FadeOut {
-        duration_secs: f32,
-    },
-    FlashScreen {
-        r: f32,
-        g: f32,
-        b: f32,
-        duration_secs: f32,
-    },
-}
+pub use crate::runtime::command::RuntimeCommand;
 
 #[inline]
 fn push_unique_string(values: &mut Vec<String>, value: &str) {
@@ -144,7 +128,7 @@ pub fn update_entities_runtime(
     nav_grid_next_id: &mut u32,
     tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
-    pending_runtime_commands: &mut Vec<RuntimeCommand>,
+    runtime_commands_accumulator: &mut Vec<RuntimeCommand>,
 ) -> Option<RuntimeCommand> {
     let mut colliders = Vec::new();
     collision_system::collect_colliders(entities, &mut colliders);
@@ -204,7 +188,7 @@ pub fn update_entities_runtime(
         tween_manager,
         audio_runtime,
         camera_snapshot,
-        pending_runtime_commands,
+        runtime_commands_accumulator,
     )
 }
 
@@ -251,7 +235,7 @@ fn update_entities_runtime_recursive(
     tween_manager: &mut crate::effects::tween::TweenManager,
     audio_runtime: &mut audio_system::AudioRuntime,
     camera_snapshot: (f32, f32, f32, f32, f32),
-    pending_runtime_commands: &mut Vec<RuntimeCommand>,
+    runtime_commands_accumulator: &mut Vec<RuntimeCommand>,
 ) -> Option<RuntimeCommand> {
     for entity in entities {
         let script_data =
@@ -381,7 +365,7 @@ fn update_entities_runtime_recursive(
             tween_manager,
             audio_runtime,
             camera_snapshot,
-            pending_runtime_commands,
+            runtime_commands_accumulator,
         ) {
             return Some(RuntimeCommand::ChangeScene(scene_path));
         }
@@ -473,7 +457,7 @@ fn update_entities_runtime_recursive(
             tween_manager,
             audio_runtime,
             camera_snapshot,
-            pending_runtime_commands,
+            runtime_commands_accumulator,
         ) {
             return Some(command);
         }

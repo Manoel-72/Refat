@@ -223,7 +223,7 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
         }
     }
 
-    renderer::paint_screen_fx_overlay(&painter, available, &host.runtime.screen_fx);
+    renderer::draw_runtime_screen_fx_after_scene(&host.runtime.screen_fx, &painter, available);
 
     if let Some(action) = pending_ui_action {
         match action {
