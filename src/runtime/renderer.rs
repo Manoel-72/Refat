@@ -10,6 +10,7 @@ use crate::core::{
     entity::Entity,
 };
 use crate::renderer::gfx::paint_rotated_placeholder;
+use crate::world::tilemap::{tiled_base_gid, TilemapNode, TILED_FLIP_D, TILED_FLIP_H, TILED_FLIP_V};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiAction {
@@ -576,15 +577,197 @@ fn draw_ui_button(
     None
 }
 
+#[inline]
+fn runtime_world_to_screen(center: egui::Pos2, cam: CameraView, wx: f32, wy: f32) -> egui::Pos2 {
+    egui::pos2(
+        center.x + (wx - cam.x) * cam.zoom,
+        center.y - (wy - cam.y) * cam.zoom,
+    )
+}
+
+fn paint_textured_tile_quad(
+    painter: &egui::Painter,
+    texture_id: egui::TextureId,
+    uv: egui::Rect,
+    corners: [egui::Pos2; 4],
+    tint: egui::Color32,
+) {
+    let mut mesh = egui::Mesh::with_texture(texture_id);
+    let b = mesh.vertices.len() as u32;
+    let uv_tl = uv.min;
+    let uv_tr = egui::pos2(uv.max.x, uv.min.y);
+    let uv_br = uv.max;
+    let uv_bl = egui::pos2(uv.min.x, uv.max.y);
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: corners[0],
+        uv: uv_tl,
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: corners[1],
+        uv: uv_tr,
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: corners[2],
+        uv: uv_br,
+        color: tint,
+    });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: corners[3],
+        uv: uv_bl,
+        color: tint,
+    });
+    mesh.indices
+        .extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+/// Desenha todos os tilemaps carregados no runtime (ordem estável por handle).
+/// Camadas de baixo para cima; alinha com `build_colliders` (origem canto superior-esquerdo em Y crescente no mundo).
+pub fn draw_runtime_tilemaps(
+    ui: &mut egui::Ui,
+    painter: &egui::Painter,
+    project_root: &Path,
+    current_scene_path: Option<&Path>,
+    sprite_textures: &mut HashMap<String, egui::TextureHandle>,
+    center: egui::Pos2,
+    camera: CameraView,
+    tilemaps: &HashMap<u32, TilemapNode>,
+    viewport: egui::Rect,
+) {
+    let _ = current_scene_path;
+    if tilemaps.is_empty() {
+        return;
+    }
+
+    let mut handles: Vec<u32> = tilemaps.keys().copied().collect();
+    handles.sort_unstable();
+
+    for handle in handles {
+        let Some(map) = tilemaps.get(&handle) else {
+            continue;
+        };
+        let tw = map.tile_width.max(1) as f32;
+        let th = map.tile_height.max(1) as f32;
+        if map.map_width == 0 || map.map_height == 0 {
+            continue;
+        }
+
+        for layer in &map.layers {
+            if !layer.visible {
+                continue;
+            }
+            let alpha_u8 = (layer.opacity.clamp(0.0, 1.0) * 255.0) as u8;
+            if alpha_u8 == 0 {
+                continue;
+            }
+            let tint_base = egui::Color32::from_white_alpha(alpha_u8);
+
+            for row in 0..map.map_height {
+                for col in 0..map.map_width {
+                    let idx = row as usize * map.map_width as usize + col as usize;
+                    let Some(gid_raw) = layer.data.get(idx).copied() else {
+                        continue;
+                    };
+                    if gid_raw == 0 {
+                        continue;
+                    }
+                    if (gid_raw & TILED_FLIP_D) != 0 {
+                        continue;
+                    }
+                    let flip_h = (gid_raw & TILED_FLIP_H) != 0;
+                    let flip_v = (gid_raw & TILED_FLIP_V) != 0;
+                    let gid = tiled_base_gid(gid_raw);
+                    if gid == 0 {
+                        continue;
+                    }
+
+                    let Some((ts, local_id)) = map.resolve_tileset_for_gid(gid_raw) else {
+                        continue;
+                    };
+                    let tex_path = ts.texture_path.trim();
+                    if tex_path.is_empty() {
+                        continue;
+                    }
+
+                    let Some(texture) = load_texture_from_relative_path(
+                        ui.ctx(),
+                        project_root,
+                        sprite_textures,
+                        tex_path,
+                    ) else {
+                        continue;
+                    };
+
+                    let tex_size = texture.size_vec2();
+                    let tex_w = tex_size.x.max(1.0);
+                    let tex_h = tex_size.y.max(1.0);
+
+                    let tw_atlas = ts.tile_width.max(1) as f32;
+                    let th_atlas = ts.tile_height.max(1) as f32;
+                    let cols = ts.columns.max(1);
+                    let tile_col = (local_id % cols) as f32;
+                    let tile_row = (local_id / cols) as f32;
+
+                    let mut u_min = (tile_col * tw_atlas) / tex_w;
+                    let mut u_max = ((tile_col + 1.0) * tw_atlas) / tex_w;
+                    let mut v_min = (tile_row * th_atlas) / tex_h;
+                    let mut v_max = ((tile_row + 1.0) * th_atlas) / tex_h;
+                    if flip_h {
+                        std::mem::swap(&mut u_min, &mut u_max);
+                    }
+                    if flip_v {
+                        std::mem::swap(&mut v_min, &mut v_max);
+                    }
+                    let uv = egui::Rect::from_min_max(
+                        egui::pos2(u_min, v_min),
+                        egui::pos2(u_max, v_max),
+                    );
+
+                    let wx0 = col as f32 * tw;
+                    let wx1 = wx0 + tw;
+                    let wy_bottom = row as f32 * th;
+                    let wy_top = wy_bottom + th;
+
+                    let p_tl = runtime_world_to_screen(center, camera, wx0, wy_top);
+                    let p_tr = runtime_world_to_screen(center, camera, wx1, wy_top);
+                    let p_br = runtime_world_to_screen(center, camera, wx1, wy_bottom);
+                    let p_bl = runtime_world_to_screen(center, camera, wx0, wy_bottom);
+
+                    let min_x = p_tl.x.min(p_tr.x).min(p_br.x).min(p_bl.x);
+                    let max_x = p_tl.x.max(p_tr.x).max(p_br.x).max(p_bl.x);
+                    let min_y = p_tl.y.min(p_tr.y).min(p_br.y).min(p_bl.y);
+                    let max_y = p_tl.y.max(p_tr.y).max(p_br.y).max(p_bl.y);
+                    let tile_screen = egui::Rect::from_min_max(
+                        egui::pos2(min_x, min_y),
+                        egui::pos2(max_x, max_y),
+                    );
+                    if !viewport.intersects(tile_screen) {
+                        continue;
+                    }
+
+                    paint_textured_tile_quad(
+                        painter,
+                        texture.id(),
+                        uv,
+                        [p_tl, p_tr, p_br, p_bl],
+                        tint_base,
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Fade / flash em tela cheia **depois** de partículas e entidades.
-/// `paint_egui` cobre o host eframe; `ScreenFx::draw` usa macroquad (`screen_width` / `screen_height`).
+/// Só `paint_egui`: o host é eframe — `ScreenFx::draw` (macroquad) panicaria (`THREAD_ID` não existe fora do loop MQ).
 pub fn draw_runtime_screen_fx_after_scene(
     fx: &crate::effects::screen_fx::ScreenFx,
     painter: &egui::Painter,
     rect: egui::Rect,
 ) {
     fx.paint_egui(painter, rect);
-    fx.draw();
 }
 
 pub fn draw_runtime_particles(

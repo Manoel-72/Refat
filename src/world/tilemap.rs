@@ -3,6 +3,17 @@ use std::{collections::HashSet, fs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Máscara Tiled para GID local (remove bits de flip nos 3 bits altos).
+pub const TILED_GID_MASK: u32 = 0x1FFF_FFFF;
+pub const TILED_FLIP_H: u32 = 0x8000_0000;
+pub const TILED_FLIP_V: u32 = 0x4000_0000;
+pub const TILED_FLIP_D: u32 = 0x2000_0000;
+
+#[inline]
+pub fn tiled_base_gid(gid: u32) -> u32 {
+    gid & TILED_GID_MASK
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TilemapNode {
     pub map_width: u32,
@@ -203,6 +214,20 @@ impl TilemapNode {
                 *tile = gid;
             }
         }
+    }
+
+    /// Tileset ativo para o GID (maior `first_gid` ≤ gid) e índice local no atlas.
+    pub fn resolve_tileset_for_gid(&self, gid: u32) -> Option<(&TilesetInfo, u32)> {
+        let gid = tiled_base_gid(gid);
+        if gid == 0 {
+            return None;
+        }
+        let ts = self
+            .tilesets
+            .iter()
+            .filter(|ts| gid >= ts.first_gid)
+            .max_by_key(|ts| ts.first_gid)?;
+        Some((ts, gid.saturating_sub(ts.first_gid)))
     }
 
     fn index(&self, col: u32, row: u32) -> Option<usize> {

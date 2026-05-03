@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::{BinaryHeap, HashMap, HashSet}};
 
 use serde::{Deserialize, Serialize};
 
-use crate::world::tilemap::TilemapNode;
+use crate::world::tilemap::{tiled_base_gid, TilemapNode};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NavGrid {
@@ -51,12 +51,19 @@ impl NavGrid {
         }
     }
 
+    /// Grelha de caminhamento a partir de uma layer do tilemap. `solid_gids` usa GIDs “base”
+    /// (bits de flip Tiled são ignorados na comparação, alinhado a `tiled_base_gid`).
     pub fn from_tilemap(map: &TilemapNode, solid_gids: &[u32], layer: usize) -> NavGrid {
         let mut grid = NavGrid::new(map.map_width, map.map_height, map.tile_width.max(1) as f32);
-        let solids: HashSet<u32> = solid_gids.iter().copied().filter(|gid| *gid != 0).collect();
+        let solids: HashSet<u32> = solid_gids
+            .iter()
+            .copied()
+            .map(tiled_base_gid)
+            .filter(|gid| *gid != 0)
+            .collect();
         for row in 0..map.map_height {
             for col in 0..map.map_width {
-                let gid = map.get_tile(layer, col, row);
+                let gid = tiled_base_gid(map.get_tile(layer, col, row));
                 if solids.contains(&gid) {
                     grid.set_solid(col as i32, row as i32, true);
                 }

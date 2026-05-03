@@ -174,9 +174,14 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
 
     // Snapshot só das entidades para desenho: `sprite_textures` exige `&mut host`, incompatível
     // com emprestar `host.runtime` ao mesmo tempo. Mais barato que clonar a `Scene` inteira.
-    let (bg, entities_snapshot) = {
-        let scene = host.runtime.active_scene.as_ref().expect("checked above");
-        (scene.background_color, scene.entities.clone())
+    let (bg, entities_snapshot, tilemaps_snapshot) = {
+        let r = &host.runtime;
+        let scene = r.active_scene.as_ref().expect("checked above");
+        (
+            scene.background_color,
+            scene.entities.clone(),
+            r.tilemaps.clone(),
+        )
     };
 
     painter.rect_filled(
@@ -205,6 +210,18 @@ fn show_game(host: &mut StandaloneApp, ui: &mut egui::Ui) {
     }
 
     let current_scene_path = host.runtime.scene_manager.current_path.clone();
+
+    renderer::draw_runtime_tilemaps(
+        ui,
+        &painter,
+        &project_root,
+        current_scene_path.as_deref(),
+        host.sprite_textures(),
+        center,
+        camera_state,
+        &tilemaps_snapshot,
+        available,
+    );
 
     renderer::draw_runtime_particles(&painter, center, camera_state, &host.runtime.particles);
 

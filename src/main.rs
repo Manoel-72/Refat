@@ -2,8 +2,12 @@
 // ============================================================
 //  RS2BR-Engine - Entry point do editor
 // ============================================================
+//
+// CLI: `rs2br-engine build --project <dir> [--output <exe>]`
+//       (stderr: passos e log do Cargo; código 0 = pacote criado)
 
 pub mod assets;
+pub mod cli;
 pub mod core;
 pub mod editor;
 pub mod effects;
@@ -13,11 +17,29 @@ pub mod renderer;
 pub mod runtime;
 pub mod serialization;
 pub mod standalone;
+pub mod standalone_export;
 pub mod world;
 
 use editor::EditorApp;
 
 pub use crate::core::{component, entity, prefab, project, scene, version};
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn AttachConsole(dw_process_id: u32) -> i32;
+}
+
+#[cfg(windows)]
+fn attach_parent_console_for_cli() {
+    const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_parent_console_for_cli() {}
 
 fn load_app_icon() -> Option<egui::IconData> {
     const EMBEDDED_PNG: &[u8] = include_bytes!("../assets/icon/rs2br_engine_icon.png");
@@ -65,6 +87,13 @@ fn load_app_icon() -> Option<egui::IconData> {
 
 fn main() {
     env_logger::init();
+
+    use clap::Parser;
+    let parsed = cli::EngineCli::parse();
+    if let Some(cli::EngineCommands::Build(args)) = parsed.command {
+        attach_parent_console_for_cli();
+        std::process::exit(cli::run_build_command(args));
+    }
 
     let standalone_root = standalone::detect_standalone_project_root();
 

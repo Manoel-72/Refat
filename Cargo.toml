@@ -27,6 +27,7 @@ uuid = { version = "1", features = ["v4"] }
 # Log
 log = "0.4"
 env_logger = "0.11"
+clap = { version = "4", features = ["derive"] }
 rodio = "0.17"
 
 # Lua 5.4 embutida — execução de LuaScript na V0.9

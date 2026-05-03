@@ -84,8 +84,8 @@ impl ScreenFx {
         }
     }
 
-    /// Desenha com macroquad em tela cheia (`screen_width` / `screen_height`).
-    /// Flash primeiro, depois fade. Só desenha se alpha > 0.001.
+    /// Desenha com macroquad (só dentro do `macroquad::window::main` / loop MQ).
+    /// No editor e standalone use sempre [`Self::paint_egui`].
     pub fn draw(&self) {
         let w = screen_width();
         let h = screen_height();

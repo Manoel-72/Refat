@@ -287,6 +287,18 @@ pub fn show<H: RuntimeContext>(host: &mut H, runtime: &mut RuntimeState, ui: &mu
 
         let current_scene_path = runtime.scene_manager.current_path.clone();
 
+        renderer::draw_runtime_tilemaps(
+            ui,
+            &painter,
+            &project_root,
+            current_scene_path.as_deref(),
+            host.sprite_textures(),
+            center,
+            camera,
+            &runtime.tilemaps,
+            available,
+        );
+
         renderer::draw_runtime_particles(&painter, center, camera, &runtime.particles);
 
         for entity in &scene.entities {

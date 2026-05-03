@@ -23,6 +23,16 @@
 //    game.raycast(ox,oy,dx,dy,dist) → {hit, x, y, dist, name} ou nil
 //    entity.id, entity.apply_impulse(ix, iy), entity.destroy()
 //    save.set(key, value), save.get(key), save.has(key), save.remove(key)
+//
+//  Navegação (NavGrid, A*):
+//    game.nav_new(cols, rows, cell_size) — alias de game.nav_new_grid
+//    game.nav_new_grid(cols, rows, cell_size) → handle (u32)
+//    game.nav_from_tilemap(tilemap_handle, { solid_gids = {gid,...}, layer = 0 }) → handle
+//    game.nav_has_grid(handle) → bool
+//    game.nav_dimensions(handle) → { width, height, cell_size } ou nil
+//    game.nav_is_solid(handle, cx, cy) → bool (célula inteira)
+//    game.nav_find_path(handle, x1, y1, x2, y2) → lista de {x,y} / nil se sem caminho
+//    game.nav_set_solid(handle, cx, cy, solid) → bool
 // ============================================================
 
 use std::{
@@ -1596,6 +1606,16 @@ pub fn run_lua_script_with_vm(
             let bridge = Rc::clone(&nav_grid_bridge);
             let nav_new_grid = lua
                 .create_function(move |_, (cols, rows, cell_size): (u32, u32, f32)| {
+                    if cols == 0 || rows == 0 {
+                        return Err(mlua::Error::runtime(
+                            "nav_new / nav_new_grid: cols e rows devem ser > 0",
+                        ));
+                    }
+                    if !cell_size.is_finite() || cell_size <= 0.0 {
+                        return Err(mlua::Error::runtime(
+                            "nav_new / nav_new_grid: cell_size deve ser um número finito > 0",
+                        ));
+                    }
                     let mut bridge = bridge.borrow_mut();
                     let handle = bridge.next_id.max(1);
                     bridge.next_id = bridge.next_id.saturating_add(1);
@@ -1605,22 +1625,36 @@ pub fn run_lua_script_with_vm(
                     Ok(handle)
                 })
                 .map_err(|e| e.to_string())?;
-            game_tbl.set("nav_new_grid", nav_new_grid).ok();
+            game_tbl.set("nav_new_grid", nav_new_grid.clone()).ok();
+            game_tbl.set("nav_new", nav_new_grid).ok();
         }
         {
             let nav_bridge = Rc::clone(&nav_grid_bridge);
             let tile_bridge = Rc::clone(&tilemap_bridge);
             let nav_from_tilemap = lua
-                .create_function(move |_, (tilemap_handle, opts): (u32, Table)| {
-                    let solid_gids_table: Table = opts.get("solid_gids")?;
+                .create_function(move |lua_ctx, (tilemap_handle, opts): (u32, Table)| {
+                    let solid_gids_table: Table = match opts.get::<Table>("solid_gids") {
+                        Ok(t) => t,
+                        Err(_) => lua_ctx.create_table()?,
+                    };
                     let mut solid_gids = Vec::new();
                     for value in solid_gids_table.sequence_values::<u32>() {
                         solid_gids.push(value?);
                     }
                     let layer_idx = opts.get::<usize>("layer").unwrap_or(0);
-                    let Some(tilemap) = tile_bridge.borrow().maps.get(&tilemap_handle).cloned() else {
-                        return Ok(0u32);
-                    };
+                    let tilemap = tile_bridge.borrow().maps.get(&tilemap_handle).cloned().ok_or_else(|| {
+                        mlua::Error::runtime(format!(
+                            "nav_from_tilemap: tilemap handle {} não existe (use game.load_tilemap antes)",
+                            tilemap_handle
+                        ))
+                    })?;
+                    if layer_idx >= tilemap.layers.len() {
+                        return Err(mlua::Error::runtime(format!(
+                            "nav_from_tilemap: layer {} fora de faixa (mapa tem {} layers)",
+                            layer_idx,
+                            tilemap.layers.len()
+                        )));
+                    }
                     let grid = crate::world::nav_grid::NavGrid::from_tilemap(&tilemap, &solid_gids, layer_idx);
                     let mut nav_bridge = nav_bridge.borrow_mut();
                     let handle = nav_bridge.next_id.max(1);
@@ -1634,14 +1668,64 @@ pub fn run_lua_script_with_vm(
         }
         {
             let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_has_grid = lua
+                .create_function(move |_, handle: u32| {
+                    Ok(bridge.borrow().grids.contains_key(&handle))
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_has_grid", nav_has_grid).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_dimensions = lua
+                .create_function(move |lua_ctx, handle: u32| {
+                    let dims = {
+                        let b = bridge.borrow();
+                        b.grids
+                            .get(&handle)
+                            .map(|g| (g.width, g.height, g.cell_size))
+                    };
+                    let Some((width, height, cell_size)) = dims else {
+                        return Ok(LuaValue::Nil);
+                    };
+                    let t = lua_ctx.create_table()?;
+                    t.set("width", width)?;
+                    t.set("height", height)?;
+                    t.set("cell_size", cell_size)?;
+                    Ok(LuaValue::Table(t))
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_dimensions", nav_dimensions).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
+            let nav_is_solid = lua
+                .create_function(move |_, (handle, cx, cy): (u32, i32, i32)| {
+                    let b = bridge.borrow();
+                    let Some(grid) = b.grids.get(&handle) else {
+                        return Ok(false);
+                    };
+                    Ok(grid.is_solid(cx, cy))
+                })
+                .map_err(|e| e.to_string())?;
+            game_tbl.set("nav_is_solid", nav_is_solid).ok();
+        }
+        {
+            let bridge = Rc::clone(&nav_grid_bridge);
             let nav_find_path = lua
                 .create_function(move |lua_ctx, (handle, x1, y1, x2, y2): (u32, f32, f32, f32, f32)| {
-                    let Some(path) = bridge
+                    let grid = bridge
                         .borrow()
                         .grids
                         .get(&handle)
-                        .and_then(|grid| grid.find_path((x1, y1), (x2, y2)))
-                    else {
+                        .cloned()
+                        .ok_or_else(|| {
+                            mlua::Error::runtime(format!(
+                                "nav_find_path: grid handle {} inválido (use nav_new ou nav_from_tilemap)",
+                                handle
+                            ))
+                        })?;
+                    let Some(path) = grid.find_path((x1, y1), (x2, y2)) else {
                         return Ok(LuaValue::Nil);
                     };
                     let out = lua_ctx.create_table()?;
@@ -1663,16 +1747,12 @@ pub fn run_lua_script_with_vm(
             let nav_set_solid = lua
                 .create_function(move |_, (handle, x, y, solid): (u32, i32, i32, bool)| {
                     let mut bridge = bridge.borrow_mut();
-                    let changed = if let Some(grid) = bridge.grids.get_mut(&handle) {
-                        grid.set_solid(x, y, solid);
-                        true
-                    } else {
-                        false
+                    let Some(grid) = bridge.grids.get_mut(&handle) else {
+                        return Ok(false);
                     };
-                    if changed {
-                        bridge.set_ops.push(NavSetSolidOp { handle, x, y, solid });
-                    }
-                    Ok(changed)
+                    grid.set_solid(x, y, solid);
+                    bridge.set_ops.push(NavSetSolidOp { handle, x, y, solid });
+                    Ok(true)
                 })
                 .map_err(|e| e.to_string())?;
             game_tbl.set("nav_set_solid", nav_set_solid).ok();
