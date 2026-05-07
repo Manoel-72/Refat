@@ -37,7 +37,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                 // ══════════════════════════════════════════════════
                 egui::menu::bar(ui, |ui| {
                     // ── Menus esquerda ──
-                    ui.menu_button("File", |ui| {
+                    ui.menu_button("Arquivo", |ui| {
                         ui.set_min_width(240.0);
 
                         section_label(ui, "PROJETO");
@@ -177,7 +177,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
                     });
 
-                    ui.menu_button("Create", |ui| {
+                    ui.menu_button("Criar", |ui| {
                         ui.set_min_width(210.0);
                         section_label(ui, "ENTIDADES");
                         if menu_item(ui, "🔷", "Entidade Vazia", "Objeto básico sem componentes")
@@ -273,7 +273,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
                     });
 
-                    ui.menu_button("Scene", |ui| {
+                    ui.menu_button("Cena", |ui| {
                         ui.set_min_width(220.0);
                         ui.label(
                             egui::RichText::new(format!("Cena ativa: {}", app.scene.name)).strong(),
@@ -438,7 +438,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
                     });
 
-                    ui.menu_button("Help", |ui| {
+                    ui.menu_button("Ajuda", |ui| {
                         ui.set_min_width(300.0);
 
                         ui.label(
@@ -497,7 +497,9 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                                 .small(),
                         );
                         ui.label(
-                            egui::RichText::new("  5. Salve a cena e pressione ▶ Play para testar")
+                            egui::RichText::new(
+                                "  5. Salve a cena e pressione ▶ Executar para testar",
+                            )
                                 .small(),
                         );
                         ui.label(
@@ -542,16 +544,16 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         );
                     });
 
-                    // ── Centro: Play / Pause / Stop ──
+                    // ── Centro: Executar / Pausar / Parar ──
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         ui.add_space((ui.available_width() * 0.34).clamp(80.0, 420.0));
                         ui.horizontal(|ui| {
                             let is_playing = app.play_state == EditorPlayState::Playing;
                             let is_paused = app.play_state == EditorPlayState::Paused;
 
-                            // Play
+                            // Executar
                             let play_btn = egui::Button::new(
-                                egui::RichText::new("Play")
+                                egui::RichText::new("Executar")
                                     .color(egui::Color32::WHITE)
                                     .strong(),
                             )
@@ -579,16 +581,16 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                                         source_path,
                                         &app.project_root,
                                     );
-                                    app.status_msg = format!("▶ Play: '{}'", label);
+                                    app.status_msg = format!("▶ Executando: '{}'", label);
                                 } else {
                                     app.runtime.start_from_scene(&app.scene, &app.project_root);
-                                    app.status_msg = "▶ Play iniciado.".to_string();
+                                    app.status_msg = "▶ Execucao iniciada.".to_string();
                                 }
                             }
 
-                            // Pause
+                            // Pausar
                             let pause_btn = egui::Button::new(
-                                egui::RichText::new("Pause").color(egui::Color32::WHITE),
+                                egui::RichText::new("Pausar").color(egui::Color32::WHITE),
                             )
                             .fill(if is_paused {
                                 PAUSE_BG
@@ -605,9 +607,9 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                                 app.status_msg = "⏸ Pausado.".to_string();
                             }
 
-                            // Stop
+                            // Parar
                             let stop_btn = egui::Button::new(
-                                egui::RichText::new("Stop").color(egui::Color32::WHITE),
+                                egui::RichText::new("Parar").color(egui::Color32::WHITE),
                             )
                             .fill(if !is_playing && !is_paused {
                                 egui::Color32::from_rgb(46, 52, 63)
@@ -643,7 +645,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                         }
                         ui.label(
                             egui::RichText::new(format!(
-                                "{} | {} tabs",
+                                "{} | {} abas",
                                 app.scene.name,
                                 app.open_scenes.len()
                             ))
@@ -662,7 +664,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     // Desfazer / Refazer compactos
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("< Undo").size(12.0))
+                            egui::Button::new(egui::RichText::new("< Desfazer").size(12.0))
                                 .min_size(egui::vec2(52.0, 20.0)),
                         )
                         .on_hover_text("Desfazer (Ctrl+Z)")
@@ -672,7 +674,7 @@ pub fn show(app: &mut EditorApp, ctx: &egui::Context) {
                     }
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("Redo >").size(12.0))
+                            egui::Button::new(egui::RichText::new("Refazer >").size(12.0))
                                 .min_size(egui::vec2(52.0, 20.0)),
                         )
                         .on_hover_text("Refazer (Ctrl+Y)")

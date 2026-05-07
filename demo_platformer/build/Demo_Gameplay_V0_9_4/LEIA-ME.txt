@@ -1,0 +1,14 @@
+RS2BR Engine - Build Standalone PC
+
+Projeto: Demo Gameplay V0.9.4
+Cena inicial: main.scene.json
+Executável: Demo_Gameplay_V0_9_4.exe
+Modo: Runtime pré-compilado
+
+Para rodar:
+1. Deixe esta pasta inteira junta.
+2. Execute Demo_Gameplay_V0_9_4.exe.
+
+Requisitos:
+- Não precisa de Rust ou Cargo.
+- Se o Windows reclamar de runtime C++, instale o Microsoft Visual C++ Redistributable 2015-2022 (x64).

@@ -43,10 +43,13 @@ pub fn sanitize_filename(name: &str) -> String {
 }
 
 pub fn find_engine_root(project_root: &Path) -> Option<PathBuf> {
+    fn is_valid_engine_root(root: &Path) -> bool {
+        root.join("Cargo.toml").is_file() && root.join("src").is_dir()
+    }
+
     for base in [project_root.to_path_buf(), std::env::current_dir().ok()?] {
         for ancestor in base.ancestors() {
-            let candidate = ancestor.join("Cargo.toml");
-            if candidate.exists() {
+            if is_valid_engine_root(ancestor) {
                 return Some(ancestor.to_path_buf());
             }
         }
@@ -206,7 +209,10 @@ fn copy_minimal_engine_workspace(src_root: &Path, dst_root: &Path) -> std::io::R
     if !src_dir.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Pasta src da engine não encontrada",
+            format!(
+                "Pasta src da engine não encontrada em {}",
+                src_root.display()
+            ),
         ));
     }
     copy_dir_recursive_filtered(&src_dir, &dst_root.join("src"))?;
