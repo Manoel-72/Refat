@@ -1,5 +1,6 @@
 {
-  "name": "Teste1",
-  "initial_scene": "assets/scenes/Teste1.scene.json",
-  "engine_version": "V0.9.0"
+  "name": "RS2 TopDown Shooter Demo",
+  "initial_scene": "assets/scenes/menu.scene.json",
+  "engine_version": "0.9.5-demo",
+  "start_fullscreen": false
 }

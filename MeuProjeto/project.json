@@ -1,0 +1,6 @@
+{
+  "name": "MeuProjeto",
+  "initial_scene": "assets/scenes/MeuProjeto.scene.json",
+  "engine_version": "V0.9.5-7",
+  "start_fullscreen": true
+}

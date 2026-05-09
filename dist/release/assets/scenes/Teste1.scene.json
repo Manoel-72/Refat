@@ -1,0 +1,143 @@
+{
+  "name": "Teste1",
+  "entities": [
+    {
+      "id": "3998d2a7-4c5c-4baa-829d-de5748b2b710",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 24.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "a881c92d-7436-4b4c-ada6-3338db47b3a7",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 24.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "",
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0
+          }
+        },
+        {
+          "RigidBody2D": {
+            "gravity_scale": 1.0,
+            "is_static": false,
+            "grounded": false
+          }
+        },
+        {
+          "Velocity": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 48.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "941734d7-7dd4-4e14-ac63-8a8d97a63b43",
+      "name": "Ground",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -80.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 320.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "layer": 0,
+            "mask": 0
+          }
+        }
+      ],
+      "matr_source": null
+    },
+    {
+      "id": "8262b03e-53e7-4dfa-8def-806bab254776",
+      "name": "TemplateLabel",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -180.0,
+            "y": 120.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Novo texto",
+            "font_size": 24.0,
+            "color_r": 1.0,
+            "color_g": 1.0,
+            "color_b": 1.0,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "matr_source": null
+    }
+  ],
+  "background_color": [
+    0.15,
+    0.15,
+    0.18
+  ]
+}

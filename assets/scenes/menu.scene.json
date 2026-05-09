@@ -1,56 +1,181 @@
 {
-  "name": "Menu Principal",
-  "background_color": [0.06, 0.08, 0.12],
+  "name": "Menu",
   "entities": [
     {
-      "id": "camera-menu",
+      "id": "2c7a0dc7-8b70-4add-bd88-b22b99853b00",
       "name": "Camera",
       "visible": true,
       "children": [],
       "components": [
-        {"Transform": {"x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0}},
-        {"Camera2D": {"zoom": 1.0, "is_main": true}}
-      ]
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
-      "id": "title-menu",
-      "name": "MenuTitle",
+      "id": "1ea09dfa-d023-4915-8c88-567604e80d70",
+      "name": "Title",
       "visible": true,
       "children": [],
       "components": [
-        {"Transform": {"x": 0.0, "y": 170.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0}},
-        {"TextLabel": {"text": "RS2BR-Engine", "font_size": 40.0, "color_r": 0.96, "color_g": 0.98, "color_b": 1.0, "color_a": 1.0, "screen_space": true}}
-      ]
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 155.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "RS2 Top-Down Shooter Demo",
+            "font_size": 34.0,
+            "color_r": 0.5,
+            "color_g": 1.0,
+            "color_b": 0.65,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
-      "id": "subtitle-menu",
-      "name": "MenuSubtitle",
+      "id": "a351cd73-8781-43c1-bd4d-ab820f47d72b",
+      "name": "Subtitle",
       "visible": true,
       "children": [],
       "components": [
-        {"Transform": {"x": 0.0, "y": 124.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0}},
-        {"TextLabel": {"text": "Menu de teste do novo UIButton profissional", "font_size": 18.0, "color_r": 0.72, "color_g": 0.78, "color_b": 0.86, "color_a": 1.0, "screen_space": true}}
-      ]
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 95.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Quadrado verde vs 4 bolinhas vermelhas",
+            "font_size": 20.0,
+            "color_r": 0.9,
+            "color_g": 0.9,
+            "color_b": 0.9,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
-      "id": "button-play",
-      "name": "PlayButton",
+      "id": "f1ae85d1-f389-4b71-824f-669d01455e73",
+      "name": "StartButton",
       "visible": true,
       "children": [],
       "components": [
-        {"Transform": {"x": 0.0, "y": 20.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0}},
-        {"UIButton": {"text": "▶ Play", "width": 260.0, "height": 64.0, "font_size": 26.0, "target_scene": "assets/scenes/main.scene.json", "close_runtime": false, "color_r": 0.06, "color_g": 0.64, "color_b": 0.34, "color_a": 1.0, "text_r": 1.0, "text_g": 1.0, "text_b": 1.0, "text_a": 1.0, "screen_space": true}}
-      ]
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "label": "Iniciar Jogo",
+            "action": "",
+            "width": 280.0,
+            "height": 64.0,
+            "text": "Iniciar Jogo",
+            "font_size": 22.0,
+            "target_scene": "assets/scenes/game.scene.json",
+            "close_runtime": false,
+            "screen_space": true,
+            "color_r": 0.1,
+            "color_g": 0.55,
+            "color_b": 0.24,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     },
     {
-      "id": "button-exit",
-      "name": "ExitButton",
+      "id": "ef7f3236-0c22-4a2d-8b0a-d42de3876f81",
+      "name": "Controls",
       "visible": true,
       "children": [],
       "components": [
-        {"Transform": {"x": 0.0, "y": -68.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0}},
-        {"UIButton": {"text": "✕ Exit", "width": 260.0, "height": 64.0, "font_size": 26.0, "target_scene": "", "close_runtime": true, "color_r": 0.76, "color_g": 0.18, "color_b": 0.22, "color_a": 1.0, "text_r": 1.0, "text_g": 1.0, "text_b": 1.0, "text_a": 1.0, "screen_space": true}}
-      ]
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -95.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "WASD/Setas = mover    Espaço = atirar",
+            "font_size": 18.0,
+            "color_r": 0.8,
+            "color_g": 0.85,
+            "color_b": 0.8,
+            "color_a": 1.0,
+            "screen_space": true
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
     }
-  ]
+  ],
+  "background_color": [
+    0.05,
+    0.06,
+    0.07
+  ],
+  "tilemaps": []
 }

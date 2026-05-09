@@ -18,7 +18,7 @@ use editor::EditorApp;
 pub use crate::core::{component, entity, prefab, project, scene, version};
 
 fn load_app_icon() -> Option<egui::IconData> {
-    const EMBEDDED_PNG: &[u8] = include_bytes!("../assets/icon/rs2br_engine_icon.png");
+    const EMBEDDED_PNG: &[u8] = &[];
     if let Ok(image) = image::load_from_memory(EMBEDDED_PNG) {
         let image = image.into_rgba8();
         let (width, height) = image.dimensions();

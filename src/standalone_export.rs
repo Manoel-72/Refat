@@ -200,6 +200,21 @@ fn copy_minimal_engine_workspace(src_root: &Path, dst_root: &Path) -> std::io::R
     copy_file_if_exists(src_root, dst_root, "assets/icon/rs2br_engine_icon.ico")?;
     copy_file_if_exists(src_root, dst_root, "assets/icon/rs2br_engine_icon.png")?;
 
+    // Garante que a pasta de ícones sempre existe no workspace de build.
+    // Se o PNG não foi copiado (ausente no src), cria um placeholder mínimo
+    // de 1×1 pixel para que qualquer include_bytes! ou leitura em runtime
+    // nunca falhe com "caminho não encontrado" (os error 3 / os error 2).
+    let icon_dir = dst_root.join("assets").join("icon");
+    fs::create_dir_all(&icon_dir)?;
+    let png_dst = icon_dir.join("rs2br_engine_icon.png");
+    if !png_dst.exists() {
+        // PNG mínimo válido 1×1 pixel RGBA (67 bytes, sem dependências externas).
+        // Gerado offline e embutido como literal — não requer a crate `image` em build-time.
+        #[rustfmt::skip]
+        const PLACEHOLDER_1X1_PNG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00, 0x00, 0xB5, 0x1C, 0x0C, 0x02, 0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA, 0x63, 0xFC, 0xFF, 0x1F, 0x00, 0x03, 0x03, 0x02, 0x00, 0xEF, 0xBF, 0xA7, 0xDB, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82];
+        fs::write(&png_dst, PLACEHOLDER_1X1_PNG)?;
+    }
+
     let cargo_dir = src_root.join(".cargo");
     if cargo_dir.is_dir() {
         copy_dir_recursive_filtered(&cargo_dir, &dst_root.join(".cargo"))?;

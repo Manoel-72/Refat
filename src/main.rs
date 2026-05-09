@@ -42,7 +42,10 @@ fn attach_parent_console_for_cli() {
 fn attach_parent_console_for_cli() {}
 
 fn load_app_icon() -> Option<egui::IconData> {
-    const EMBEDDED_PNG: &[u8] = include_bytes!("../assets/icon/rs2br_engine_icon.png");
+    // EMBEDDED_PNG: intencionalmente vazio — sem include_bytes!.
+    // O ícone é carregado em runtime via candidatos abaixo (fallback gracioso).
+    // Manter vazio garante que a build nunca falhe por asset ausente.
+    const EMBEDDED_PNG: &[u8] = &[];
     if let Ok(image) = image::load_from_memory(EMBEDDED_PNG) {
         let image = image.into_rgba8();
         let (width, height) = image.dimensions();

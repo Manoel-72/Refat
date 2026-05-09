@@ -1,0 +1,4 @@
+// Script do jogador para o teste V0.3
+@start_message Jogador inicializado
+@player_controller 220
+@camera_follow

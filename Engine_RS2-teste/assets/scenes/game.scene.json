@@ -1,0 +1,1209 @@
+{
+  "name": "Game",
+  "entities": [
+    {
+      "id": "c305fa34-273a-4fdd-8b61-1db7f9506368",
+      "name": "Camera",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Camera2D": {
+            "zoom": 1.0,
+            "is_main": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/camera_follow.lua"
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    },
+    {
+      "id": "a01624c3-5695-42d5-96ac-529911ac3129",
+      "name": "HUD_Status",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 270.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "Vida: 5   Inimigos: 4/4",
+            "font_size": 20.0,
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/hud.lua"
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    },
+    {
+      "id": "ef67938d-7f2f-43bd-9bb8-86c47f6b95f7",
+      "name": "HUD_End",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": 30.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "TextLabel": {
+            "text": "",
+            "font_size": 34.0,
+            "color_r": 1,
+            "color_g": 0.9,
+            "color_b": 0.2,
+            "color_a": 1,
+            "screen_space": true
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/hud.lua"
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    },
+    {
+      "id": "b38786a6-7c50-4e66-9ff7-9ec32ef20bf7",
+      "name": "MenuButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 340.0,
+            "y": 270.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "label": "Menu",
+            "action": "",
+            "width": 120.0,
+            "height": 38.0,
+            "text": "Menu",
+            "font_size": 22.0,
+            "target_scene": "assets/scenes/menu.scene.json",
+            "close_runtime": false,
+            "screen_space": true,
+            "color_r": 0.1,
+            "color_g": 0.55,
+            "color_b": 0.24,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    },
+    {
+      "id": "26f645a2-4611-4543-bc77-062972d8baf2",
+      "name": "RestartButton",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 205.0,
+            "y": 270.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "UIButton": {
+            "label": "Reiniciar",
+            "action": "",
+            "width": 130.0,
+            "height": 38.0,
+            "text": "Reiniciar",
+            "font_size": 22.0,
+            "target_scene": "assets/scenes/game.scene.json",
+            "close_runtime": false,
+            "screen_space": true,
+            "color_r": 0.1,
+            "color_g": 0.55,
+            "color_b": 0.24,
+            "color_a": 1.0,
+            "text_r": 1.0,
+            "text_g": 1.0,
+            "text_b": 1.0,
+            "text_a": 1.0
+          }
+        }
+      ],
+      "tags": [],
+      "matr_source": null,
+      "hp": 100.0,
+      "max_hp": 100.0,
+      "is_dead": false
+    },
+    {
+      "id": "671a8aea-d55d-44d9-87db-4ee2260a01de",
+      "name": "Player",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 0.0,
+            "y": -150.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/player_green.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 32.0,
+              "height": 32.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/player.lua"
+          }
+        }
+      ],
+      "tags": [
+        "player"
+      ],
+      "matr_source": null,
+      "hp": 5.0,
+      "max_hp": 5.0,
+      "is_dead": false
+    },
+    {
+      "id": "2669bd51-8bb6-4095-8ef1-051e464e0f5d",
+      "name": "Enemy_01",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -260.0,
+            "y": 160.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/enemy_red.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 32.0,
+              "height": 32.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy.lua"
+          }
+        }
+      ],
+      "tags": [
+        "enemy"
+      ],
+      "matr_source": null,
+      "hp": 3.0,
+      "max_hp": 3.0,
+      "is_dead": false
+    },
+    {
+      "id": "0b214929-f820-4fc7-b756-12bf34e4635a",
+      "name": "Enemy_02",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 260.0,
+            "y": 160.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/enemy_red.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 32.0,
+              "height": 32.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy.lua"
+          }
+        }
+      ],
+      "tags": [
+        "enemy"
+      ],
+      "matr_source": null,
+      "hp": 3.0,
+      "max_hp": 3.0,
+      "is_dead": false
+    },
+    {
+      "id": "0f3a7095-7272-41c7-b047-ca27ba2de854",
+      "name": "Enemy_03",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": -260.0,
+            "y": -40.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/enemy_red.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 32.0,
+              "height": 32.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy.lua"
+          }
+        }
+      ],
+      "tags": [
+        "enemy"
+      ],
+      "matr_source": null,
+      "hp": 3.0,
+      "max_hp": 3.0,
+      "is_dead": false
+    },
+    {
+      "id": "30e3c65c-01fc-4aa7-8973-37509dac6110",
+      "name": "Enemy_04",
+      "visible": true,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 260.0,
+            "y": -40.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/enemy_red.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 32.0,
+            "height": 32.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": false,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 32.0,
+              "height": 32.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/enemy.lua"
+          }
+        }
+      ],
+      "tags": [
+        "enemy"
+      ],
+      "matr_source": null,
+      "hp": 3.0,
+      "max_hp": 3.0,
+      "is_dead": false
+    },
+    {
+      "id": "61f18b93-d222-465a-b12f-76c6f2ea5b81",
+      "name": "Bullet_01",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "31e80a95-0ea4-455b-8cac-70da00ee0e37",
+      "name": "Bullet_02",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "b796cb89-326a-4e9f-8cd7-960e88c3b711",
+      "name": "Bullet_03",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "f66b71f0-c728-4b24-8c5e-6124044b81d3",
+      "name": "Bullet_04",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "2e6bfe38-3f28-4c59-827b-1589f42c2323",
+      "name": "Bullet_05",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "77173329-14b3-4a96-9797-578807fda4e6",
+      "name": "Bullet_06",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "93abe0fb-570e-4324-827e-2b1d1d86b5a5",
+      "name": "Bullet_07",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "65be1519-3333-4d5a-b3f0-2ba05981d70f",
+      "name": "Bullet_08",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "a06091cf-3d55-468a-8290-15fa2439600c",
+      "name": "Bullet_09",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "2ce45a38-70d3-42ca-aeab-ba65bf5adbe7",
+      "name": "Bullet_10",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "d04bd561-4073-4e2e-8ea3-aba34dec301b",
+      "name": "Bullet_11",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    },
+    {
+      "id": "08bba1f1-6abf-4f95-bcd2-3c800db264b5",
+      "name": "Bullet_12",
+      "visible": false,
+      "children": [],
+      "components": [
+        {
+          "Transform": {
+            "x": 9999.0,
+            "y": 9999.0,
+            "rotation": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0
+          }
+        },
+        {
+          "Sprite": {
+            "texture_path": "assets/sprites/bullet_yellow.png",
+            "color_r": 1,
+            "color_g": 1,
+            "color_b": 1,
+            "color_a": 1,
+            "screen_space": false
+          }
+        },
+        {
+          "BoxCollider": {
+            "width": 16.0,
+            "height": 16.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "is_trigger": true,
+            "collision_enabled": true,
+            "layer": 0,
+            "mask": 0,
+            "body_type": "kinematic",
+            "shape": {
+              "kind": "box",
+              "width": 16.0,
+              "height": 16.0
+            },
+            "one_way": false,
+            "one_way_margin": 6.0
+          }
+        },
+        {
+          "LuaScript": {
+            "file_path": "assets/scripts/bullet.lua"
+          }
+        }
+      ],
+      "tags": [
+        "bullet"
+      ],
+      "matr_source": null,
+      "hp": 1.0,
+      "max_hp": 1.0,
+      "is_dead": false
+    }
+  ],
+  "background_color": [
+    0.08,
+    0.09,
+    0.1
+  ],
+  "tilemaps": []
+}
